@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>3D Viewer</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <style>
+    /* ── Reset ────────────────────────────────────────────────────────────── */
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+    :root {
+      --cyan:      #00d4ff;
+      --cyan-dim:  rgba(0, 212, 255, 0.12);
+      --panel-bg:  rgba(7, 9, 13, 0.93);
+      --border:    rgba(0, 212, 255, 0.14);
+      --text:      #d8dde6;
+      --muted:     #4a5568;
+      --input-bg:  rgba(255, 255, 255, 0.04);
+      --font:      'JetBrains Mono', monospace;
+    }
+    html, body {
+      width: 100%; height: 100%;
+      overflow: hidden;
+      background: #000;
+      font-family: var(--font);
+    }
+    canvas { display: block; width: 100%; height: 100%; }
+
+    /* ── Top bar container ────────────────────────────────────────────────── */
+    #topbar {
+      position: absolute;
+      top: 18px;
+      left: 50%;
+      transform: translateX(-50%);
+      pointer-events: none;
+      z-index: 10;
+      white-space: nowrap;
+    }
+
+    /* ── Pill ─────────────────────────────────────────────────────────────── */
+    .tb-pill {
+      display: inline-flex;
+      align-items: stretch;
+      background:
+        linear-gradient(rgba(0,212,255,0.025) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0,212,255,0.025) 1px, transparent 1px),
+        var(--panel-bg);
+      background-size: 20px 20px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      backdrop-filter: blur(14px) saturate(1.5);
+      -webkit-backdrop-filter: blur(14px) saturate(1.5);
+      overflow: hidden;
+      pointer-events: all;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.5), 0 0 0 1px rgba(0,212,255,0.06);
+    }
+
+    .tb-btn {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 0 16px;
+      height: 40px;
+      background: transparent;
+      border: none;
+      color: var(--muted);
+      font-family: var(--font);
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.16em;
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s;
+      white-space: nowrap;
+    }
+    .tb-btn:hover { background: rgba(255,255,255,0.04); color: var(--text); }
+    .tb-btn.tb-active { color: var(--cyan); background: var(--cyan-dim); }
+
+    .tb-sep {
+      width: 1px;
+      background: var(--border);
+      align-self: stretch;
+      flex-shrink: 0;
+    }
+
+    /* Indicator dot inside toggle buttons */
+    .tb-dot {
+      width: 5px; height: 5px;
+      border-radius: 50%;
+      background: var(--muted);
+      transition: background 0.15s, box-shadow 0.15s;
+      flex-shrink: 0;
+    }
+    .tb-active .tb-dot {
+      background: var(--cyan);
+      box-shadow: 0 0 6px var(--cyan), 0 0 12px rgba(0,212,255,0.4);
+    }
+
+    /* Sphere count badge inside SPHERES button */
+    .tb-badge {
+      display: inline-block;
+      background: rgba(0, 212, 255, 0.12);
+      border: 1px solid rgba(0, 212, 255, 0.25);
+      border-radius: 3px;
+      padding: 1px 6px;
+      font-size: 9px;
+      line-height: 1.6;
+      color: var(--cyan);
+      letter-spacing: 0.05em;
+    }
+
+    /* ── Side panel ───────────────────────────────────────────────────────── */
+    #gui {
+      position: absolute;
+      top: 0; right: 0;
+      width: 252px; height: 100%;
+      display: flex;
+      flex-direction: column;
+      background:
+        linear-gradient(rgba(0,212,255,0.025) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0,212,255,0.025) 1px, transparent 1px),
+        var(--panel-bg);
+      background-size: 24px 24px;
+      border-left: 1px solid var(--border);
+      backdrop-filter: blur(12px) saturate(1.4);
+      -webkit-backdrop-filter: blur(12px) saturate(1.4);
+      overflow: hidden;
+      /* Hidden by default — slides in from right */
+      transform: translateX(100%);
+      transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+      z-index: 5;
+    }
+    #gui.panel-visible {
+      transform: translateX(0);
+    }
+
+    .panel-header {
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 18px 16px 14px;
+      border-bottom: 1px solid var(--border);
+    }
+    .panel-title {
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.2em;
+      color: var(--cyan);
+    }
+    .panel-count {
+      font-size: 10px;
+      color: var(--muted);
+      letter-spacing: 0.1em;
+      background: var(--cyan-dim);
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      padding: 2px 7px;
+      min-width: 20px;
+      text-align: center;
+    }
+
+    /* ── Panel header action buttons ─────────────────────────────────────── */
+    .header-btn-group {
+      display: flex;
+      gap: 5px;
+    }
+    .header-btn {
+      background: var(--input-bg);
+      border: 1px solid rgba(255,255,255,0.07);
+      border-radius: 4px;
+      color: var(--muted);
+      font-family: var(--font);
+      font-size: 8px;
+      font-weight: 600;
+      letter-spacing: 0.12em;
+      padding: 4px 7px;
+      cursor: pointer;
+      transition: background 0.12s, color 0.12s, border-color 0.12s;
+    }
+    .header-btn:hover {
+      background: rgba(255,255,255,0.07);
+      border-color: rgba(255,255,255,0.14);
+      color: var(--text);
+    }
+    .header-btn-accent {
+      border-color: rgba(0,212,255,0.25);
+      color: var(--cyan);
+    }
+    .header-btn-accent:hover {
+      background: var(--cyan-dim);
+      border-color: rgba(0,212,255,0.45);
+      color: var(--cyan);
+    }
+
+    /* ── Physics settings panel body ──────────────────────────────────────── */
+    .settings-body {
+      flex: 1;
+      overflow-y: auto;
+      overflow-x: hidden;
+      padding-bottom: 16px;
+    }
+    .settings-body::-webkit-scrollbar { width: 3px; }
+    .settings-body::-webkit-scrollbar-track { background: transparent; }
+    .settings-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+    .settings-section-header {
+      font-size: 9px;
+      font-weight: 600;
+      letter-spacing: 0.22em;
+      color: var(--cyan);
+      opacity: 0.65;
+      padding: 14px 14px 5px;
+    }
+    .settings-section-body { padding: 2px 0 6px; }
+
+    /* ── Slider rows ──────────────────────────────────────────────────────── */
+    .param-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 4px 14px;
+    }
+    .param-label {
+      font-size: 9px;
+      font-weight: 500;
+      letter-spacing: 0.08em;
+      color: var(--muted);
+      width: 54px;
+      flex-shrink: 0;
+    }
+    .param-value {
+      font-size: 10px;
+      color: var(--text);
+      width: 34px;
+      text-align: right;
+      flex-shrink: 0;
+      letter-spacing: 0.03em;
+    }
+
+    input[type="range"] {
+      -webkit-appearance: none;
+      appearance: none;
+      flex: 1;
+      height: 2px;
+      background: transparent;
+      outline: none;
+      cursor: pointer;
+    }
+    input[type="range"]::-webkit-slider-runnable-track {
+      background: var(--border);
+      height: 2px;
+      border-radius: 1px;
+    }
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 11px; height: 11px;
+      margin-top: -4.5px;
+      border-radius: 50%;
+      background: var(--cyan);
+      box-shadow: 0 0 5px rgba(0,212,255,0.45);
+      transition: transform 0.1s, box-shadow 0.1s;
+    }
+    input[type="range"]::-webkit-slider-thumb:hover {
+      transform: scale(1.2);
+      box-shadow: 0 0 8px rgba(0,212,255,0.7);
+    }
+    input[type="range"]::-moz-range-track {
+      background: var(--border);
+      height: 2px;
+      border-radius: 1px;
+      border: none;
+    }
+    input[type="range"]::-moz-range-thumb {
+      border: none;
+      width: 11px; height: 11px;
+      border-radius: 50%;
+      background: var(--cyan);
+      box-shadow: 0 0 5px rgba(0,212,255,0.45);
+    }
+
+    /* ── Integrator dropdown ──────────────────────────────────────────────── */
+    .param-select {
+      flex: 1;
+      min-width: 0;
+      background-color: var(--input-bg);
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='5' viewBox='0 0 8 5'%3E%3Cpath d='M0 0l4 5 4-5z' fill='%234a5568'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 8px center;
+      border: 1px solid rgba(255,255,255,0.07);
+      border-radius: 4px;
+      color: var(--text);
+      font-family: var(--font);
+      font-size: 10px;
+      letter-spacing: 0.05em;
+      padding: 4px 22px 4px 7px;
+      outline: none;
+      cursor: pointer;
+      appearance: none;
+      -webkit-appearance: none;
+      transition: border-color 0.12s, background-color 0.12s;
+    }
+    .param-select:hover { border-color: rgba(255,255,255,0.14); }
+    .param-select:focus { border-color: var(--cyan); background-color: rgba(0,212,255,0.05); }
+    .param-select option { background: #0d0f18; color: var(--text); }
+
+    /* ── Count (particle number) input ───────────────────────────────────── */
+    .count-input {
+      flex: 1;
+      background: var(--input-bg);
+      border: 1px solid rgba(255,255,255,0.07); border-radius: 4px;
+      color: var(--text); font-family: var(--font); font-size: 11px;
+      padding: 4px 7px; text-align: right; outline: none;
+      transition: border-color 0.12s, background 0.12s;
+      -moz-appearance: textfield;
+    }
+    .count-input::-webkit-inner-spin-button,
+    .count-input::-webkit-outer-spin-button { -webkit-appearance: none; }
+    .count-input:hover { border-color: rgba(255,255,255,0.14); }
+    .count-input:focus { border-color: var(--cyan); background: rgba(0,212,255,0.05); }
+
+    /* ── Toggle rows ──────────────────────────────────────────────────────── */
+    .toggle-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 7px 14px;
+      user-select: none;
+      transition: background 0.12s;
+    }
+    .toggle-row:hover { background: rgba(255,255,255,0.025); }
+    .toggle-label {
+      font-size: 10px;
+      letter-spacing: 0.06em;
+      color: var(--text);
+    }
+    .toggle-switch {
+      width: 30px; height: 15px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--input-bg);
+      position: relative;
+      flex-shrink: 0;
+      transition: background 0.15s, border-color 0.15s;
+    }
+    .toggle-switch.on {
+      background: rgba(0,212,255,0.15);
+      border-color: rgba(0,212,255,0.5);
+    }
+    .toggle-switch::after {
+      content: '';
+      position: absolute;
+      top: 2px; left: 2px;
+      width: 9px; height: 9px;
+      border-radius: 50%;
+      background: var(--muted);
+      transition: transform 0.15s, background 0.15s;
+    }
+    .toggle-switch.on::after {
+      transform: translateX(15px);
+      background: var(--cyan);
+      box-shadow: 0 0 4px rgba(0,212,255,0.6);
+    }
+
+    /* ── Energy plot (inside panel) ──────────────────────────────────────── */
+    .energy-wrap {
+      padding: 4px 14px 8px;
+    }
+    .energy-wrap canvas {
+      display: block;
+      border-radius: 4px;
+      background: rgba(0, 0, 0, 0.35);
+    }
+
+    /* ── Camera hint ──────────────────────────────────────────────────────── */
+    #hint {
+      position: absolute;
+      bottom: 18px; left: 50%;
+      transform: translateX(-50%);
+      font-size: 10px; letter-spacing: 0.12em;
+      color: rgba(150,170,190,0.3);
+      pointer-events: none; white-space: nowrap; text-transform: uppercase;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="canvas"></canvas>
+  <div id="topbar"></div>
+  <div id="gui"></div>
+  <div id="hint">Left-drag: orbit &nbsp;·&nbsp; Right-drag: pan &nbsp;·&nbsp; Scroll: zoom</div>
+  <script type="module" src="dist/main.js"></script>
+</body>
+</html>
