@@ -257,6 +257,11 @@ export class Renderer {
   private sphereIndexBuffer!: GPUBuffer;
   private sphereIndexCount = 0;
 
+  private editorPreviewBuffer!: GPUBuffer;
+  private editorGridBuffer!: GPUBuffer;
+  private editorGridVertexCount = 0;
+  private editorPreviewVisible = false;
+
   private springPipeline!: GPURenderPipeline;
   private springBGL!: GPUBindGroupLayout;
   private springBindGroup: GPUBindGroup | null = null;
@@ -380,6 +385,14 @@ export class Renderer {
       size: indices.byteLength, usage: GPUBufferUsage.INDEX | GPUBufferUsage.COPY_DST,
     });
     this.device.queue.writeBuffer(this.sphereIndexBuffer, 0, indices.buffer as ArrayBuffer);
+
+    this.editorPreviewBuffer = this.device.createBuffer({
+      size: SPHERE_INST_STRIDE, usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
+    });
+    // 22 grid lines (11 per axis), 2 vertices per line, 6 floats per vertex.
+    this.editorGridBuffer = this.device.createBuffer({
+      size: 22 * 2 * 6 * 4, usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
+    });
   }
 
   resize(width: number, height: number): void {
@@ -404,6 +417,34 @@ export class Renderer {
     const data = buildBoundingBox(half);
     this.boxVertexCount = data.length / 6;
     this.device.queue.writeBuffer(this.boxBuffer, 0, data.buffer as ArrayBuffer);
+  }
+
+  /** Update or hide the atom-placement preview and its temporary local XZ grid. */
+  updateEditorPreview(position: [number, number, number] | null, radius = 0.25, cellSize = 0.6): void {
+    this.editorPreviewVisible = position !== null;
+    if (!position) { this.editorGridVertexCount = 0; return; }
+
+    const sphere = new Float32Array(8);
+    sphere[0] = position[0]; sphere[1] = position[1]; sphere[2] = position[2]; sphere[3] = radius;
+    sphere[4] = 0.08; sphere[5] = 0.62; sphere[6] = 0.72;
+    this.device.queue.writeBuffer(this.editorPreviewBuffer, 0, sphere.buffer as ArrayBuffer);
+
+    const extent = 5;
+    const data = new Float32Array(22 * 2 * 6);
+    let offset = 0;
+    const vertex = (x: number, y: number, z: number) => {
+      data[offset++] = x; data[offset++] = y; data[offset++] = z;
+      data[offset++] = 0.16; data[offset++] = 0.34; data[offset++] = 0.38;
+    };
+    const y = position[1] - radius;
+    for (let i = -extent; i <= extent; i++) {
+      vertex(position[0] + i*cellSize, y, position[2] - extent*cellSize);
+      vertex(position[0] + i*cellSize, y, position[2] + extent*cellSize);
+      vertex(position[0] - extent*cellSize, y, position[2] + i*cellSize);
+      vertex(position[0] + extent*cellSize, y, position[2] + i*cellSize);
+    }
+    this.editorGridVertexCount = offset / 6;
+    this.device.queue.writeBuffer(this.editorGridBuffer, 0, data.buffer as ArrayBuffer);
   }
 
   /** Call once after compute.init(), and again whenever spring topology changes. */
@@ -474,6 +515,11 @@ export class Renderer {
       pass.draw(this.axisVertexCount);
     }
 
+    if (this.editorPreviewVisible && this.editorGridVertexCount > 0) {
+      pass.setVertexBuffer(0, this.editorGridBuffer);
+      pass.draw(this.editorGridVertexCount);
+    }
+
     // Spring cylinders — drawn before spheres so spheres occlude them via depth
     if (springRenderCount > 0 && this.springBindGroup) {
       pass.setPipeline(this.springPipeline);
@@ -490,6 +536,14 @@ export class Renderer {
       pass.setVertexBuffer(1, sphereBuf);
       pass.setIndexBuffer(this.sphereIndexBuffer, "uint16");
       pass.drawIndexed(this.sphereIndexCount, sphereCount);
+    }
+
+    if (this.editorPreviewVisible) {
+      pass.setPipeline(this.spherePipeline);
+      pass.setVertexBuffer(0, this.sphereVertexBuffer);
+      pass.setVertexBuffer(1, this.editorPreviewBuffer);
+      pass.setIndexBuffer(this.sphereIndexBuffer, "uint16");
+      pass.drawIndexed(this.sphereIndexCount, 1);
     }
 
     // Force-vector lines — 2 pre-formatted line vertices per sphere written by compute

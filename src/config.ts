@@ -1,4 +1,4 @@
-import { Sphere, PhysicsParams } from "./types.js";
+import { Sphere, PhysicsParams, AtomType, Bond } from "./types.js";
 
 // ── On-disk schema ────────────────────────────────────────────────────────────
 
@@ -7,17 +7,19 @@ export interface SerializedSphere {
   velocity: [number, number, number];
   radius:   number;
   color:    [number, number, number];
+  type?:    AtomType;
 }
 
 export interface Config {
   version:  1;
   physics:  PhysicsParams;
   spheres:  SerializedSphere[];
+  bonds?:   Bond[];
 }
 
 // ── Conversions ───────────────────────────────────────────────────────────────
 
-export function spheresToConfig(spheres: Sphere[], physics: PhysicsParams): Config {
+export function spheresToConfig(spheres: Sphere[], physics: PhysicsParams, bonds: Bond[] = []): Config {
   return {
     version: 1,
     physics: { ...physics },
@@ -26,7 +28,9 @@ export function spheresToConfig(spheres: Sphere[], physics: PhysicsParams): Conf
       velocity: [...s.velocity] as [number, number, number],
       radius:   s.radius,
       color:    [...s.color]    as [number, number, number],
+      type:     s.type,
     })),
+    bonds: bonds.map(b => ({ ...b })),
   };
 }
 
@@ -38,6 +42,7 @@ export function configToSpheres(cfg: Config): Sphere[] {
     radius:   s.radius,
     mass:     s.radius ** 3 * 50,
     color:    [...s.color]    as [number, number, number],
+    type:     s.type === 2 ? 2 : 1,
   }));
 }
 

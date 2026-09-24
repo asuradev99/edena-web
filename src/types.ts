@@ -1,5 +1,13 @@
 export const BOX_HALF = 5;
 
+export type AtomType = 1 | 2;
+
+export interface Bond {
+  a: number; // sphere array index
+  b: number; // sphere array index
+  restLength: number;
+}
+
 export interface Sphere {
   id: number;
   position: [number, number, number];
@@ -7,6 +15,7 @@ export interface Sphere {
   radius: number;
   mass: number;
   color: [number, number, number]; // RGB 0..1
+  type: AtomType;                  // 1 = dynamic, 2 = static
 }
 
 export type Integrator = "velocity-verlet";

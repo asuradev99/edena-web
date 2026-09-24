@@ -3,10 +3,13 @@ export class TopBar {
     panelOpen = false;
     showAxes = true;
     glowOn = true;
+    editing = false;
+    onEditChange;
     playBtn;
     objectsBtn;
     axesBtn;
     glowBtn;
+    editBtn;
     constructor(container) {
         this.build(container);
     }
@@ -14,17 +17,34 @@ export class TopBar {
     isPanelOpen() { return this.panelOpen; }
     isAxesVisible() { return this.showAxes; }
     isGlowEnabled() { return this.glowOn; }
+    isEditing() { return this.editing; }
     build(container) {
         const pill = document.createElement("div");
         pill.className = "tb-pill";
         // ── Play / Pause ─────────────────────────────────────────────────────────
         this.playBtn = this.btn("▶  PLAY");
         this.playBtn.addEventListener("click", () => {
+            if (this.editing) {
+                this.editing = false;
+                this.editBtn.classList.remove("tb-active");
+                this.onEditChange?.(false);
+            }
             this.playing = !this.playing;
             this.playBtn.textContent = this.playing ? "⏸  PAUSE" : "▶  PLAY";
             this.playBtn.classList.toggle("tb-active", this.playing);
         });
         pill.appendChild(this.playBtn);
+        pill.appendChild(this.sep());
+        this.editBtn = this.btn("EDIT");
+        this.editBtn.title = "Editing is available only while the simulation is paused";
+        this.editBtn.addEventListener("click", () => {
+            if (this.playing)
+                return;
+            this.editing = !this.editing;
+            this.editBtn.classList.toggle("tb-active", this.editing);
+            this.onEditChange?.(this.editing);
+        });
+        pill.appendChild(this.editBtn);
         pill.appendChild(this.sep());
         // ── Physics panel toggle ──────────────────────────────────────────────────
         this.objectsBtn = this.btn("PHYSICS");

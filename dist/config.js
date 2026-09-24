@@ -1,5 +1,5 @@
 // ── Conversions ───────────────────────────────────────────────────────────────
-export function spheresToConfig(spheres, physics) {
+export function spheresToConfig(spheres, physics, bonds = []) {
     return {
         version: 1,
         physics: { ...physics },
@@ -8,7 +8,9 @@ export function spheresToConfig(spheres, physics) {
             velocity: [...s.velocity],
             radius: s.radius,
             color: [...s.color],
+            type: s.type,
         })),
+        bonds: bonds.map(b => ({ ...b })),
     };
 }
 export function configToSpheres(cfg) {
@@ -19,6 +21,7 @@ export function configToSpheres(cfg) {
         radius: s.radius,
         mass: s.radius ** 3 * 50,
         color: [...s.color],
+        type: s.type === 2 ? 2 : 1,
     }));
 }
 // ── File I/O ──────────────────────────────────────────────────────────────────

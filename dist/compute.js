@@ -3,7 +3,7 @@
 //  PhysElem layout (64 B / particle):
 //    pos_r   vec4f  offset  0   xyz=position, w=radius
 //    vel_m   vec4f  offset 16   xyz=velocity, w=mass
-//    color   vec4f  offset 32   xyz=base_color, w=pad
+//    color   vec4f  offset 32   xyz=base_color, w=atom type (1 dynamic, 2 static)
 //    acc_pad vec4f  offset 48   xyz=acceleration from previous substep, w=pad
 //
 //  Velocity Verlet over one substep:
@@ -105,6 +105,7 @@ fn updatePos(@builtin(global_invocation_id) gid: vec3u) {
   if i >= params.n { return; }
 
   let e   = phys[i];
+  if e.color.w > 1.5 { return; }
   let pos = e.pos_r.xyz;
   let r   = e.pos_r.w;
   let vel = e.vel_m.xyz;
@@ -122,6 +123,20 @@ fn updateVel(@builtin(global_invocation_id) gid: vec3u) {
   if i >= params.n { return; }
 
   let e   = phys[i];
+  if e.color.w > 1.5 {
+    phys[i].vel_m = vec4f(0.0, 0.0, 0.0, e.vel_m.w);
+    phys[i].acc_pad = vec4f(0.0);
+    rend[i].pos_r = e.pos_r;
+    rend[i].color_pad = vec4f(0.48, 0.50, 0.54, 0.0);
+    if params.show_forces != 0u {
+      let fi = i * 12u;
+      forceLines[fi+0u] = e.pos_r.x; forceLines[fi+1u] = e.pos_r.y; forceLines[fi+2u] = e.pos_r.z;
+      forceLines[fi+3u] = 0.48; forceLines[fi+4u] = 0.50; forceLines[fi+5u] = 0.54;
+      forceLines[fi+6u] = e.pos_r.x; forceLines[fi+7u] = e.pos_r.y; forceLines[fi+8u] = e.pos_r.z;
+      forceLines[fi+9u] = 0.48; forceLines[fi+10u] = 0.50; forceLines[fi+11u] = 0.54;
+    }
+    return;
+  }
   var pos = e.pos_r.xyz;
   let r   = e.pos_r.w;
   let vel = e.vel_m.xyz;
@@ -279,7 +294,7 @@ export class Compute {
             layout, compute: { module: mod, entryPoint: "updateVel" },
         });
     }
-    upload(spheres) {
+    upload(spheres, selectedIndex = -1) {
         this.sphereCount = spheres.length;
         if (spheres.length === 0)
             return;
@@ -299,15 +314,19 @@ export class Compute {
             physData[po + 8] = s.color[0];
             physData[po + 9] = s.color[1];
             physData[po + 10] = s.color[2];
-            // po+11..15 = 0 (color pad, acc_pad — zero-initialised)
+            physData[po + 11] = s.type;
+            // po+12..15 = 0 (acc_pad — zero-initialised)
             const ro = i * 8;
             rendData[ro] = s.position[0];
             rendData[ro + 1] = s.position[1];
             rendData[ro + 2] = s.position[2];
             rendData[ro + 3] = s.radius;
-            rendData[ro + 4] = s.color[0];
-            rendData[ro + 5] = s.color[1];
-            rendData[ro + 6] = s.color[2];
+            const color = i === selectedIndex
+                ? (s.type === 2 ? [0.76, 0.78, 0.82] : [0.0, 0.84, 1.0])
+                : s.type === 2 ? [0.48, 0.50, 0.54] : s.color;
+            rendData[ro + 4] = color[0];
+            rendData[ro + 5] = color[1];
+            rendData[ro + 6] = color[2];
         }
         this.device.queue.writeBuffer(this.physBuf, 0, physData.buffer);
         this.device.queue.writeBuffer(this.renderBuf, 0, rendData.buffer);
@@ -315,7 +334,7 @@ export class Compute {
     /** Build nearest-neighbour springs from current sphere positions and upload to GPU.
      *  Threshold = 1.2 × minimum pairwise distance in the system.
      *  Must be called after upload() whenever positions are reset. */
-    buildAndUploadSprings(spheres) {
+    buildAndUploadSprings(spheres, explicitBonds) {
         // Always write a zeroed count buffer so stale data from a previous larger
         // config doesn't affect atoms beyond the current count.
         const counts = new Uint32Array(MAX_SPHERES);
@@ -323,7 +342,20 @@ export class Compute {
         const entryU = new Uint32Array(entryAB);
         const entryF = new Float32Array(entryAB);
         const n = spheres.length;
-        if (n >= 2) {
+        if (explicitBonds) {
+            for (const bond of explicitBonds) {
+                if (bond.a < 0 || bond.b < 0 || bond.a >= n || bond.b >= n || bond.a === bond.b)
+                    continue;
+                for (const [i, j] of [[bond.a, bond.b], [bond.b, bond.a]]) {
+                    if (counts[i] >= MAX_SPRINGS_PER_ATOM)
+                        continue;
+                    const slot = i * MAX_SPRINGS_PER_ATOM + counts[i]++;
+                    entryU[slot * 2] = j;
+                    entryF[slot * 2 + 1] = bond.restLength;
+                }
+            }
+        }
+        else if (n >= 2) {
             // Find minimum pairwise distance
             let minDist = Infinity;
             for (let i = 0; i < n; i++) {
@@ -370,6 +402,19 @@ export class Compute {
             }
         }
         this.springRenderCount = pairCount;
+        const uploadedBonds = [];
+        for (let p = 0; p < pairCount; p++) {
+            const a = pairsU[p * 2], b = pairsU[p * 2 + 1];
+            let restLength = 0;
+            for (let k = 0; k < counts[a]; k++) {
+                const slot = a * MAX_SPRINGS_PER_ATOM + k;
+                if (entryU[slot * 2] === b) {
+                    restLength = entryF[slot * 2 + 1];
+                    break;
+                }
+            }
+            uploadedBonds.push({ a, b, restLength });
+        }
         this.device.queue.writeBuffer(this.springCountBuf, 0, counts.buffer);
         if (n > 0) {
             this.device.queue.writeBuffer(this.springDataBuf, 0, entryAB);
@@ -377,6 +422,7 @@ export class Compute {
         if (pairCount > 0) {
             this.device.queue.writeBuffer(this.springPairsBuf, 0, pairsAB, 0, pairCount * 8);
         }
+        return uploadedBonds;
     }
     updatePhysicsParams(p) {
         const buf = new ArrayBuffer(64);

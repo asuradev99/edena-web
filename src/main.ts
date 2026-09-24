@@ -4,7 +4,8 @@ import { Compute }     from "./compute.js";
 import { GUI }         from "./gui.js";
 import { TopBar }      from "./topbar.js";
 import { EnergyPlot }  from "./energyplot.js";
-import { Sphere, DEFAULT_PHYSICS, PhysicsParams } from "./types.js";
+import { Editor, GridSpec } from "./editor.js";
+import { Sphere, DEFAULT_PHYSICS, PhysicsParams, Bond, AtomType } from "./types.js";
 import {
   spheresToConfig, configToSpheres,
   saveConfig, loadConfigFromFile, parseConfig,
@@ -43,6 +44,7 @@ function generateSpheres(n: number, radius: number, boxHalf: number): Sphere[] {
       radius,
       mass: radius * radius * radius * 50,
       color: hslToRgb(hue, 0.75, 0.62),
+      type: 1,
     });
   }
   return result;
@@ -85,8 +87,9 @@ async function main() {
   const topbarEl = document.getElementById("topbar")  as HTMLElement;
 
   const physParams: PhysicsParams = { ...DEFAULT_PHYSICS };
-  // Will be replaced by default-config.json; this is just a type-safe placeholder
-  let spheres: Sphere[] = generateSpheres(216, physParams.radius, physParams.boxHalf);
+  let spheres: Sphere[] = [];
+  let bonds: Bond[] = [];
+  let selectedIndex = -1;
 
   const camera     = new Camera(canvas);
   const renderer   = new Renderer();
@@ -101,6 +104,117 @@ async function main() {
   compute.init(device);
   renderer.setCylinderData(compute.renderBuf, compute.springPairsBuf);
 
+  const uploadEditedState = () => {
+    compute.upload(spheres, selectedIndex);
+    bonds = compute.buildAndUploadSprings(spheres, bonds);
+    compute.updatePhysicsParams(physParams);
+  };
+
+  const editor = new Editor(canvas, camera, {
+    getSpheres: () => spheres,
+    onSelectionChange: index => {
+      selectedIndex = index;
+      compute.upload(spheres, selectedIndex);
+    },
+    onMove: (index, delta) => {
+      const sphere = spheres[index];
+      if (!sphere) return;
+      const bound = physParams.boxHalf - sphere.radius;
+      sphere.position = [
+        Math.max(-bound, Math.min(bound, sphere.position[0] + delta[0])),
+        Math.max(-bound, Math.min(bound, sphere.position[1] + delta[1])),
+        Math.max(-bound, Math.min(bound, sphere.position[2] + delta[2])),
+      ];
+      sphere.velocity = [0, 0, 0];
+      uploadEditedState();
+    },
+    onAdd: (position, type) => {
+      if (spheres.length >= 512) return -1;
+      const radius = physParams.radius;
+      const bound = physParams.boxHalf - radius;
+      const id = spheres.reduce((max, sphere) => Math.max(max, sphere.id), 0) + 1;
+      const color = hslToRgb((id * 137.508) % 360, 0.75, 0.62);
+      spheres.push({
+        id,
+        position: [Math.max(-bound, Math.min(bound, position[0])), 0, Math.max(-bound, Math.min(bound, position[2]))],
+        velocity: [0, 0, 0], radius, mass: radius ** 3 * 50, color, type,
+      });
+      gui.rebuild(spheres.length);
+      uploadEditedState();
+      return spheres.length - 1;
+    },
+    onSetType: (index, type) => {
+      const sphere = spheres[index];
+      if (!sphere) return;
+      sphere.type = type;
+      if (type === 2) sphere.velocity = [0, 0, 0];
+      uploadEditedState();
+    },
+    onDelete: index => {
+      if (!spheres[index]) return;
+      spheres.splice(index, 1);
+      bonds = bonds
+        .filter(bond => bond.a !== index && bond.b !== index)
+        .map(bond => ({
+          ...bond,
+          a: bond.a > index ? bond.a - 1 : bond.a,
+          b: bond.b > index ? bond.b - 1 : bond.b,
+        }));
+      selectedIndex = -1;
+      gui.rebuild(spheres.length);
+      uploadEditedState();
+    },
+    onBond: (a, b) => {
+      const lo = Math.min(a, b), hi = Math.max(a, b);
+      if (bonds.some(bond => bond.a === lo && bond.b === hi)) return;
+      const degree = (index: number) => bonds.filter(bond => bond.a === index || bond.b === index).length;
+      if (degree(lo) >= 12 || degree(hi) >= 12) return;
+      const pa = spheres[lo].position, pb = spheres[hi].position;
+      bonds.push({ a: lo, b: hi, restLength: Math.hypot(pa[0]-pb[0], pa[1]-pb[1], pa[2]-pb[2]) });
+      uploadEditedState();
+    },
+    onPreview: (position, cellSize) => {
+      renderer.updateEditorPreview(position, physParams.radius, cellSize);
+    },
+    onGridCreate: (spec: GridSpec) => {
+      const available = 512 - spheres.length;
+      const count = Math.min(available, spec.x * spec.y * spec.z);
+      if (count <= 0) return 0;
+      const cell = Math.max(spec.cellSize, physParams.radius * 2);
+      let created = 0;
+      const nextId = spheres.reduce((max, sphere) => Math.max(max, sphere.id), 0) + 1;
+      const halfGridY = (spec.y - 1) * cell / 2;
+      const bound = physParams.boxHalf - physParams.radius;
+      const top = spheres.reduce((max, sphere) => Math.max(max, sphere.position[1] + sphere.radius), -Infinity);
+      const bottom = spheres.reduce((min, sphere) => Math.min(min, sphere.position[1] - sphere.radius), Infinity);
+      const above = top + physParams.radius + halfGridY;
+      const below = bottom - physParams.radius - halfGridY;
+      const centerY = spheres.length === 0 ? 0 : above + halfGridY <= bound ? above : below - halfGridY >= -bound ? below : 0;
+      for (let z = 0; z < spec.z && created < count; z++) {
+        for (let y = 0; y < spec.y && created < count; y++) {
+          for (let x = 0; x < spec.x && created < count; x++) {
+            const color = hslToRgb(((nextId + created) * 137.508) % 360, 0.75, 0.62);
+            spheres.push({
+              id: nextId + created,
+              position: [(x-(spec.x-1)/2)*cell, centerY + (y-(spec.y-1)/2)*cell, (z-(spec.z-1)/2)*cell],
+              velocity: [0, 0, 0], radius: physParams.radius,
+              mass: physParams.radius ** 3 * 50, color, type: spec.atomType,
+            });
+            created++;
+          }
+        }
+      }
+      gui.rebuild(spheres.length);
+      uploadEditedState();
+      return created;
+    },
+  });
+  topbar.onEditChange = editing => {
+    selectedIndex = -1;
+    editor.setActive(editing);
+    compute.upload(spheres, selectedIndex);
+  };
+
   // ── GUI callbacks ─────────────────────────────────────────────────────────
 
   gui.onParamsChange = () => {
@@ -109,9 +223,10 @@ async function main() {
   };
 
   gui.onParticleCountChange = (n: number) => {
+    editor.clearSelection();
     spheres = generateSpheres(n, physParams.radius, physParams.boxHalf);
-    compute.upload(spheres);
-    compute.buildAndUploadSprings(spheres);
+    compute.upload(spheres, selectedIndex);
+    bonds = compute.buildAndUploadSprings(spheres);
     compute.updatePhysicsParams(physParams);
   };
 
@@ -120,7 +235,7 @@ async function main() {
       s.radius = r;
       s.mass   = r * r * r * 50;
     }
-    compute.upload(spheres);
+    compute.upload(spheres, selectedIndex);
     // Spring rest lengths are position-based, no rebuild needed for radius-only change
   };
 
@@ -128,10 +243,11 @@ async function main() {
 
   const applyConfig = (cfg: ReturnType<typeof parseConfig>) => {
     if (!cfg) return;
+    editor.clearSelection();
     spheres = configToSpheres(cfg);
     Object.assign(physParams, cfg.physics);
     compute.upload(spheres);
-    compute.buildAndUploadSprings(spheres);
+    bonds = compute.buildAndUploadSprings(spheres, cfg.bonds);
     compute.updatePhysicsParams(physParams);
     renderer.updateBoundingBox(physParams.boxHalf);
     gui.rebuild(spheres.length);
@@ -139,11 +255,18 @@ async function main() {
   };
 
   gui.onSave = () => {
-    saveConfig(spheresToConfig(spheres, physParams));
+    saveConfig(spheresToConfig(spheres, physParams, bonds));
   };
 
   gui.onLoad = () => {
     loadConfigFromFile().then(cfg => applyConfig(cfg));
+  };
+
+  gui.onLoadCube = () => {
+    fetch("cube-config.json")
+      .then(response => response.ok ? response.text() : Promise.reject(new Error("Cube preset unavailable")))
+      .then(json => applyConfig(parseConfig(json)))
+      .catch(console.error);
   };
 
   // ── Load default config on startup ────────────────────────────────────────
@@ -160,7 +283,7 @@ async function main() {
   } catch { /* fall back to generated spheres */ }
 
   compute.upload(spheres);
-  compute.buildAndUploadSprings(spheres);
+  bonds = compute.buildAndUploadSprings(spheres);
   compute.updatePhysicsParams(physParams);
   renderer.updateBoundingBox(physParams.boxHalf);
   gui.rebuild(spheres.length);

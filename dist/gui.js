@@ -10,6 +10,8 @@ export class GUI {
     onSave;
     /** Called when the user clicks Load — should open a file picker. */
     onLoad;
+    /** Called when the user loads the built-in FCC cube preset. */
+    onLoadCube;
     /** Canvas element for the energy plot — pass to EnergyPlot constructor. */
     energyCanvas;
     particleCount;
@@ -41,10 +43,15 @@ export class GUI {
         btnLoad.textContent = "LOAD";
         btnLoad.title = "Load configuration from JSON file";
         btnLoad.addEventListener("click", () => this.onLoad?.());
+        const btnCube = el("button", "header-btn");
+        btnCube.textContent = "CUBE";
+        btnCube.title = "Load the built-in FCC cube configuration";
+        btnCube.addEventListener("click", () => this.onLoadCube?.());
         const btnSave = el("button", "header-btn header-btn-accent");
         btnSave.textContent = "SAVE";
         btnSave.title = "Save current configuration to JSON file";
         btnSave.addEventListener("click", () => this.onSave?.());
+        btnGroup.appendChild(btnCube);
         btnGroup.appendChild(btnLoad);
         btnGroup.appendChild(btnSave);
         header.appendChild(title);

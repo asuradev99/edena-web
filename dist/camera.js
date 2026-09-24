@@ -15,6 +15,7 @@ export class Camera {
     activeButton = -1;
     lastX = 0;
     lastY = 0;
+    leftDragEnabled = true;
     constructor(canvas) {
         canvas.addEventListener("mousedown", this.onDown);
         window.addEventListener("mousemove", this.onMove);
@@ -33,6 +34,27 @@ export class Camera {
         return mat4Multiply(proj, view);
     }
     getEyePosition() { return this.eye(); }
+    /** Editor tools reserve left-drag; right/middle pan and wheel zoom remain available. */
+    setLeftDragEnabled(enabled) { this.leftDragEnabled = enabled; }
+    getRay(clientX, clientY, canvas) {
+        const rect = canvas.getBoundingClientRect();
+        const nx = ((clientX - rect.left) / rect.width) * 2 - 1;
+        const ny = 1 - ((clientY - rect.top) / rect.height) * 2;
+        const origin = this.eye();
+        const forward = normalize([
+            this.target[0] - origin[0], this.target[1] - origin[1], this.target[2] - origin[2],
+        ]);
+        const right = normalize(cross(forward, [0, 1, 0]));
+        const up = normalize(cross(right, forward));
+        const scale = Math.tan(Math.PI / 8);
+        const aspect = rect.width / rect.height;
+        const direction = normalize([
+            forward[0] + right[0] * nx * scale * aspect + up[0] * ny * scale,
+            forward[1] + right[1] * nx * scale * aspect + up[1] * ny * scale,
+            forward[2] + right[2] * nx * scale * aspect + up[2] * ny * scale,
+        ]);
+        return { origin, direction };
+    }
     eye() {
         const sp = Math.sin(this.phi), cp = Math.cos(this.phi);
         const st = Math.sin(this.theta), ct = Math.cos(this.theta);
@@ -43,6 +65,8 @@ export class Camera {
         ];
     }
     onDown = (e) => {
+        if (e.button === 0 && !this.leftDragEnabled)
+            return;
         this.activeButton = e.button;
         this.lastX = e.clientX;
         this.lastY = e.clientY;
@@ -92,5 +116,12 @@ export class Camera {
         this.target[1] += (-ry * dx + uy * dy) * scale;
         this.target[2] += (-rz * dx + uz * dy) * scale;
     }
+}
+function cross(a, b) {
+    return [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+}
+function normalize(v) {
+    const length = Math.hypot(v[0], v[1], v[2]) || 1;
+    return [v[0] / length, v[1] / length, v[2] / length];
 }
 //# sourceMappingURL=camera.js.map

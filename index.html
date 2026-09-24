@@ -373,6 +373,59 @@
       background: rgba(0, 0, 0, 0.35);
     }
 
+    /* ── Paused structure editor ─────────────────────────────────────────── */
+    #editor-panel {
+      position: absolute;
+      top: 74px;
+      left: 18px;
+      z-index: 11;
+      width: 226px;
+      padding: 14px;
+      display: none;
+      color: var(--text);
+      background: var(--panel-bg);
+      border: 1px solid var(--border);
+      border-radius: 9px;
+      backdrop-filter: blur(14px);
+      box-shadow: 0 8px 30px rgba(0,0,0,.45);
+      font-size: 9px;
+      letter-spacing: .08em;
+    }
+    #editor-panel.visible { display: block; }
+    body:has(#editor-panel.visible) #canvas { cursor: crosshair; }
+    .editor-title { color: var(--cyan); font-weight: 600; letter-spacing: .18em; margin-bottom: 10px; }
+    .editor-tools { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; }
+    .editor-tool, #create-grid, #set-atom-type, #delete-atom {
+      border: 1px solid rgba(255,255,255,.09);
+      border-radius: 4px;
+      padding: 7px 5px;
+      color: var(--muted);
+      background: var(--input-bg);
+      font: 600 8px var(--font);
+      letter-spacing: .08em;
+      cursor: pointer;
+    }
+    .editor-tool.active { color: var(--cyan); border-color: rgba(0,212,255,.35); background: var(--cyan-dim); }
+    .editor-tool { font-size: 15px; line-height: 1; }
+    .editor-bond-icon { font-size: 11px; letter-spacing: -.08em; }
+    .editor-mode-panel { display: none; }
+    .editor-mode-panel.visible { display: block; }
+    .editor-section { margin: 14px 0 7px; color: var(--cyan); opacity: .7; font-weight: 600; }
+    .editor-grid-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; }
+    .editor-grid-row label, .editor-field { color: var(--muted); }
+    .editor-grid-row input, .editor-field input, .editor-field select {
+      width: 100%; margin-top: 4px; padding: 6px;
+      border: 1px solid rgba(255,255,255,.08); border-radius: 4px;
+      outline: none; background: var(--input-bg); color: var(--text); font: 10px var(--font);
+    }
+    .editor-field { display: block; margin-top: 7px; }
+    .editor-field select option { background: #0d0f18; }
+    #create-grid, #set-atom-type, #delete-atom { width: 100%; margin-top: 7px; color: var(--cyan); border-color: rgba(0,212,255,.25); }
+    #set-atom-type { color: var(--text); }
+    #delete-atom { color: #ff7f8b; border-color: rgba(255,80,100,.24); }
+    #editor-status { min-height: 28px; margin-top: 11px; color: var(--text); line-height: 1.5; }
+    .editor-help { color: var(--muted); line-height: 1.5; opacity: .8; }
+
     /* ── Camera hint ──────────────────────────────────────────────────────── */
     #hint {
       position: absolute;

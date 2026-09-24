@@ -85,6 +85,7 @@ for (let ix = 0; ix < NCELLS; ix++) {
           velocity: [0, 0, 0],
           radius:   0.25,
           color:    hslToRgb(hue, 0.75, 0.62),
+          type:     1,
         });
       }
     }
@@ -97,6 +98,6 @@ const config = {
   spheres,
 };
 
-const outPath = join(__dirname, "..", "default-config.json");
+const outPath = join(__dirname, "..", "cube-config.json");
 writeFileSync(outPath, JSON.stringify(config, null, 2), "utf8");
 console.log(`Wrote ${spheres.length} particles to ${outPath}`);
