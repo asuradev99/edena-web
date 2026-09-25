@@ -396,6 +396,8 @@ function rebuild(): void {
     atomLabelsToggle.title = atomLabelsToggle.disabled ? 'Symbols are drawn for cells of up to 36 sites' : 'Label every site with its element';
     bondsToggle.disabled = big.positions.length > 1200;
     bondsToggle.title = bondsToggle.disabled ? 'Bonds are found for cells of up to 1,200 atoms' : 'Draw a bond between neighbouring sites';
+    trailsToggle.disabled = big.positions.length > 400;
+    trailsToggle.title = trailsToggle.disabled ? 'Orbit arcs are drawn for cells of up to 400 sites' : 'Trace the path each site travels';
   }
 
   // The nearest-neighbour search and the bond list describe the structure, not the operation, and
