@@ -143,10 +143,13 @@ Last updated: 2026-09-25 by **deepcode** (crystal viewer: centred-lattice animat
     montages per operation (`/tmp/edena/montage-*.png`), `npm test` 45 → **59/59**.
   - **Performance (found while checking a large upload).** `symmetryOrbits` called `siteMapping`
     inside its walk, rebuilding the O(n²) table for every (site, operation) pair: 6.5 s for a
-    400-atom cell, 23 ms now. The "before" wire markers each built their own wireframe geometry;
-    they now share one per element. The bond list, the nearest-neighbour distance and the structure
-    summary describe the crystal rather than the chosen operation, so they are cached across
-    operation changes. A 400-atom SrTiO3 POSCAR went from ~13 s to **473 ms** and renders at 61 fps.
+    400-atom cell, 23 ms now. The "before" wire markers each built their own wireframe geometry, and
+    a CPU profile then showed the per-vertex-shaded sphere being rebuilt per element on every
+    rebuild — the largest single cost of choosing an operation. Bond finding, the nearest-neighbour
+    distance, the atom mesh, the bond geometry and the cell-preserving operation list describe the
+    crystal rather than the chosen operation, so all of them are cached across operation changes.
+    A 400-atom SrTiO3 POSCAR loads in **473 ms** (was ~13 s) and renders at 61 fps; choosing an
+    operation rebuilds in **4 ms** at 1x1x1, 30 ms at 3x3x3 (was 55-95 ms and 78 ms).
 - **Crystal viewer, library layer (chatgpt):** `src/lib/crystal.ts` — `parsePOSCAR` (VASP 4/5,
   selective dynamics, Cartesian or direct, negative scale as target volume) and
   `parsePhonopySymmetry`, exported through `src/index.ts` with `tests/crystal.test.mjs`.

@@ -148,7 +148,7 @@ Measurements were taken on Chrome Beta with Vulkan and an AMD RX 6700 XT. They a
 | Workload | Result |
 | --- | --- |
 | Landing showcase | 60 FPS, four views, about 123K triangles |
-| Crystal symmetry viewer | 60 FPS at 1×1×1 through 3×3×3 perovskite (135 atoms, 129 moving sites, one merged trail draw); a 400-atom POSCAR loads in ~0.5 s |
+| Crystal symmetry viewer | 60 FPS at 1×1×1 through 3×3×3 perovskite (135 atoms, 129 moving sites, one merged trail draw); a 400-atom POSCAR loads in ~0.5 s; choosing an operation rebuilds in ~4 ms, ~30 ms at 3×3×3 |
 | Physics laboratory | 60 FPS, six views, about 54K triangles |
 | GPU oscillator | 50,000 particles, about 0.022 ms GPU integration per step |
 | GPU direct n-body | 8,192 bodies ≈ 0.5 ms/step; 32,768 ≈ 3.7 ms/step |
@@ -156,7 +156,7 @@ Measurements were taken on Chrome Beta with Vulkan and an AMD RX 6700 XT. They a
 
 Default budgets throw when exceeded: isosurfaces allow 250,000 grid samples, surfaces allow 250,000 quads, curves allow 100,000 samples, and polylines allow 100,000 points. CPU field extraction blocks the frame that requests it, so precompute or lower resolution for interactive controls.
 
-The crystal viewer bonds cells up to 1,200 atoms (beyond that it draws atoms without bonds) and draws at most 1,600 atoms per supercell. Bond finding, the nearest-neighbour distance and the symmetry-orbit computation are all O(n²) in the number of sites, but they describe the crystal rather than the selected operation, so they are computed once per structure and reused as the operation changes.
+The crystal viewer bonds cells up to 1,200 atoms (beyond that it draws atoms without bonds) and draws at most 1,600 atoms per supercell. Bond finding, the nearest-neighbour distance, the atom mesh and the symmetry-orbit computation describe the crystal rather than the selected operation, so they are computed once and reused as the operation changes; only the orbit arcs, which are per operation, are rebuilt each time.
 
 ## Development
 
