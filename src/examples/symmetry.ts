@@ -119,6 +119,8 @@ let colourMode: 'species' | 'site' = 'species';
 let built: Built | undefined;
 /** Neighbour search and bonds, reused while the crystal and the bond toggle are unchanged. */
 let neighbours: { base: CrystalStructure; n: number; showBonds: boolean; shortest: number; bonds: Bond[] } | undefined;
+/** Which structure the camera was framed for, so a manual zoom survives operation changes. */
+let framed: { base: CrystalStructure; n: number } | undefined;
 let frame = 0;
 let last = 0;
 let clock = 0;
@@ -287,8 +289,25 @@ function rebuild(): void {
   const pivot = fracToCart([n / 2, n / 2, n / 2]);
   const corners = [0, n].flatMap(i => [0, n].flatMap(j => [0, n].map(k => sub(fractionalToCartesian([i, j, k], base.lattice), pivot))));
   const bounds = boundsOf(corners);
-  view.camera.target = bounds.centre;
-  view.camera.height = bounds.extent * 1.45;
+  // Frame the box once per structure. Re-framing on every operation change would throw away the
+  // zoom and orbit the user just set up.
+  if (!framed || framed.base !== base || framed.n !== n) {
+    const camera = view.camera;
+    camera.target = bounds.centre;
+    camera.height = bounds.extent * 1.45;
+    // A rotated box projects taller than its axis-aligned extent, and the guard changes with the
+    // viewport aspect (a narrow stage clips the sides too), so measure the projection and fit it.
+    const viewportWidth = canvas.clientWidth, viewportHeight = canvas.clientHeight;
+    if (viewportWidth > 0 && viewportHeight > 0) {
+      const aspect = viewportWidth / viewportHeight;
+      const projected = corners.map(point => camera.project(point, viewportWidth, viewportHeight));
+      const toWorld = camera.height / viewportHeight;
+      const tall = (Math.max(...projected.map(([, y]) => y)) - Math.min(...projected.map(([, y]) => y))) * toWorld;
+      const wide = (Math.max(...projected.map(([x]) => x)) - Math.min(...projected.map(([x]) => x))) * toWorld / aspect;
+      camera.height = Math.max(bounds.extent, tall, wide) * 1.18;
+    }
+    framed = { base, n };
+  }
 
   // The nearest-neighbour search and the bond list describe the structure, not the operation, and
   // both are O(n²): re-deriving them on every operation change cost a 400-atom cell ~140 ms a time.
