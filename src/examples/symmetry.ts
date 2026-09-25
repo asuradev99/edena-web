@@ -6,7 +6,7 @@ import {
   latticePointGroup, mapsOntoSelf, siteMapping, symmetryOrbits,
   operationIsometry, isometryPoint, isometryTarget, rotateAboutAxis,
   mathml, mi, mn, mo, msub, row, matrix, vec,
-  type Vec3, type Bond, type CrystalStructure, type CrystalOperation, type Supercell, type Isometry,
+  type Vec3, type Bond, type Lattice, type CrystalStructure, type CrystalOperation, type Supercell, type Isometry,
 } from '../index.js';
 
 const $ = <T extends HTMLElement>(id: string): T => {
@@ -152,13 +152,16 @@ function gcd(a: number, b: number): number { return b ? gcd(b, a % b) : a; }
 
 /**
  * The operation's rigid motion, memoised: the picker, the ordering and the report all ask for it
- * repeatedly, and the decomposition costs a couple of 3×3 products. Operations are recreated
- * whenever the structure changes, so a WeakMap keyed by operation cannot go stale.
+ * repeatedly, and the decomposition costs a couple of 3×3 products. The motion is Cartesian, so the
+ * entry records which lattice it was derived from — a phonopy file's operations outlive a change of
+ * structure, and their axis and translation would otherwise describe the crystal that has gone.
  */
-const MOTIONS = new WeakMap<CrystalOperation, Motion>();
+const MOTIONS = new WeakMap<CrystalOperation, { lattice: Lattice; motion: Motion }>();
 function motionFor(operation: CrystalOperation): Motion {
-  let motion = MOTIONS.get(operation);
-  if (!motion) { motion = { ...operationIsometry(base.lattice, operation), operation }; MOTIONS.set(operation, motion); }
+  const cached = MOTIONS.get(operation);
+  if (cached && cached.lattice === base.lattice) return cached.motion;
+  const motion = { ...operationIsometry(base.lattice, operation), operation };
+  MOTIONS.set(operation, { lattice: base.lattice, motion });
   return motion;
 }
 
