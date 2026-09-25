@@ -166,29 +166,128 @@
         </div>
       </section>
 
-      <section class="panel" id="follow" aria-label="A camera that follows">
-        <div class="panel-head"><span class="index">21</span><div><h2>A camera that follows</h2><p>camera.target · smooth · polyline</p></div><span class="tag">FOLLOW</span></div>
-        <div class="stage"><canvas id="follow-canvas" aria-label="A marker travelling a closed path while the camera keeps it centred"></canvas><div class="labels" id="follow-labels"></div></div>
+      <section class="panel" id="plot" aria-label="A chart in three dimensions">
+        <div class="panel-head"><span class="index">08</span><div><h2>A chart in 3D</h2><p>plotFrame · functionCurve · niceStep · tickValues · formatTick</p></div><span class="tag">PLOT</span></div>
+        <div class="stage"><canvas id="plot-canvas" aria-label="A function plot with axes, ticks, a grid and edge-aligned tick labels, drawn with the same camera as the 3D scenes"></canvas><div class="labels" id="plot-labels"></div></div>
         <div class="controls">
-          <label><button id="follow-lock" aria-pressed="true">Following</button></label>
-          <label><button id="follow-play" aria-pressed="false">Pause</button></label>
-          <label>Height <input id="follow-pitch" type="range" min="0.06" max="1.35" step="0.01" value="0.38"> <output id="follow-pitch-value">0.38</output></label>
-          <label>Distance <input id="follow-distance" type="range" min="5" max="15" step="0.1" value="9.5"> <output id="follow-distance-value">9.5</output></label>
-          <p class="readout" id="follow-readout">target</p>
-          <p><code>camera.target</code> is the point the camera looks at, so animating it is how a shot follows its subject: the whole path is drawn in advance, the marker slides along it, and only the looked-at point changes. Turn following off and the same motion happens in the corner of a still frame — which is the difference between a shot and a diagram.</p>
+          <label>Function <select id="plot-function"><option value="sine" selected>sin(x)</option><option value="square">square wave</option><option value="damped">damped sine</option><option value="gaussian">Gaussian</option></select></label>
+          <p>A chart is a 3D scene too, so it orbits, zooms and labels with exactly the same machinery as everything else. <code>plotFrame</code> returns grid, tick and axis geometry plus the anchors to label them, picking round tick steps with <code>niceStep</code> and formatting them with <code>formatTick</code>.</p>
         </div>
       </section>
 
-      <section class="panel" id="bars" aria-label="A bar chart in 3D">
-        <div class="panel-head"><span class="index">20</span><div><h2>A bar chart in 3D</h2><p>box · tickValues · niceStep · ramps · a tweened sort</p></div><span class="tag">CHART</span></div>
-        <div class="stage"><canvas id="bars-canvas" aria-label="Eight bars rising from a grid, coloured by value, with a labelled value axis"></canvas><div class="labels" id="bars-labels"></div></div>
+      <section class="panel" id="depth" aria-label="Depth and draw order">
+        <div class="panel-head"><span class="index">09</span><div><h2>Depth, and why order does not matter</h2><p>box · shadedSphere · rgba(hex, alpha) · two passes</p></div><span class="tag">DEPTH</span></div>
+        <div class="stage"><canvas id="depth-canvas" aria-label="Two large translucent slabs crossing each other with opaque spheres threaded through them"></canvas><div class="labels" id="depth-labels"></div></div>
         <div class="controls">
-          <label>Series <select id="bars-series"><option value="orbits" selected>Orbit radii</option><option value="moons">Moon counts</option><option value="sizes">Body diameters</option></select></label>
-          <label><button id="bars-play" aria-pressed="false">Pause</button></label>
-          <label>Sort <input id="bars-sort" type="range" min="0" max="1" step="0.02" value="0"> <output id="bars-sort-value">by index</output></label>
-          <label><button id="bars-spin" aria-pressed="true">Turning</button></label>
-          <p class="readout" id="bars-readout">orbits</p>
-          <p>Data becomes geometry: one unit bar mesh, scaled per datum, sitting on a grid whose ticks come from <code>tickValues</code> and <code>niceStep</code>. The sort slider eases the heights towards their ranked order rather than jumping, which is the whole reason an animated chart reads better than a redrawn one — and it is the same <code>smooth</code> the rest of the tour uses.</p>
+          <label>Cross them <input id="depth-cross" type="range" min="-2.6" max="2.6" step="0.05" value="0.6"> <output id="depth-cross-value">0.60</output></label>
+          <label>Tilt the stack <input id="depth-tilt" type="range" min="-70" max="70" step="1" value="26"> <output id="depth-tilt-value">26°</output></label>
+          <label><button id="depth-spin" aria-pressed="true">Turning</button></label>
+          <p>Opacity is only half the problem: translucent faces have to be blended back to front, and the order they were added in must not matter. The renderer draws opaque geometry first with a depth test, then sorts the translucent faces by depth. The spheres below stay solid wherever they sit, and the two slabs blend correctly however they cross — which is what makes nested and interpenetrating solids work everywhere else on this page.</p>
+        </div>
+      </section>
+
+      <section class="panel" id="instances" aria-label="One mesh, many copies">
+        <div class="panel-head"><span class="index">10</span><div><h2>One mesh, many copies</h2><p>Geometry · Group.add · the renderer's batching</p></div><span class="tag">BATCHING</span></div>
+        <div class="stage"><canvas id="instances-canvas" aria-label="A grid of cubes that all share one mesh, scaled by a travelling wave"></canvas><div class="labels" id="instances-labels"></div></div>
+        <div class="controls">
+          <label>Copies <input id="instances-count" type="range" min="2" max="6" step="1" value="4"> <output id="instances-count-value">4³ = 64 cubes</output></label>
+          <label>Wave <input id="instances-wave" type="range" min="0" max="1" step="0.02" value="0.6"> <output id="instances-wave-value">0.60</output></label>
+          <label><button id="instances-spin" aria-pressed="true">Animating</button></label>
+          <p>The same mesh, moved and scaled rather than rebuilt: 64 cubes here, 216 at the top of the slider, all from one <code>Geometry</code> and two colours. The renderer buckets the tree by geometry and colour and pushes one instanced draw per bucket, which is why a lattice of a thousand atoms costs no more to issue than a handful.</p>
+        </div>
+      </section>
+
+      <section class="panel" id="camera" aria-label="A camera move">
+        <div class="panel-head"><span class="index">11</span><div><h2>A camera move</h2><p>OrbitCamera · yaw · pitch · distance · smooth</p></div><span class="tag">CAMERA</span></div>
+        <div class="stage"><canvas id="camera-canvas" aria-label="A ring of solids seen from a camera that orbits, dives, sweeps or climbs"></canvas><div class="labels" id="camera-labels"></div></div>
+        <div class="controls">
+          <label>Move <select id="camera-path"><option value="orbit" selected>Orbit</option><option value="dive">Dive in</option><option value="sweep">Sweep across</option><option value="top">Climb over</option></select></label>
+          <label><button id="camera-play" aria-pressed="false">Pause</button></label>
+          <label>Shot <input id="camera-time" type="range" min="0" max="1" step="0.005" value="0"> <output id="camera-time-value">0%</output></label>
+          <p>A camera is three numbers: yaw, pitch and distance — or the visible height in orthographic mode. Driving them with <code>smooth</code> gives a shot, and scrubbing the same number gives a storyboard of it. Nothing in the scene moves here; the readout below shows the numbers a drag would be editing by hand.</p>
+          <p class="readout" id="camera-readout">yaw 0.00 · pitch 0.00 · distance 0.0</p>
+        </div>
+      </section>
+
+      <section class="panel" id="simulation" aria-label="A simulation, stepped by hand">
+        <div class="panel-head"><span class="index">12</span><div><h2>A simulation, stepped by hand</h2><p>createParticleState · stepParticles · Visual</p></div><span class="tag">SIMULATION</span></div>
+        <div class="stage"><canvas id="simulation-canvas" aria-label="Hundreds of particles moving under an acceleration the page computes itself"></canvas><div class="labels" id="simulation-labels"></div></div>
+        <div class="controls">
+          <label>Force <select id="simulation-force"><option value="spring" selected>Spring</option><option value="swirl">Swirl</option><option value="pair">Two wells</option></select></label>
+          <label>Particles <input id="simulation-count" type="range" min="60" max="600" step="20" value="260"> <output id="simulation-count-value">260</output></label>
+          <label><button id="simulation-play" aria-pressed="false">Pause</button></label>
+          <p>The library does not need the GPU for this: <code>stepParticles</code> hands each particle's position and velocity to a function you write, returns an acceleration, and advances semi-implicitly without allocating. Here that function is three lines, and the numbers the readout shows are the same ones driving the picture — six hundred of them at the top of the slider.</p>
+        </div>
+      </section>
+
+      <section class="panel" id="field" aria-label="Shapes from a scalar field">
+        <div class="panel-head"><span class="index">13</span><div><h2>Shapes from a scalar field</h2><p>isosurface(f, bounds, level, resolution) · boundsBox</p></div><span class="tag">FIELD</span></div>
+        <div class="stage"><canvas id="field-canvas" aria-label="The level set of an implicit function, inside a wireframe domain box"></canvas><div class="labels" id="field-labels"></div></div>
+        <div class="controls">
+          <label>Field <select id="field-kind"><option value="balls" selected>Two overlapping balls</option><option value="torus">Torus</option><option value="gyroid">Gyroid</option></select></label>
+          <label>Level <input id="field-level" type="range" min="-1" max="1" step="0.02" value="0"> <output id="field-level-value">0.00</output></label>
+          <label>Detail <select id="field-resolution"><option value="20">Coarse</option><option value="28" selected>Medium</option><option value="36">Fine</option></select></label>
+          <label><button id="field-spin" aria-pressed="true">Turning</button></label>
+          <p>No triangles are authored here: the shape is the set of points where <code>f(x, y, z) = level</code>, extracted on the CPU by marching tetrahedra. Move the level and the surface swells, splits or pinches off — which is why implicit shapes are so easy to animate, and why the field explorer on the landing page can morph one into another.</p>
+        </div>
+      </section>
+
+      <section class="panel" id="streamlines" aria-label="Streamlines in a vector field">
+        <div class="panel-head"><span class="index">14</span><div><h2>Streamlines in a vector field</h2><p>streamlines(field, seeds) · sphereSeeds · polyline · merge</p></div><span class="tag">FLOW</span></div>
+        <div class="stage"><canvas id="streamlines-canvas" aria-label="Curves traced through a vector field, with markers flowing along them"></canvas><div class="labels" id="streamlines-labels"></div></div>
+        <div class="controls">
+          <label>Field <select id="streamlines-kind"><option value="swirl" selected>Swirl</option><option value="saddle">Saddle</option><option value="dipole">Source and sink</option></select></label>
+          <label>Lines <input id="streamlines-count" type="range" min="6" max="48" step="2" value="22"> <output id="streamlines-count-value">22</output></label>
+          <label>Flow <input id="streamlines-speed" type="range" min="0" max="2" step="0.05" value="0.7"> <output id="streamlines-speed-value">0.70</output></label>
+          <label><button id="streamlines-turn" aria-pressed="true">Turning</button></label>
+          <p>A vector field is a function from a point to a direction. <code>streamlines</code> seeds a set of starting points on a sphere and integrates each one with RK4, normalising at every step so the spacing is arc length rather than speed. The tubes are one merged geometry, and the markers riding them are just points interpolated along the traced polylines.</p>
+        </div>
+      </section>
+
+      <section class="panel" id="story" aria-label="Building a scene in steps">
+        <div class="panel-head"><span class="index">15</span><div><h2>Building a scene in steps</h2><p>Timeline · Cue · seek · opacity · reveal</p></div><span class="tag">STORY</span></div>
+        <div class="stage"><canvas id="story-canvas" aria-label="A small lattice assembled in four steps: frame, bonds, atoms, then labels"></canvas><div class="labels" id="story-labels"></div></div>
+        <div class="controls">
+          <label><button id="story-play" aria-pressed="false">Pause</button></label>
+          <label>Timeline <input id="story-time" type="range" min="0" max="8" step="0.01" value="0"> <output id="story-time-value">0.0 s</output></label>
+          <label><button id="story-restart">Start over</button></label>
+          <p class="readout" id="story-chapter">0 · waiting</p>
+          <p>Every explainer on this site is this demo. One <code>Timeline</code> holds four cues — the frame fades in, the bonds scale out, the atoms arrive, the labels appear — and each cue is a function of its own progress. Seeking is absolute, so the scrubber, the play button and the readout are all the same clock, and a paused frame is reproducible.</p>
+        </div>
+      </section>
+
+      <section class="panel" id="vectors" aria-label="A vector diagram">
+        <div class="panel-head"><span class="index">16</span><div><h2>Arrows, and what they add up to</h2><p>arrow(start, end) · polyline · merge · vec()</p></div><span class="tag">DIAGRAM</span></div>
+        <div class="stage"><canvas id="vectors-canvas" aria-label="Two arrows from an origin, the parallelogram they span, and their sum"></canvas><div class="labels" id="vectors-labels"></div></div>
+        <div class="controls">
+          <label>Spread <input id="vectors-spread" type="range" min="10" max="165" step="1" value="70"> <output id="vectors-spread-value">70°</output></label>
+          <label>Length <input id="vectors-length" type="range" min="0.6" max="2.3" step="0.05" value="1.8"> <output id="vectors-length-value">1.80</output></label>
+          <label><button id="vectors-spin" aria-pressed="true">Turning</button></label>
+          <p class="readout" id="vectors-readout">sum</p>
+          <p>A diagram is geometry plus text: an <code>arrow</code> is a tube with a cone on the end, the parallelogram is two more tubes, and each vector is named with the math typesetter's <code>vec</code> accent positioned at its tip. Everything follows the two sliders, and the readout restates the arithmetic in the picture.</p>
+        </div>
+      </section>
+
+      <section class="panel" id="path" aria-label="A path to travel along">
+        <div class="panel-head"><span class="index">17</span><div><h2>A path to travel along</h2><p>polyline · msub · tween · smooth</p></div><span class="tag">PATH</span></div>
+        <div class="stage"><canvas id="path-canvas" aria-label="A cubic Bezier curve, its control polygon, and a marker travelling along it"></canvas><div class="labels" id="path-labels"></div></div>
+        <div class="controls">
+          <label>Path <select id="path-kind"><option value="arc" selected>High arc</option><option value="swoop">Swoop</option><option value="loop">Loop</option></select></label>
+          <label><button id="path-play" aria-pressed="false">Pause</button></label>
+          <label>Along <input id="path-time" type="range" min="0" max="1" step="0.005" value="0"> <output id="path-time-value">0%</output></label>
+          <p class="readout" id="path-readout">t = 0.00</p>
+          <p>A path is a curve sampled into a tube: four control points define a cubic Bézier, the polygon between them is drawn faintly so the construction is visible, and the marker reads its position from the same parameter the scrubber sets. Easing that parameter with <code>smooth</code> is what makes a move look deliberate rather than robotic — the readout shows both, so the difference is measurable.</p>
+        </div>
+      </section>
+
+      <section class="panel" id="normals" aria-label="A surface and its normals">
+        <div class="panel-head"><span class="index">18</span><div><h2>A surface, and the way it faces</h2><p>functionSurface · arrow · merge · central differences</p></div><span class="tag">NORMALS</span></div>
+        <div class="stage"><canvas id="normals-canvas" aria-label="A height surface carrying a grid of arrows along its normals"></canvas><div class="labels" id="normals-labels"></div></div>
+        <div class="controls">
+          <label>Surface <select id="normals-kind"><option value="saddle" selected>Saddle</option><option value="wave">Wave</option><option value="dome">Dome</option></select></label>
+          <label>Arrow length <input id="normals-length" type="range" min="0.2" max="1.4" step="0.05" value="0.7"> <output id="normals-length-value">0.70</output></label>
+          <label><button id="normals-spin" aria-pressed="true">Turning</button></label>
+          <p>For a height field <code>z = f(x, y)</code> the normal is <code>(−f<sub>x</sub>, 1, −f<sub>y</sub>)</code> up to scale, and the tangents it comes from are just central differences. The arrows are one merged geometry sampled on a grid; changing the surface rebuilds both the surface and every normal, which is the same work a lighting model would do per vertex.</p>
         </div>
       </section>
 
@@ -205,128 +304,29 @@
         </div>
       </section>
 
-      <section class="panel" id="normals" aria-label="A surface and its normals">
-        <div class="panel-head"><span class="index">18</span><div><h2>A surface, and the way it faces</h2><p>functionSurface · arrow · merge · central differences</p></div><span class="tag">NORMALS</span></div>
-        <div class="stage"><canvas id="normals-canvas" aria-label="A height surface carrying a grid of arrows along its normals"></canvas><div class="labels" id="normals-labels"></div></div>
+      <section class="panel" id="bars" aria-label="A bar chart in 3D">
+        <div class="panel-head"><span class="index">20</span><div><h2>A bar chart in 3D</h2><p>box · tickValues · niceStep · ramps · a tweened sort</p></div><span class="tag">CHART</span></div>
+        <div class="stage"><canvas id="bars-canvas" aria-label="Eight bars rising from a grid, coloured by value, with a labelled value axis"></canvas><div class="labels" id="bars-labels"></div></div>
         <div class="controls">
-          <label>Surface <select id="normals-kind"><option value="saddle" selected>Saddle</option><option value="wave">Wave</option><option value="dome">Dome</option></select></label>
-          <label>Arrow length <input id="normals-length" type="range" min="0.2" max="1.4" step="0.05" value="0.7"> <output id="normals-length-value">0.70</output></label>
-          <label><button id="normals-spin" aria-pressed="true">Turning</button></label>
-          <p>For a height field <code>z = f(x, y)</code> the normal is <code>(−f<sub>x</sub>, 1, −f<sub>y</sub>)</code> up to scale, and the tangents it comes from are just central differences. The arrows are one merged geometry sampled on a grid; changing the surface rebuilds both the surface and every normal, which is the same work a lighting model would do per vertex.</p>
+          <label>Series <select id="bars-series"><option value="orbits" selected>Orbit radii</option><option value="moons">Moon counts</option><option value="sizes">Body diameters</option></select></label>
+          <label><button id="bars-play" aria-pressed="false">Pause</button></label>
+          <label>Sort <input id="bars-sort" type="range" min="0" max="1" step="0.02" value="0"> <output id="bars-sort-value">by index</output></label>
+          <label><button id="bars-spin" aria-pressed="true">Turning</button></label>
+          <p class="readout" id="bars-readout">orbits</p>
+          <p>Data becomes geometry: one unit bar mesh, scaled per datum, sitting on a grid whose ticks come from <code>tickValues</code> and <code>niceStep</code>. The sort slider eases the heights towards their ranked order rather than jumping, which is the whole reason an animated chart reads better than a redrawn one — and it is the same <code>smooth</code> the rest of the tour uses.</p>
         </div>
       </section>
 
-      <section class="panel" id="path" aria-label="A path to travel along">
-        <div class="panel-head"><span class="index">17</span><div><h2>A path to travel along</h2><p>polyline · msub · tween · smooth</p></div><span class="tag">PATH</span></div>
-        <div class="stage"><canvas id="path-canvas" aria-label="A cubic Bezier curve, its control polygon, and a marker travelling along it"></canvas><div class="labels" id="path-labels"></div></div>
+      <section class="panel" id="follow" aria-label="A camera that follows">
+        <div class="panel-head"><span class="index">21</span><div><h2>A camera that follows</h2><p>camera.target · smooth · polyline</p></div><span class="tag">FOLLOW</span></div>
+        <div class="stage"><canvas id="follow-canvas" aria-label="A marker travelling a closed path while the camera keeps it centred"></canvas><div class="labels" id="follow-labels"></div></div>
         <div class="controls">
-          <label>Path <select id="path-kind"><option value="arc" selected>High arc</option><option value="swoop">Swoop</option><option value="loop">Loop</option></select></label>
-          <label><button id="path-play" aria-pressed="false">Pause</button></label>
-          <label>Along <input id="path-time" type="range" min="0" max="1" step="0.005" value="0"> <output id="path-time-value">0%</output></label>
-          <p class="readout" id="path-readout">t = 0.00</p>
-          <p>A path is a curve sampled into a tube: four control points define a cubic Bézier, the polygon between them is drawn faintly so the construction is visible, and the marker reads its position from the same parameter the scrubber sets. Easing that parameter with <code>smooth</code> is what makes a move look deliberate rather than robotic — the readout shows both, so the difference is measurable.</p>
-        </div>
-      </section>
-
-      <section class="panel" id="vectors" aria-label="A vector diagram">
-        <div class="panel-head"><span class="index">16</span><div><h2>Arrows, and what they add up to</h2><p>arrow(start, end) · polyline · merge · vec()</p></div><span class="tag">DIAGRAM</span></div>
-        <div class="stage"><canvas id="vectors-canvas" aria-label="Two arrows from an origin, the parallelogram they span, and their sum"></canvas><div class="labels" id="vectors-labels"></div></div>
-        <div class="controls">
-          <label>Spread <input id="vectors-spread" type="range" min="10" max="165" step="1" value="70"> <output id="vectors-spread-value">70°</output></label>
-          <label>Length <input id="vectors-length" type="range" min="0.6" max="2.3" step="0.05" value="1.8"> <output id="vectors-length-value">1.80</output></label>
-          <label><button id="vectors-spin" aria-pressed="true">Turning</button></label>
-          <p class="readout" id="vectors-readout">sum</p>
-          <p>A diagram is geometry plus text: an <code>arrow</code> is a tube with a cone on the end, the parallelogram is two more tubes, and each vector is named with the math typesetter's <code>vec</code> accent positioned at its tip. Everything follows the two sliders, and the readout restates the arithmetic in the picture.</p>
-        </div>
-      </section>
-
-      <section class="panel" id="story" aria-label="Building a scene in steps">
-        <div class="panel-head"><span class="index">15</span><div><h2>Building a scene in steps</h2><p>Timeline · Cue · seek · opacity · reveal</p></div><span class="tag">STORY</span></div>
-        <div class="stage"><canvas id="story-canvas" aria-label="A small lattice assembled in four steps: frame, bonds, atoms, then labels"></canvas><div class="labels" id="story-labels"></div></div>
-        <div class="controls">
-          <label><button id="story-play" aria-pressed="false">Pause</button></label>
-          <label>Timeline <input id="story-time" type="range" min="0" max="8" step="0.01" value="0"> <output id="story-time-value">0.0 s</output></label>
-          <label><button id="story-restart">Start over</button></label>
-          <p class="readout" id="story-chapter">0 · waiting</p>
-          <p>Every explainer on this site is this demo. One <code>Timeline</code> holds four cues — the frame fades in, the bonds scale out, the atoms arrive, the labels appear — and each cue is a function of its own progress. Seeking is absolute, so the scrubber, the play button and the readout are all the same clock, and a paused frame is reproducible.</p>
-        </div>
-      </section>
-
-      <section class="panel" id="streamlines" aria-label="Streamlines in a vector field">
-        <div class="panel-head"><span class="index">14</span><div><h2>Streamlines in a vector field</h2><p>streamlines(field, seeds) · sphereSeeds · polyline · merge</p></div><span class="tag">FLOW</span></div>
-        <div class="stage"><canvas id="streamlines-canvas" aria-label="Curves traced through a vector field, with markers flowing along them"></canvas><div class="labels" id="streamlines-labels"></div></div>
-        <div class="controls">
-          <label>Field <select id="streamlines-kind"><option value="swirl" selected>Swirl</option><option value="saddle">Saddle</option><option value="dipole">Source and sink</option></select></label>
-          <label>Lines <input id="streamlines-count" type="range" min="6" max="48" step="2" value="22"> <output id="streamlines-count-value">22</output></label>
-          <label>Flow <input id="streamlines-speed" type="range" min="0" max="2" step="0.05" value="0.7"> <output id="streamlines-speed-value">0.70</output></label>
-          <label><button id="streamlines-turn" aria-pressed="true">Turning</button></label>
-          <p>A vector field is a function from a point to a direction. <code>streamlines</code> seeds a set of starting points on a sphere and integrates each one with RK4, normalising at every step so the spacing is arc length rather than speed. The tubes are one merged geometry, and the markers riding them are just points interpolated along the traced polylines.</p>
-        </div>
-      </section>
-
-      <section class="panel" id="field" aria-label="Shapes from a scalar field">
-        <div class="panel-head"><span class="index">13</span><div><h2>Shapes from a scalar field</h2><p>isosurface(f, bounds, level, resolution) · boundsBox</p></div><span class="tag">FIELD</span></div>
-        <div class="stage"><canvas id="field-canvas" aria-label="The level set of an implicit function, inside a wireframe domain box"></canvas><div class="labels" id="field-labels"></div></div>
-        <div class="controls">
-          <label>Field <select id="field-kind"><option value="balls" selected>Two overlapping balls</option><option value="torus">Torus</option><option value="gyroid">Gyroid</option></select></label>
-          <label>Level <input id="field-level" type="range" min="-1" max="1" step="0.02" value="0"> <output id="field-level-value">0.00</output></label>
-          <label>Detail <select id="field-resolution"><option value="20">Coarse</option><option value="28" selected>Medium</option><option value="36">Fine</option></select></label>
-          <label><button id="field-spin" aria-pressed="true">Turning</button></label>
-          <p>No triangles are authored here: the shape is the set of points where <code>f(x, y, z) = level</code>, extracted on the CPU by marching tetrahedra. Move the level and the surface swells, splits or pinches off — which is why implicit shapes are so easy to animate, and why the field explorer on the landing page can morph one into another.</p>
-        </div>
-      </section>
-
-      <section class="panel" id="simulation" aria-label="A simulation, stepped by hand">
-        <div class="panel-head"><span class="index">12</span><div><h2>A simulation, stepped by hand</h2><p>createParticleState · stepParticles · Visual</p></div><span class="tag">SIMULATION</span></div>
-        <div class="stage"><canvas id="simulation-canvas" aria-label="Hundreds of particles moving under an acceleration the page computes itself"></canvas><div class="labels" id="simulation-labels"></div></div>
-        <div class="controls">
-          <label>Force <select id="simulation-force"><option value="spring" selected>Spring</option><option value="swirl">Swirl</option><option value="pair">Two wells</option></select></label>
-          <label>Particles <input id="simulation-count" type="range" min="60" max="600" step="20" value="260"> <output id="simulation-count-value">260</output></label>
-          <label><button id="simulation-play" aria-pressed="false">Pause</button></label>
-          <p>The library does not need the GPU for this: <code>stepParticles</code> hands each particle's position and velocity to a function you write, returns an acceleration, and advances semi-implicitly without allocating. Here that function is three lines, and the numbers the readout shows are the same ones driving the picture — six hundred of them at the top of the slider.</p>
-        </div>
-      </section>
-
-      <section class="panel" id="camera" aria-label="A camera move">
-        <div class="panel-head"><span class="index">11</span><div><h2>A camera move</h2><p>OrbitCamera · yaw · pitch · distance · smooth</p></div><span class="tag">CAMERA</span></div>
-        <div class="stage"><canvas id="camera-canvas" aria-label="A ring of solids seen from a camera that orbits, dives, sweeps or climbs"></canvas><div class="labels" id="camera-labels"></div></div>
-        <div class="controls">
-          <label>Move <select id="camera-path"><option value="orbit" selected>Orbit</option><option value="dive">Dive in</option><option value="sweep">Sweep across</option><option value="top">Climb over</option></select></label>
-          <label><button id="camera-play" aria-pressed="false">Pause</button></label>
-          <label>Shot <input id="camera-time" type="range" min="0" max="1" step="0.005" value="0"> <output id="camera-time-value">0%</output></label>
-          <p>A camera is three numbers: yaw, pitch and distance — or the visible height in orthographic mode. Driving them with <code>smooth</code> gives a shot, and scrubbing the same number gives a storyboard of it. Nothing in the scene moves here; the readout below shows the numbers a drag would be editing by hand.</p>
-          <p class="readout" id="camera-readout">yaw 0.00 · pitch 0.00 · distance 0.0</p>
-        </div>
-      </section>
-
-      <section class="panel" id="instances" aria-label="One mesh, many copies">
-        <div class="panel-head"><span class="index">10</span><div><h2>One mesh, many copies</h2><p>Geometry · Group.add · the renderer's batching</p></div><span class="tag">BATCHING</span></div>
-        <div class="stage"><canvas id="instances-canvas" aria-label="A grid of cubes that all share one mesh, scaled by a travelling wave"></canvas><div class="labels" id="instances-labels"></div></div>
-        <div class="controls">
-          <label>Copies <input id="instances-count" type="range" min="2" max="6" step="1" value="4"> <output id="instances-count-value">4³ = 64 cubes</output></label>
-          <label>Wave <input id="instances-wave" type="range" min="0" max="1" step="0.02" value="0.6"> <output id="instances-wave-value">0.60</output></label>
-          <label><button id="instances-spin" aria-pressed="true">Animating</button></label>
-          <p>The same mesh, moved and scaled rather than rebuilt: 64 cubes here, 216 at the top of the slider, all from one <code>Geometry</code> and two colours. The renderer buckets the tree by geometry and colour and pushes one instanced draw per bucket, which is why a lattice of a thousand atoms costs no more to issue than a handful.</p>
-        </div>
-      </section>
-
-      <section class="panel" id="depth" aria-label="Depth and draw order">
-        <div class="panel-head"><span class="index">09</span><div><h2>Depth, and why order does not matter</h2><p>box · shadedSphere · rgba(hex, alpha) · two passes</p></div><span class="tag">DEPTH</span></div>
-        <div class="stage"><canvas id="depth-canvas" aria-label="Two large translucent slabs crossing each other with opaque spheres threaded through them"></canvas><div class="labels" id="depth-labels"></div></div>
-        <div class="controls">
-          <label>Cross them <input id="depth-cross" type="range" min="-2.6" max="2.6" step="0.05" value="0.6"> <output id="depth-cross-value">0.60</output></label>
-          <label>Tilt the stack <input id="depth-tilt" type="range" min="-70" max="70" step="1" value="26"> <output id="depth-tilt-value">26°</output></label>
-          <label><button id="depth-spin" aria-pressed="true">Turning</button></label>
-          <p>Opacity is only half the problem: translucent faces have to be blended back to front, and the order they were added in must not matter. The renderer draws opaque geometry first with a depth test, then sorts the translucent faces by depth. The spheres below stay solid wherever they sit, and the two slabs blend correctly however they cross — which is what makes nested and interpenetrating solids work everywhere else on this page.</p>
-        </div>
-      </section>
-
-      <section class="panel" id="plot" aria-label="A chart in three dimensions">
-        <div class="panel-head"><span class="index">08</span><div><h2>A chart in 3D</h2><p>plotFrame · functionCurve · niceStep · tickValues · formatTick</p></div><span class="tag">PLOT</span></div>
-        <div class="stage"><canvas id="plot-canvas" aria-label="A function plot with axes, ticks, a grid and edge-aligned tick labels, drawn with the same camera as the 3D scenes"></canvas><div class="labels" id="plot-labels"></div></div>
-        <div class="controls">
-          <label>Function <select id="plot-function"><option value="sine" selected>sin(x)</option><option value="square">square wave</option><option value="damped">damped sine</option><option value="gaussian">Gaussian</option></select></label>
-          <p>A chart is a 3D scene too, so it orbits, zooms and labels with exactly the same machinery as everything else. <code>plotFrame</code> returns grid, tick and axis geometry plus the anchors to label them, picking round tick steps with <code>niceStep</code> and formatting them with <code>formatTick</code>.</p>
+          <label><button id="follow-lock" aria-pressed="true">Following</button></label>
+          <label><button id="follow-play" aria-pressed="false">Pause</button></label>
+          <label>Height <input id="follow-pitch" type="range" min="0.06" max="1.35" step="0.01" value="0.38"> <output id="follow-pitch-value">0.38</output></label>
+          <label>Distance <input id="follow-distance" type="range" min="5" max="15" step="0.1" value="9.5"> <output id="follow-distance-value">9.5</output></label>
+          <p class="readout" id="follow-readout">target</p>
+          <p><code>camera.target</code> is the point the camera looks at, so animating it is how a shot follows its subject: the whole path is drawn in advance, the marker slides along it, and only the looked-at point changes. Turn following off and the same motion happens in the corner of a still frame — which is the difference between a shot and a diagram.</p>
         </div>
       </section>
     </div>
