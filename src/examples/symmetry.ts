@@ -975,6 +975,8 @@ async function init(): Promise<void> {
   const toggleLegend = () => {
     const collapsed = legend.classList.toggle('collapsed');
     legendAnchor.setAttribute('aria-expanded', String(!collapsed));
+    // The word has to describe what the next click does, not what the last one did.
+    $('legend-toggle-label').textContent = collapsed ? 'expand' : 'collapse';
   };
   legendAnchor.addEventListener('click', toggleLegend, events);
   legendAnchor.addEventListener('keydown', event => {
