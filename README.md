@@ -15,7 +15,7 @@ Open [http://localhost:5173/](http://localhost:5173/). The landing page is an in
 
 Dedicated demos:
 
-- [Basics](basics.html): start here. Thirteen small demos, one library idea each — the 3D coordinate
+- [Basics](basics.html): start here. Fourteen small demos, one library idea each — the 3D coordinate
   system and its projected labels, interpolation with a seekable `Timeline`, solids with transparent
   sides, the geometry primitives and `merge`, groups with nested transforms, typeset maths riding a
   moving point, colour taken from data, a chart drawn in 3D, and depth and draw order. Each panel names the API it uses.
@@ -41,7 +41,7 @@ view.world.add(new Visual(axes3d(1.9, .012), rgba('#dbe9f5', .9)));
 second.world.add(new Visual(box([-1, -1, -1], [1, 1, 1]), rgba('#58c4dd', .18)));
 ```
 
-The thirteen ideas, in the order the page presents them: the frame (`axes3d`, `boundsBox`, tick labels
+The fourteen ideas, in the order the page presents them: the frame (`axes3d`, `boundsBox`, tick labels
 through `LabelLayer`, perspective or orthographic camera); motion (`Timeline`, `tween`, `smooth`,
 `lerp`, absolute-time seeking); volume (`box`, `sphere` and `cylinder` faces, per-face alpha,
 draw-order-independent sorting, wire cages); shape (`polyline`, `arrow`, `circle`, `sphere`,
@@ -55,7 +55,8 @@ back to front, so slab order never matters); and sharing (`Geometry` moved and s
 which the renderer buckets into one instanced draw per geometry-and-colour); the camera (yaw, pitch
 and distance driven as a shot, and scrubbed like a storyboard); and simulation (the CPU seam —
 `createParticleState`/`stepParticles` with an acceleration you write, stepping allocation-free); and
-implicit surfaces (`isosurface` extracting `f(x, y, z) = level` on the CPU, inside a `boundsBox`).
+implicit surfaces (`isosurface` extracting `f(x, y, z) = level` on the CPU, inside a `boundsBox`); and
+vector fields (`streamlines` integrated with RK4 from `sphereSeeds`, with markers riding the polylines).
 
 ## Crystal workflow
 
@@ -216,7 +217,7 @@ than trusting the code that drew it:
 ```sh
 node scripts/check-links.mjs           # every page resolves, and every page reaches the tour
 node scripts/check-depth.mjs [port]    # renderer depth + the crystal viewer, pixel by pixel
-node scripts/check-basics.mjs [port]   # the basics tour: thirteen demos, every control, every assertion
+node scripts/check-basics.mjs [port]   # the basics tour: fourteen demos, every control, every assertion
 ```
 
 `check-basics` captures from the compositor and measures the regions back inside the page, because a

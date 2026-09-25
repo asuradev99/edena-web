@@ -9,7 +9,7 @@ import {
   WebGPUView, LabelLayer, Group, Visual, Timeline, tween,
   axes3d, boundsBox, box, boxEdges, cylinder, polyline, arrow, circle, sphere, shadedSphere, wireSphere, isosurface,
   parametricSurface, functionSurface, functionCurve, merge, rgba, lerp, smooth, transform, applyMatrix,
-  createParticleState, stepParticles, type ParticleAcceleration,
+  createParticleState, stepParticles, streamlines, sphereSeeds, type VectorField, type ParticleAcceleration,
   mathml, mi, mn, mo, mtext, msup, row, tickValues, formatTick, plotFrame, viridis, plasma,
   Geometry, type Vec3, type Rgb,
 } from '../index.js';
@@ -554,6 +554,103 @@ function colourDemo(view: WebGPUView): Demo {
 }
 
 /* --------------------------------------------------------------------------------------------
+ * 14 · Streamlines in a vector field: integrate a direction field and flow markers along it.
+ * ------------------------------------------------------------------------------------------ */
+
+function streamlineDemo(view: WebGPUView): Demo {
+  look(view, .6, .33, 9);
+  const labels = new LabelLayer($('streamlines-labels'), view.camera);
+  const spin = new Group();
+  view.world.add(spin, new Visual(count(boundsBox([-3, -3, -3], [3, 3, 3], .003)), rgba('#9fe7ff', .14)), new Visual(count(axes3d(1.1, .005)), rgba('#dbe9f5', .22)));
+
+  const fields: Record<string, VectorField> = {
+    // Closed circles about the y axis: the prettiest way to show that a field is a direction at
+    // every point, and that a streamline is what you get by following it.
+    swirl: p => [-p[2], 0, p[0]],
+    // A saddle: lines fall towards the origin in one direction and away from it in the others.
+    saddle: p => [p[0] * .7, -p[1] * .7, p[2] * .25],
+    // A source and a sink: radial out of one point and into another, which curves the field lines
+    // between them exactly as a dipole's are curved.
+    dipole: p => {
+      const radial = (cx: number): Vec3 => {
+        const dx = p[0] - cx, dy = p[1], dz = p[2];
+        const k = 1 / Math.max(.5, Math.hypot(dx, dy, dz)) ** 3;
+        return [k * dx, k * dy, k * dz];
+      };
+      const out = radial(-1.3), into = radial(1.3);
+      return [out[0] - into[0], out[1] - into[1], out[2] - into[2]];
+    },
+  };
+  const colours: Record<string, string> = { swirl: '#58c4dd', saddle: '#83c167', dipole: '#f7d681' };
+  let kind = 'swirl', seeds = 22, speed = .7, phase = 0, flow = 0, spinning = !reducedMotion;
+  let traced: Vec3[][] = [];
+  let markers: { visual: Visual; line: Vec3[]; offset: number }[] = [];
+
+  const markerMesh = parametricSurface((u, v) => [.062 * Math.sin(u) * Math.cos(v), .062 * Math.cos(u), .062 * Math.sin(u) * Math.sin(v)], [0, Math.PI], [0, Math.PI * 2], [6, 10]);
+  const spinButton = $<HTMLButtonElement>('streamlines-turn');
+  const summary = labels.addHTML(mathml(mn('')), () => [0, -3.55, 0], '#9db0c2', 'math-label');
+
+  const build = (): void => {
+    const field = fields[kind];
+    traced = streamlines(field, sphereSeeds(seeds, 2.4), 0, { step: .09, steps: 420, both: true, minStrength: .08, bounds: { min: [-3, -3, -3], max: [3, 3, 3] } });
+    const tubes = traced.filter(line => line.length > 6).map(line => polyline(line, .014, 5));
+    spin.clear();
+    markers = [];
+    if (tubes.length) spin.add(new Visual(count(merge(...tubes)), rgba(colours[kind], .85)));
+    for (const line of traced) {
+      if (line.length < 6) continue;
+      // Three markers per line, spread along it, is what makes the direction readable.
+      for (let index = 0; index < 3; index++) {
+        const visual = new Visual(markerMesh, rgba('#ffffff', .92));
+        visual.position = [...line[0]];
+        spin.add(visual);
+        markers.push({ visual, line, offset: index / 3 });
+      }
+    }
+    summary.innerHTML = mathml(mtext(`${kind} · ${tubes.length} streamlines · ${markers.length} markers`));
+  };
+
+  const kindSelect = $<HTMLSelectElement>('streamlines-kind');
+  const countInput = $<HTMLInputElement>('streamlines-count');
+  const speedInput = $<HTMLInputElement>('streamlines-speed');
+  const button = (): void => {
+    spinButton.textContent = spinning ? 'Turning' : 'Still';
+    spinButton.setAttribute('aria-pressed', String(spinning));
+  };
+  kindSelect.addEventListener('change', () => { kind = kindSelect.value; build(); });
+  countInput.addEventListener('input', () => {
+    seeds = Number(countInput.value);
+    $('streamlines-count-value').textContent = String(seeds);
+    build();
+  });
+  speedInput.addEventListener('input', () => {
+    speed = Number(speedInput.value);
+    $('streamlines-speed-value').textContent = speed.toFixed(2);
+  });
+  spinButton.addEventListener('click', () => { spinning = !spinning; button(); });
+  build();
+  button();
+
+  return {
+    labels,
+    update: delta => {
+      if (spinning) { phase += delta * .2; flow += delta * speed * .12; }
+      spin.rotation = phase;
+      // Markers slide along their own traced polyline: no integration in the render loop. The flow
+      // shares the button, so "Still" holds the whole picture.
+      for (const marker of markers) {
+        const along = (marker.offset + flow) % 1;
+        const position = Math.min(marker.line.length - 1, along * marker.line.length);
+        const low = Math.floor(position), high = Math.min(marker.line.length - 1, low + 1), mix = position - low;
+        marker.visual.position[0] = lerp(marker.line[low][0], marker.line[high][0], mix);
+        marker.visual.position[1] = lerp(marker.line[low][1], marker.line[high][1], mix);
+        marker.visual.position[2] = lerp(marker.line[low][2], marker.line[high][2], mix);
+      }
+    },
+  };
+}
+
+/* --------------------------------------------------------------------------------------------
  * 13 · Shapes from a scalar field: an implicit surface, extracted at a level you choose.
  * ------------------------------------------------------------------------------------------ */
 
@@ -614,7 +711,7 @@ function fieldDemo(view: WebGPUView): Demo {
   return {
     labels,
     update: delta => {
-      if (spinning) phase += delta * .18;
+      if (spinning) phase += delta * .35;
       spin.rotation = phase;
     },
   };
@@ -971,7 +1068,7 @@ function plotDemo(view: WebGPUView): Demo {
  * ------------------------------------------------------------------------------------------ */
 
 async function initialize(): Promise<void> {
-  const canvases = ['coordinates-canvas', 'interpolation-canvas', 'transparency-canvas', 'shapes-canvas', 'groups-canvas', 'labels-canvas', 'colour-canvas', 'plot-canvas', 'depth-canvas', 'instances-canvas', 'camera-canvas', 'simulation-canvas', 'field-canvas'];
+  const canvases = ['coordinates-canvas', 'interpolation-canvas', 'transparency-canvas', 'shapes-canvas', 'groups-canvas', 'labels-canvas', 'colour-canvas', 'plot-canvas', 'depth-canvas', 'instances-canvas', 'camera-canvas', 'simulation-canvas', 'field-canvas', 'streamlines-canvas'];
   const first = await WebGPUView.create($<HTMLCanvasElement>(canvases[0]), { samples: msaa, maxDpr, onError: report });
   views.push(first);
   if (disposed) { first.dispose(); return; }
@@ -992,6 +1089,7 @@ async function initialize(): Promise<void> {
     cameraDemo(views[10]),
     simulationDemo(views[11]),
     fieldDemo(views[12]),
+    streamlineDemo(views[13]),
   );
 
   // Eleven views on one page: drawing the ones below the fold would cost a full render each frame for

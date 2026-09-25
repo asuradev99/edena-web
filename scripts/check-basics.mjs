@@ -1,7 +1,7 @@
 // Run against a Chrome debugging session: node scripts/check-basics.mjs [port]
 //
 // Checks the basics tour the way a reader meets it:
-//   1. every one of the thirteen demos draws something, and each draws something distinct;
+//   1. every one of the fourteen demos draws something, and each draws something distinct;
 //   2. every control changes its own stage — projection, grid, marker height, opacity, spin, the mesh
 //      selector, the group's spread and opacity, and the helix's turn count — and leaves the others be;
 //   3. the two moving demos advance on their own, and the transport seeks;
@@ -101,7 +101,7 @@ try {
     return evaluate(`window.__measureRegion(${JSON.stringify(shot)}, ${JSON.stringify(rect)})`);
   };
 
-  const stageIds = ['coordinates', 'interpolation', 'transparency', 'shapes', 'groups', 'labels', 'colour', 'plot', 'depth', 'instances', 'camera', 'simulation', 'field'];
+  const stageIds = ['coordinates', 'interpolation', 'transparency', 'shapes', 'groups', 'labels', 'colour', 'plot', 'depth', 'instances', 'camera', 'simulation', 'field', 'streamlines'];
   const startup = await evaluate(`({ stats: document.getElementById('stats').textContent, status: document.getElementById('status').hidden, labels: document.querySelectorAll('.labels span').length })`);
   assert.ok(startup.status, `the page reported an error: ${await evaluate('document.getElementById("status").textContent')}`);
   assert.match(startup.stats, /fps/);
@@ -142,13 +142,15 @@ try {
     ['simulation-count', 400, 'simulation'],
     ['field-kind', 'gyroid', 'field'],
     ['field-level', .5, 'field'],
+    ['streamlines-kind', 'dipole', 'streamlines'],
+    ['streamlines-count', 40, 'streamlines'],
   ];
   // Stop the demos that spin, so every control can be judged against a still picture. The spin buttons
   // themselves are checked afterwards, by measuring exactly this drift.
-  await evaluate(`document.getElementById('transparency-spin').click(); document.getElementById('groups-spin').click(); document.getElementById('depth-spin').click(); document.getElementById('instances-spin').click(); document.getElementById('field-spin').click();`);
+  await evaluate(`document.getElementById('transparency-spin').click(); document.getElementById('groups-spin').click(); document.getElementById('depth-spin').click(); document.getElementById('instances-spin').click(); document.getElementById('field-spin').click(); document.getElementById('streamlines-turn').click();`);
   await wait(500);
   // Only these hold still on their own, so only they can prove that a control left them alone.
-  const still = new Set(['coordinates', 'shapes', 'groups', 'colour', 'plot', 'depth', 'instances', 'field']);
+  const still = new Set(['coordinates', 'shapes', 'groups', 'colour', 'plot', 'depth', 'instances', 'field', 'streamlines']);
   for (const [control, value, stageId] of changes) {
     // The helix keeps moving, so stop it first: then the turn count is the only thing that changes.
     if (control === 'labels-turns' || control.startsWith('camera-') || control.startsWith('simulation-')) {
@@ -175,7 +177,7 @@ try {
 
   // The spin button is a state rather than a nudge: prove it by holding the stage still, then letting
   // it go again. A rotating scene drifts on its own, which is exactly what this measures.
-  for (const [button, stageId] of [['transparency-spin', 'transparency'], ['groups-spin', 'groups'], ['depth-spin', 'depth'], ['instances-spin', 'instances'], ['field-spin', 'field']]) {
+  for (const [button, stageId] of [['transparency-spin', 'transparency'], ['groups-spin', 'groups'], ['depth-spin', 'depth'], ['instances-spin', 'instances'], ['field-spin', 'field'], ['streamlines-turn', 'streamlines']]) {
     const heldStill = difference(await region(stageId), await region(stageId));
     assert.ok(heldStill < .04, `${stageId} should hold still once stopped (drift ${heldStill.toFixed(5)})`);
     await evaluate(`document.getElementById(${JSON.stringify(button)}).click()`);
@@ -207,6 +209,22 @@ try {
   assert.notEqual(await evaluate(`document.querySelector('#simulation-labels span').textContent`), probeStart, 'the simulation should advance when played');
   await evaluate(`document.getElementById('simulation-play').click()`);
 
+  // The flow rate is a speed, not a still picture, so it is judged by how much the stage changes per
+  // frame with the scene turning: zero should hold the markers, two should race them.
+  const turnButton = `document.getElementById('streamlines-turn')`;
+  if (await evaluate(`${turnButton}.textContent`) === 'Still') await evaluate(`${turnButton}.click()`);
+  await wait(400);
+  await evaluate(`window.__set('streamlines-speed', 0)`);
+  await wait(300);
+  const idle = difference(await region('streamlines'), await region('streamlines'));
+  await evaluate(`window.__set('streamlines-speed', 2)`);
+  await wait(300);
+  const racing = difference(await region('streamlines'), await region('streamlines'));
+  assert.ok(racing > idle + .01, `a faster flow should change more (${idle.toFixed(5)} → ${racing.toFixed(5)})`);
+  await evaluate(`${turnButton}.click()`);
+  await evaluate(`window.__set('streamlines-speed', .7)`);
+  await wait(300);
+
   // 3. Motion: the helix label advances on its own, and the transport seeks and resumes.
   const liveTime = () => evaluate(`document.querySelectorAll('#labels-stage-labels span')[1]?.textContent ?? ''`);
   // The control sweep stopped the helix to measure the turn count, so set it going again.
@@ -228,11 +246,11 @@ try {
   const stats = await evaluate(`document.getElementById('stats').textContent`);
   const fps = Number(/· (\d+) fps/.exec(stats)?.[1] ?? 0);
   assert.ok(fps >= 50, `expected a healthy frame rate, saw ${stats}`);
-  assert.match(stats, /13 views/);
+  assert.match(stats, /14 views/);
   const problems = events.filter(event => event.method === 'Runtime.exceptionThrown' || (event.method === 'Runtime.consoleAPICalled' && event.params.type === 'error') || (event.method === 'Log.entryAdded' && event.params.entry.level === 'error'));
   assert.equal(problems.length, 0, `the page reported ${problems.length} problem(s): ${JSON.stringify(problems[0]?.params ?? {}).slice(0, 300)}`);
 
-  console.log('PASS: thirteen demos drawing distinct scenes, every control moving its own stage alone,');
+  console.log('PASS: fourteen demos drawing distinct scenes, every control moving its own stage alone,');
   console.log('      the helix and the timeline running, the transport seeking and resuming,', stats);
   console.log('     ', JSON.stringify(Object.fromEntries(stageIds.map(stageId => [stageId, Number(signatures[stageId].mean.toFixed(3))]))));
 } finally {
