@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Edena · Crystal symmetry</title>
+<style>
+:root{color-scheme:dark;font-family:system-ui,sans-serif}*{box-sizing:border-box}body{margin:0;background:#0b1019;color:#e9eff7}main{max-width:1200px;margin:auto;padding:32px}a{color:#83d4df}header{display:flex;justify-content:space-between;align-items:center}h1{font:44px Georgia,serif;margin:24px 0 12px}p{color:#a9b8c8;line-height:1.7}.layout{display:grid;grid-template-columns:1fr 340px;gap:24px}.stage{position:relative;height:560px;border:1px solid #293648;border-radius:20px;overflow:hidden;background:#060a10}.stage canvas{width:100%;height:100%;display:block;touch-action:none}#labels{position:absolute;inset:0;pointer-events:none}aside{background:#111b29;border:1px solid #293648;border-radius:20px;padding:24px}label{display:block;margin:18px 0 8px;font-size:13px}select,button,input{font:inherit;padding:12px;background:#19283a;color:#eef8ff;border:1px solid #40526a;border-radius:9px;width:100%}button{margin-top:14px;cursor:pointer;background:#175d70}input{accent-color:#70d7df}output{display:block;font:14px monospace;color:#f7d681;margin-top:20px}#status{color:#ffaca4}.file{border:1px dashed #4b677a;border-radius:12px;padding:14px;margin:12px 0;color:#a9c4ce}.file.active{background:#183441;border-color:#83d4df}.file input{padding:6px;background:transparent;border:0}.file-list{display:grid;gap:6px;margin:12px 0}.file-item{padding:9px 10px;border-radius:8px;background:#162536;color:#cde5e9;font:12px ui-monospace,monospace}.file-item.error{color:#ffaaa1;background:#30202a}button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid #f7d681;outline-offset:4px}@media(max-width:760px){main{padding:18px}.layout{grid-template-columns:1fr}.stage{height:420px}h1{font-size:34px}}
+</style></head><body><main>
+<header><a href="/">← Edena playground</a><span>CRYSTAL SYMMETRY / 01</span></header>
+<h1>Different positions. The same crystal.</h1>
+<p>Load a VASP POSCAR/CONTCAR and a phonopy symmetry file to inspect operations acting on your actual structure. Files stay in your browser; the built-in cubic cell is a starting point.</p>
+<div class="layout"><div class="stage"><canvas id="scene" aria-label="Crystal symmetry operation"></canvas><div id="labels"></div></div><aside>
+<div id="drop-zone" class="file">Drop a POSCAR and/or symmetry.yaml here</div>
+<label for="files-input">Load files together</label><input id="files-input" type="file" multiple>
+<div id="file-list" class="file-list" aria-live="polite"><div class="file-item">No files loaded yet</div></div>
+<label for="poscar-file">Structure · POSCAR / CONTCAR</label><input id="poscar-file" type="file">
+<label for="symmetry-file">Operations · phonopy symmetry</label><input id="symmetry-file" type="file">
+<p id="structure-info"></p><div id="legend" class="file-list"></div><label for="operation">Symmetry operation</label><select id="operation"></select><p id="description"></p>
+<label for="progress">Transformation progress</label><input id="progress" type="range" min="0" max="1" step="0.001" value="0"><button id="play">Animate operation</button><button id="reset">Reset</button><output id="mapping"></output><p>Cyan atoms move through fractional coordinates under the selected operation. Drag to orbit and scroll to zoom.</p><p id="status" role="alert"></p>
+</aside></div><script type="module" src="build/examples/symmetry.js"></script></main></body></html>

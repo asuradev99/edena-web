@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Edena · 50K GPU particle benchmark</title>
+  <style>
+    :root{color-scheme:dark}*{box-sizing:border-box}body{margin:0;background:#07080c;color:#e6e8ef;font:14px ui-sans-serif,system-ui,sans-serif}main{max-width:1100px;margin:auto;padding:32px 24px}h1{font:400 34px Georgia,serif;margin:0 0 8px}p{color:#9ea3b3;line-height:1.6;max-width:760px}.stage{height:min(70vh,680px);min-height:360px;background:#010207;border:1px solid #242a36;border-radius:6px;position:relative;overflow:hidden}.stage canvas{width:100%;height:100%;display:block}.hud{display:flex;gap:16px;align-items:center;flex-wrap:wrap;margin-top:14px;font:12px ui-monospace,monospace;color:#aeb5c6}.hud button,.hud select{background:#111722;color:#e6e8ef;border:1px solid #354052;border-radius:4px;padding:8px 10px}.status{color:#ff9d9d;margin-top:14px;white-space:pre-wrap}.note{font-size:12px;margin-top:18px}
+  </style>
+</head>
+<body><main>
+  <h1>50K particles, GPU-resident</h1>
+  <p>This is the raw simulation baseline: one compute integration pass and one instanced point draw. It intentionally uses a simple oscillator force—no spatial hashing, Barnes–Hut, or all-pairs approximation yet.</p>
+  <div class="stage"><canvas id="particles" aria-label="GPU particle benchmark"></canvas></div>
+  <div class="hud"><button id="pause" aria-pressed="false">Pause simulation</button><label>mode <select id="mode"><option value="oscillator" selected>oscillator · a = −kx</option><option value="nbody">all-pairs gravity · O(N²)</option></select></label><label>count <select id="count"><option>2048</option><option>8192</option><option>16384</option><option>32768</option><option selected>50000</option><option>100000</option></select></label><span id="stats">Starting GPU benchmark…</span></div>
+  <div id="status" class="status" role="alert" hidden></div>
+  <p class="note">The reported frame time includes compute dispatch, render encoding, submission, and presentation. GPU step timing appears when the adapter exposes timestamp queries.</p>
+  <script type="module" src="build/examples/particles.js"></script>
+</main></body></html>

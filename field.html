@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#080809">
+  <meta name="description" content="Edena example: one isosurface level of a 3D scalar field, extracted with marching tetrahedra and drawn in WebGPU.">
+  <title>Scalar field isosurface · Edena</title>
+  <style>
+    *{box-sizing:border-box}:root{color-scheme:dark;--blue:#58c4dd;--muted:#85858e;--serif:'STIX Two Text','Cambria','Georgia',serif}
+    body{margin:0;background:#080809;color:#ededf0;font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;-webkit-font-smoothing:antialiased}
+    a{color:inherit;text-decoration:none}a:hover{color:var(--blue)}
+    .masthead{height:76px;border-bottom:1px solid #222226;padding:0 5%;display:flex;align-items:center;justify-content:space-between;gap:20px}
+    .wordmark{font-family:var(--serif);font-size:25px;letter-spacing:-1px}.wordmark span{font:11px monospace;color:#777;letter-spacing:0;margin-left:15px}
+    .edition{font-size:9px;letter-spacing:2px;color:#a2a2ad;display:flex;align-items:center;gap:15px}.edition i{height:3px;width:3px;background:var(--blue);border-radius:50%}
+    main{max-width:1100px;margin:auto;padding:0 48px 60px}h1{font-family:var(--serif);font-size:34px;font-weight:400;letter-spacing:-1.2px;margin:40px 0 10px}
+    .lede{font-size:13px;line-height:1.85;color:#92929c;margin:0 0 26px;max-width:70ch}.lede code{font-family:ui-monospace,monospace;font-size:12px;color:#c9c9d2}
+    .panel{position:relative;aspect-ratio:16/9;background:#000;border:1px solid #26262b;border-radius:3px;overflow:hidden;container-type:inline-size}
+    canvas{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none}
+    .labels{position:absolute;inset:0;pointer-events:none;font-family:var(--serif);font-style:italic;font-size:clamp(10px,1.7cqw,18px);text-shadow:0 1px 7px #000,0 0 3px #000}
+    .hint,.stats{position:absolute;font-size:11px;color:#8f8f99;letter-spacing:.02em}.hint{left:14px;bottom:12px}.stats{right:14px;bottom:12px;font-family:ui-monospace,monospace}
+    .status{position:absolute;inset:8%;display:grid;place-content:center;text-align:center;font-size:13px;line-height:1.7;color:#ff9d9d;background:#000}
+    footer{max-width:1100px;margin:auto;padding:0 48px 50px;display:flex;justify-content:space-between;gap:20px;font-size:11px;color:#7c7c85}
+    @media(max-width:750px){.masthead{height:61px;padding:0 20px}.wordmark span,.edition{display:none}main{padding:0 16px 40px}h1{font-size:27px}footer{padding:0 16px 36px}}
+  </style>
+</head>
+<body>
+  <header class="masthead"><a href="./" class="wordmark">edena<span> / mathematical motion</span></a><span class="edition">EXAMPLE <i></i> SCALAR FIELDS</span></header>
+  <main>
+    <h1>One level set of a scalar field.</h1>
+    <p class="lede">The implicit surface <code>w = 0</code> for the union of two balls, sampled over a bounded grid and extracted with marching tetrahedra by <code>isosurface(field, bounds, isovalue, resolution)</code>. The <code>axes3d</code> and <code>boundsBox</code> helpers frame the domain; drag to orbit and scroll to zoom.</p>
+    <section class="panel" aria-label="Isosurface of a three-dimensional scalar field">
+      <canvas id="scene" aria-label="Two merged spheres, a translucent level surface drawn inside a wireframe domain box with coordinate axes"></canvas>
+      <div id="labels" class="labels"></div>
+      <div id="hint" class="hint">Drag to orbit · scroll to zoom</div>
+      <div id="stats" class="stats"></div>
+      <div id="status" class="status" role="alert" hidden></div>
+    </section>
+  </main>
+  <footer><span>Edena TypeScript visualization library · <a href="./">Showcase ↗</a></span><span>Geometry · WebGPU · fields</span></footer>
+  <script type="module" src="build/examples/field.js"></script>
+</body>
+</html>

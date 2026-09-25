@@ -1,0 +1,161 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { isosurface, plotFrame, tickValues, niceStep, formatTick, axes3d, boundsBox, Geometry, merge, ramp, viridis, plasma, colorMappedSurface, functionCurve } from '../build/index.js';
+
+/** Colors round-trip through a Float32Array, so compare with a tolerance. */
+const closeTo = (a, b, eps = 1e-6) => a.length === b.length && a.every((value, index) => Math.abs(value - b[index]) < eps);
+
+test('tick helpers choose round steps, stay in range, and hide float noise', () => {
+  assert.equal(niceStep(10, 5), 2);
+  assert.equal(niceStep(1, 3), .2);
+  assert.deepEqual(tickValues(0, 10, 5), [0, 2, 4, 6, 8, 10]);
+  assert.deepEqual(tickValues(-1, 1, 4), [-1, -.5, 0, .5, 1]);
+  for (const count of [3, 4, 5, 6, 7, 8]) {
+    const values = tickValues(-3.3, 7.1, count);
+    assert.ok(values.length >= 2);
+    for (let i = 1; i < values.length; i++) assert.ok(values[i] > values[i - 1]);
+    assert.ok(values[0] >= -3.3 && values[values.length - 1] <= 7.1);
+  }
+  assert.equal(formatTick(0.30000000000000004, .1), '0.3');
+  assert.equal(formatTick(-1e-15, 1), '0');
+  assert.equal(formatTick(.25, .05), '0.25');
+  assert.throws(() => niceStep(0, 5));
+  assert.throws(() => niceStep(1, 0));
+  assert.throws(() => tickValues(1, 1));
+});
+
+test('plot frame builds finite axes, ticks, grid, and one label per tick', () => {
+  const frame = plotFrame([-2, 2], [-1, 1]);
+  assert.ok([frame.axes, frame.ticks, frame.grid].every(g => g.vertices.length > 0));
+  assert.ok([frame.axes, frame.ticks, frame.grid].every(g => g.vertices.every(Number.isFinite)));
+  const xs = tickValues(-2, 2, 6), ys = tickValues(-1, 1, 5);
+  assert.equal(frame.labels.length, xs.length + ys.length - 1); // the origin is labelled once, not twice
+  assert.equal(frame.labels.filter(l => l.text === '0.0').length, 1);
+  assert.ok(frame.labels.every(l => Number.isFinite(l.position[0] + l.position[1] + l.position[2])));
+  assert.equal(plotFrame([0, 1], [0, 1], { grid: false }).grid.vertices.length, 0);
+  // When the clamped origin is not also a tick on the other axis, both labels are kept.
+  const offset = plotFrame([.3, 1.7], [2.3, 3.7]);
+  assert.equal(offset.labels.length, tickValues(.3, 1.7, 6).length + tickValues(2.3, 3.7, 5).length);
+  assert.throws(() => plotFrame([1, 0], [0, 1]));
+  assert.throws(() => plotFrame([0, 1], [0, 1], { width: 0 }));
+});
+
+test('3D axis and bounds helpers stay finite and reject bad input', () => {
+  assert.ok(axes3d(2).vertices.every(Number.isFinite));
+  assert.equal(boundsBox([-1, -1, -1], [1, 1, 1]).vertices.length, 12 * 4 * 2 * 9);
+  const box = boundsBox([-2, -1, -3], [4, 5, 6], .01).vertices;
+  assert.ok(box.every(Number.isFinite));
+  // Tube rings expand each edge by half its width, so corners land within that tolerance.
+  assert.ok(Math.abs(Math.min(...box.filter((_, i) => i % 3 === 0)) + 2) < .02);
+  assert.ok(Math.abs(Math.max(...box.filter((_, i) => i % 3 === 1)) - 5) < .02);
+  assert.throws(() => axes3d(0));
+  assert.throws(() => boundsBox([1, 0, 0], [0, 1, 1]));
+});
+
+test('isosurface reconstructs a unit sphere within linear-interpolation error', () => {
+  const bounds = { min: [-1.5, -1.5, -1.5], max: [1.5, 1.5, 1.5] };
+  const field = (x, y, z) => x * x + y * y + z * z;
+  const g = isosurface(field, bounds, 1, 40);
+  assert.ok(g.vertices.length > 0 && g.vertices.length % 9 === 0);
+  let area = 0, maxError = 0;
+  for (let i = 0; i < g.vertices.length; i += 9) {
+    const p = [g.vertices[i], g.vertices[i + 1], g.vertices[i + 2]];
+    const q = [g.vertices[i + 3], g.vertices[i + 4], g.vertices[i + 5]];
+    const r = [g.vertices[i + 6], g.vertices[i + 7], g.vertices[i + 8]];
+    for (const v of [p, q, r]) maxError = Math.max(maxError, Math.abs(Math.hypot(...v) - 1));
+    const u = q.map((x, k) => x - p[k]), w = r.map((x, k) => x - p[k]);
+    area += .5 * Math.hypot(u[1] * w[2] - u[2] * w[1], u[2] * w[0] - u[0] * w[2], u[0] * w[1] - u[1] * w[0]);
+  }
+  assert.ok(maxError < .01, `max radius error ${maxError}`);
+  assert.ok(Math.abs(area / (4 * Math.PI) - 1) < .01, `area relative error ${area / (4 * Math.PI) - 1}`);
+  assert.deepEqual(isosurface(field, bounds, 1, 40).vertices, g.vertices);
+});
+
+test('isosurface suppresses non-finite samples and validates its budget', () => {
+  const bounds = { min: [-1, -1, -1], max: [1, 1, 1] };
+  const g = isosurface((x, y, z) => x > .2 ? NaN : x * x + y * y + z * z, bounds, 1, 24);
+  assert.ok(g.vertices.length > 0 && g.vertices.every(Number.isFinite));
+  assert.equal(isosurface(() => 1, bounds, 5, 8).vertices.length, 0);
+  assert.equal(isosurface(() => 1, bounds, -5, 8).vertices.length, 0);
+  assert.ok(isosurface((x, y, z) => x + y + z, bounds, 0, [12, 8, 4]).vertices.length > 0);
+  assert.throws(() => isosurface(() => 0, bounds, 0, 200));
+  assert.throws(() => isosurface(() => 0, bounds, NaN, 8));
+  assert.throws(() => isosurface(() => 0, bounds, 0, 0));
+  assert.throws(() => isosurface(() => 0, { min: [1, 0, 0], max: [0, 1, 1] }, 0, 8));
+});
+
+test('color ramps interpolate between stops and clamp outside them', () => {
+  const ramp2 = ramp([0, [0, 0, 0]], [1, [1, .5, .25]]);
+  assert.deepEqual(ramp2(0), [0, 0, 0]);
+  assert.deepEqual(ramp2(1), [1, .5, .25]);
+  assert.deepEqual(ramp2(-5), [0, 0, 0]);
+  assert.deepEqual(ramp2(9), [1, .5, .25]);
+  const mid = ramp2(.5);
+  assert.ok(Math.abs(mid[0] - .5) < 1e-12 && Math.abs(mid[1] - .25) < 1e-12 && Math.abs(mid[2] - .125) < 1e-12);
+  assert.deepEqual(ramp2(NaN), [0, 0, 0]);
+  for (const value of [0, .25, .5, .75, 1]) {
+    for (const ramp3 of [viridis, plasma]) {
+      const color = ramp3(value);
+      assert.equal(color.length, 3);
+      assert.ok(color.every(channel => channel >= 0 && channel <= 1));
+    }
+  }
+  assert.notDeepEqual(viridis(0), viridis(1));
+  assert.throws(() => ramp([0, [0, 0, 0]]));
+  assert.throws(() => ramp([0, [0, 0, 0]], [0, [1, 1, 1]]));
+  assert.throws(() => ramp([0, [0, 0, 0]], [1, [1, 1, NaN]]));
+});
+
+test('geometry keeps optional per-vertex colors through merge', () => {
+  const plain = new Geometry([0, 0, 0, 1, 0, 0, 0, 1, 0]);
+  const tinted = new Geometry([0, 0, 0, 1, 0, 0, 0, 1, 0], [1, 0, 0, 0, 1, 0, 0, 0, 1]);
+  assert.equal(plain.colors, undefined);
+  assert.deepEqual(Array.from(tinted.colors), [1, 0, 0, 0, 1, 0, 0, 0, 1]);
+  const merged = merge(plain, tinted);
+  assert.equal(merged.colors.length, merged.vertices.length);
+  assert.deepEqual(Array.from(merged.colors.slice(0, 9)), Array(9).fill(1));       // uncolored input becomes white
+  assert.deepEqual(Array.from(merged.colors.slice(9)), Array.from(tinted.colors));
+  assert.equal(merge(plain, plain).colors, undefined);                             // stays uncolored when nothing is colored
+  assert.throws(() => new Geometry([0, 0, 0, 1, 0, 0, 0, 1, 0], [1, 0, 0]));
+  assert.throws(() => new Geometry([0, 0, 0, 1, 0, 0, 0, 1, 0], Array(9).fill(NaN)));
+});
+
+test('color-mapped surfaces color every vertex by its own value', () => {
+  const surface = colorMappedSurface((x, y) => x + y, [-1, 1], [-1, 1], viridis, [4, 5]);
+  assert.equal(surface.vertices.length, 4 * 5 * 2 * 9);
+  assert.equal(surface.colors.length, surface.vertices.length);
+  assert.ok(surface.colors.every(channel => channel >= 0 && channel <= 1));
+  // Sampled range is [-2, 2]; the lowest value must take the ramp start and the highest its end.
+  const perVertex = (index) => Array.from(surface.colors.slice(index * 3, index * 3 + 3));
+  const values = [];
+  for (let i = 0; i < surface.vertices.length; i += 3) values.push(surface.vertices[i + 1]);
+  const lowest = values.indexOf(Math.min(...values)), highest = values.indexOf(Math.max(...values));
+  assert.ok(closeTo(perVertex(lowest), viridis(0)));
+  assert.ok(closeTo(perVertex(highest), viridis(1)));
+  // An explicit range overrides the sampled one.
+  const fixed = colorMappedSurface((x, y) => x + y, [-1, 1], [-1, 1], viridis, [4, 5], [-1, 1]);
+  assert.ok(closeTo(perVertexOf(fixed, 0), viridis(0)));
+  const clipped = colorMappedSurface(() => 0, [-1, 1], [-1, 1], viridis, [2, 2], [0, 1]);
+  assert.ok(clipped.colors.every(channel => channel >= 0 && channel <= 1));
+  // A constant field must not divide by zero.
+  assert.ok(colorMappedSurface(() => 3, [-1, 1], [-1, 1], viridis, [3, 3]).colors.every(Number.isFinite));
+  // Non-finite samples drop their quads instead of bridging.
+  const gapped = colorMappedSurface((x, y) => x > .2 ? NaN : x + y, [-1, 1], [-1, 1], viridis, [16, 16]);
+  assert.ok(gapped.vertices.every(Number.isFinite) && gapped.colors.every(Number.isFinite));
+  assert.ok(gapped.vertices.length < 16 * 16 * 2 * 9);
+  assert.throws(() => colorMappedSurface((x, y) => x, [1, 0], [-1, 1]));
+  assert.throws(() => colorMappedSurface((x, y) => x, [-1, 1], [-1, 1], viridis, [2, 2], [0, 0]));
+  assert.throws(() => colorMappedSurface((x, y) => x, [-1, 1], [-1, 1], viridis, [600, 600]));
+});
+
+test('functionCurve reaches its documented sample budget instead of tripping the tube cap', () => {
+  // At exactly the advertised budget the run is chunked internally; it used to fail inside
+  // `polyline` with an unrelated "Invalid line resolution or width" error.
+  const curve = functionCurve(x => x, [0, 1], 100_000);
+  assert.ok(curve.vertices.length > 0 && curve.vertices.every(Number.isFinite));
+  assert.throws(() => functionCurve(x => x, [0, 1], 100_001), /sampling budget/);
+});
+
+function perVertexOf(geometry, index) {
+  return Array.from(geometry.colors.slice(index * 3, index * 3 + 3));
+}

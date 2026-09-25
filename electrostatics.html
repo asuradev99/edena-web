@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#000000">
+  <meta name="description" content="An interactive mathematical animatic: derive the electric field of a uniformly charged ball by evaluating Coulomb's full volume integral, step by step.">
+  <title>A ball of charge · Edena</title>
+  <link rel="stylesheet" href="demo.css">
+</head>
+<body>
+  <header class="masthead"><a href="./" class="wordmark">edena<span> / mathematical motion</span></a><span class="edition">EXAMPLE 001 <i></i> ELECTROSTATICS</span><a class="source-link" href="https://github.com/3b1b/manim" target="_blank" rel="noreferrer">Inspired by Manim ↗</a></header>
+  <main>
+    <div class="film-heading"><div><span class="eyebrow">A VISUAL DERIVATION</span><h1>A ball of charge.</h1></div><p>From one tiny charge to the entire field.<br>The full integral, one step at a time.</p></div>
+    <section class="player" aria-label="Animated derivation of the electric field" id="player">
+      <div class="stage" id="stage">
+        <canvas id="scene" aria-label="Three-dimensional charged ball, Gaussian surface, and radial electric field arrows"></canvas>
+        <div id="labels" class="labels"></div>
+        <div class="stage-chapter"><span id="chapter-number">01</span><span id="chapter-name">The question</span></div>
+        <div class="stage-brand">EDENA <span>∴</span></div>
+        <div class="opening" id="opening"><div class="opening-kicker">LET’S BUILD AN INTUITION</div><h2>What does the field<br>of a <em>ball of charge</em> look like?</h2><p>From symmetry to an equation.</p></div>
+        <div class="thought" id="thought"></div>
+        <div class="equation-panel" id="equations" aria-label="Current derivation"></div>
+        <div class="graph-scene" id="graph-scene" aria-label="Electric field magnitude as a function of radius">
+          <div class="graph-title">The entire field, in one picture.</div>
+          <canvas id="graph" aria-label="Normalized field rises linearly inside the ball and decreases as inverse radius squared outside"></canvas>
+          <div id="graph-labels" class="labels"></div>
+          <div class="graph-caption"><span class="blue">Inside: more enclosed charge.</span><span class="yellow">Outside: the same charge, spread out.</span></div>
+        </div>
+        <div class="subtitle" id="subtitle" aria-live="off"></div>
+        <div class="stage-error" id="error" role="alert" hidden></div>
+        <div class="loading" id="loading">Preparing the stage<span>WebGPU · mathematical animation</span></div>
+      </div>
+      <div class="transport">
+        <input type="range" id="scrubber" min="0" max="192" step="0.01" value="0" aria-label="Animation time">
+        <div class="transport-row"><div class="playback"><button id="play" class="play" aria-label="Play animation" disabled>▶</button><button id="restart" title="Replay from the beginning" aria-label="Replay animation" disabled>↺</button><span id="time" class="time">0:00 <span>/ 3:12</span></span></div><span id="now-playing">THE QUESTION</span><div class="settings"><label class="speed-label"><span class="sr-only">Playback speed</span><select id="speed" aria-label="Playback speed"><option value="0.75">0.75×</option><option value="1" selected>1×</option><option value="1.5">1.5×</option><option value="2">2×</option></select></label><button id="captions" aria-label="Toggle captions" aria-pressed="true">CC</button><button id="fullscreen" aria-label="Enter fullscreen" title="Fullscreen">⛶</button></div></div>
+      </div>
+    </section>
+    <nav id="chapters" class="chapters" aria-label="Animation chapters"></nav>
+    <section class="below"><div class="lesson-note"><span class="eyebrow">THE SETUP</span><p>A solid, insulating ball of radius <em>R</em>, with positive charge <em>Q</em> distributed uniformly throughout its volume. Vacuum permittivity <em>ε₀</em>. We’re finding the field at a distance <em>r</em> from its center.</p><span class="fine-print">A 3 min 12 sec animatic with written narration. Space to play / pause · ← → to seek · drag the ball to orbit.</span></div><div class="explore"><span class="eyebrow">AFTER THE DERIVATION</span><label for="radius">Explore the radius <output id="radius-value">r = 1.50 R</output></label><input type="range" min="0" max="2.7" step="0.01" value="1.5" id="radius"><div class="readout"><span id="region">Outside the ball</span><span id="field-value">E / E(R) = 0.444</span></div><p>Moving this slider pauses the film at the final graph.</p></div></section>
+    <footer><span>Archived example · <a href="./">Back to the Edena showcase ↗</a></span><span>Geometry · WebGPU · text · time</span></footer>
+  </main>
+  <script type="module" src="build/demo/main.js"></script>
+</body>
+</html>

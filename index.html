@@ -1,447 +1,111 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>3D Viewer</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#080809">
+  <meta name="description" content="An interactive WebGPU math and physics playground: Fourier waves, colored surfaces, Möbius strips, implicit shapes, lattice assembly, and GPU particles.">
+  <title>Edena · mathematical visualization with WebGPU</title>
   <style>
-    /* ── Reset ────────────────────────────────────────────────────────────── */
-    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
-    :root {
-      --cyan:      #00d4ff;
-      --cyan-dim:  rgba(0, 212, 255, 0.12);
-      --panel-bg:  rgba(7, 9, 13, 0.93);
-      --border:    rgba(0, 212, 255, 0.14);
-      --text:      #d8dde6;
-      --muted:     #4a5568;
-      --input-bg:  rgba(255, 255, 255, 0.04);
-      --font:      'JetBrains Mono', monospace;
-    }
-    html, body {
-      width: 100%; height: 100%;
-      overflow: hidden;
-      background: #000;
-      font-family: var(--font);
-    }
-    canvas { display: block; width: 100%; height: 100%; }
-
-    /* ── Top bar container ────────────────────────────────────────────────── */
-    #topbar {
-      position: absolute;
-      top: 18px;
-      left: 50%;
-      transform: translateX(-50%);
-      pointer-events: none;
-      z-index: 10;
-      white-space: nowrap;
-    }
-
-    /* ── Pill ─────────────────────────────────────────────────────────────── */
-    .tb-pill {
-      display: inline-flex;
-      align-items: stretch;
-      background:
-        linear-gradient(rgba(0,212,255,0.025) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(0,212,255,0.025) 1px, transparent 1px),
-        var(--panel-bg);
-      background-size: 20px 20px;
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      backdrop-filter: blur(14px) saturate(1.5);
-      -webkit-backdrop-filter: blur(14px) saturate(1.5);
-      overflow: hidden;
-      pointer-events: all;
-      box-shadow: 0 4px 24px rgba(0,0,0,0.5), 0 0 0 1px rgba(0,212,255,0.06);
-    }
-
-    .tb-btn {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      padding: 0 16px;
-      height: 40px;
-      background: transparent;
-      border: none;
-      color: var(--muted);
-      font-family: var(--font);
-      font-size: 10px;
-      font-weight: 600;
-      letter-spacing: 0.16em;
-      cursor: pointer;
-      transition: background 0.15s, color 0.15s;
-      white-space: nowrap;
-    }
-    .tb-btn:hover { background: rgba(255,255,255,0.04); color: var(--text); }
-    .tb-btn.tb-active { color: var(--cyan); background: var(--cyan-dim); }
-
-    .tb-sep {
-      width: 1px;
-      background: var(--border);
-      align-self: stretch;
-      flex-shrink: 0;
-    }
-
-    /* Indicator dot inside toggle buttons */
-    .tb-dot {
-      width: 5px; height: 5px;
-      border-radius: 50%;
-      background: var(--muted);
-      transition: background 0.15s, box-shadow 0.15s;
-      flex-shrink: 0;
-    }
-    .tb-active .tb-dot {
-      background: var(--cyan);
-      box-shadow: 0 0 6px var(--cyan), 0 0 12px rgba(0,212,255,0.4);
-    }
-
-    /* Sphere count badge inside SPHERES button */
-    .tb-badge {
-      display: inline-block;
-      background: rgba(0, 212, 255, 0.12);
-      border: 1px solid rgba(0, 212, 255, 0.25);
-      border-radius: 3px;
-      padding: 1px 6px;
-      font-size: 9px;
-      line-height: 1.6;
-      color: var(--cyan);
-      letter-spacing: 0.05em;
-    }
-
-    /* ── Side panel ───────────────────────────────────────────────────────── */
-    #gui {
-      position: absolute;
-      top: 0; right: 0;
-      width: 252px; height: 100%;
-      display: flex;
-      flex-direction: column;
-      background:
-        linear-gradient(rgba(0,212,255,0.025) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(0,212,255,0.025) 1px, transparent 1px),
-        var(--panel-bg);
-      background-size: 24px 24px;
-      border-left: 1px solid var(--border);
-      backdrop-filter: blur(12px) saturate(1.4);
-      -webkit-backdrop-filter: blur(12px) saturate(1.4);
-      overflow: hidden;
-      /* Hidden by default — slides in from right */
-      transform: translateX(100%);
-      transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-      z-index: 5;
-    }
-    #gui.panel-visible {
-      transform: translateX(0);
-    }
-
-    .panel-header {
-      flex-shrink: 0;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 18px 16px 14px;
-      border-bottom: 1px solid var(--border);
-    }
-    .panel-title {
-      font-size: 10px;
-      font-weight: 600;
-      letter-spacing: 0.2em;
-      color: var(--cyan);
-    }
-    .panel-count {
-      font-size: 10px;
-      color: var(--muted);
-      letter-spacing: 0.1em;
-      background: var(--cyan-dim);
-      border: 1px solid var(--border);
-      border-radius: 3px;
-      padding: 2px 7px;
-      min-width: 20px;
-      text-align: center;
-    }
-
-    /* ── Panel header action buttons ─────────────────────────────────────── */
-    .header-btn-group {
-      display: flex;
-      gap: 5px;
-    }
-    .header-btn {
-      background: var(--input-bg);
-      border: 1px solid rgba(255,255,255,0.07);
-      border-radius: 4px;
-      color: var(--muted);
-      font-family: var(--font);
-      font-size: 8px;
-      font-weight: 600;
-      letter-spacing: 0.12em;
-      padding: 4px 7px;
-      cursor: pointer;
-      transition: background 0.12s, color 0.12s, border-color 0.12s;
-    }
-    .header-btn:hover {
-      background: rgba(255,255,255,0.07);
-      border-color: rgba(255,255,255,0.14);
-      color: var(--text);
-    }
-    .header-btn-accent {
-      border-color: rgba(0,212,255,0.25);
-      color: var(--cyan);
-    }
-    .header-btn-accent:hover {
-      background: var(--cyan-dim);
-      border-color: rgba(0,212,255,0.45);
-      color: var(--cyan);
-    }
-
-    /* ── Physics settings panel body ──────────────────────────────────────── */
-    .settings-body {
-      flex: 1;
-      overflow-y: auto;
-      overflow-x: hidden;
-      padding-bottom: 16px;
-    }
-    .settings-body::-webkit-scrollbar { width: 3px; }
-    .settings-body::-webkit-scrollbar-track { background: transparent; }
-    .settings-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
-
-    .settings-section-header {
-      font-size: 9px;
-      font-weight: 600;
-      letter-spacing: 0.22em;
-      color: var(--cyan);
-      opacity: 0.65;
-      padding: 14px 14px 5px;
-    }
-    .settings-section-body { padding: 2px 0 6px; }
-
-    /* ── Slider rows ──────────────────────────────────────────────────────── */
-    .param-row {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      padding: 4px 14px;
-    }
-    .param-label {
-      font-size: 9px;
-      font-weight: 500;
-      letter-spacing: 0.08em;
-      color: var(--muted);
-      width: 54px;
-      flex-shrink: 0;
-    }
-    .param-value {
-      font-size: 10px;
-      color: var(--text);
-      width: 34px;
-      text-align: right;
-      flex-shrink: 0;
-      letter-spacing: 0.03em;
-    }
-
-    input[type="range"] {
-      -webkit-appearance: none;
-      appearance: none;
-      flex: 1;
-      height: 2px;
-      background: transparent;
-      outline: none;
-      cursor: pointer;
-    }
-    input[type="range"]::-webkit-slider-runnable-track {
-      background: var(--border);
-      height: 2px;
-      border-radius: 1px;
-    }
-    input[type="range"]::-webkit-slider-thumb {
-      -webkit-appearance: none;
-      width: 11px; height: 11px;
-      margin-top: -4.5px;
-      border-radius: 50%;
-      background: var(--cyan);
-      box-shadow: 0 0 5px rgba(0,212,255,0.45);
-      transition: transform 0.1s, box-shadow 0.1s;
-    }
-    input[type="range"]::-webkit-slider-thumb:hover {
-      transform: scale(1.2);
-      box-shadow: 0 0 8px rgba(0,212,255,0.7);
-    }
-    input[type="range"]::-moz-range-track {
-      background: var(--border);
-      height: 2px;
-      border-radius: 1px;
-      border: none;
-    }
-    input[type="range"]::-moz-range-thumb {
-      border: none;
-      width: 11px; height: 11px;
-      border-radius: 50%;
-      background: var(--cyan);
-      box-shadow: 0 0 5px rgba(0,212,255,0.45);
-    }
-
-    /* ── Integrator dropdown ──────────────────────────────────────────────── */
-    .param-select {
-      flex: 1;
-      min-width: 0;
-      background-color: var(--input-bg);
-      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='5' viewBox='0 0 8 5'%3E%3Cpath d='M0 0l4 5 4-5z' fill='%234a5568'/%3E%3C/svg%3E");
-      background-repeat: no-repeat;
-      background-position: right 8px center;
-      border: 1px solid rgba(255,255,255,0.07);
-      border-radius: 4px;
-      color: var(--text);
-      font-family: var(--font);
-      font-size: 10px;
-      letter-spacing: 0.05em;
-      padding: 4px 22px 4px 7px;
-      outline: none;
-      cursor: pointer;
-      appearance: none;
-      -webkit-appearance: none;
-      transition: border-color 0.12s, background-color 0.12s;
-    }
-    .param-select:hover { border-color: rgba(255,255,255,0.14); }
-    .param-select:focus { border-color: var(--cyan); background-color: rgba(0,212,255,0.05); }
-    .param-select option { background: #0d0f18; color: var(--text); }
-
-    /* ── Count (particle number) input ───────────────────────────────────── */
-    .count-input {
-      flex: 1;
-      background: var(--input-bg);
-      border: 1px solid rgba(255,255,255,0.07); border-radius: 4px;
-      color: var(--text); font-family: var(--font); font-size: 11px;
-      padding: 4px 7px; text-align: right; outline: none;
-      transition: border-color 0.12s, background 0.12s;
-      -moz-appearance: textfield;
-    }
-    .count-input::-webkit-inner-spin-button,
-    .count-input::-webkit-outer-spin-button { -webkit-appearance: none; }
-    .count-input:hover { border-color: rgba(255,255,255,0.14); }
-    .count-input:focus { border-color: var(--cyan); background: rgba(0,212,255,0.05); }
-
-    /* ── Toggle rows ──────────────────────────────────────────────────────── */
-    .toggle-row {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 7px 14px;
-      user-select: none;
-      transition: background 0.12s;
-    }
-    .toggle-row:hover { background: rgba(255,255,255,0.025); }
-    .toggle-label {
-      font-size: 10px;
-      letter-spacing: 0.06em;
-      color: var(--text);
-    }
-    .toggle-switch {
-      width: 30px; height: 15px;
-      border-radius: 8px;
-      border: 1px solid var(--border);
-      background: var(--input-bg);
-      position: relative;
-      flex-shrink: 0;
-      transition: background 0.15s, border-color 0.15s;
-    }
-    .toggle-switch.on {
-      background: rgba(0,212,255,0.15);
-      border-color: rgba(0,212,255,0.5);
-    }
-    .toggle-switch::after {
-      content: '';
-      position: absolute;
-      top: 2px; left: 2px;
-      width: 9px; height: 9px;
-      border-radius: 50%;
-      background: var(--muted);
-      transition: transform 0.15s, background 0.15s;
-    }
-    .toggle-switch.on::after {
-      transform: translateX(15px);
-      background: var(--cyan);
-      box-shadow: 0 0 4px rgba(0,212,255,0.6);
-    }
-
-    /* ── Energy plot (inside panel) ──────────────────────────────────────── */
-    .energy-wrap {
-      padding: 4px 14px 8px;
-    }
-    .energy-wrap canvas {
-      display: block;
-      border-radius: 4px;
-      background: rgba(0, 0, 0, 0.35);
-    }
-
-    /* ── Paused structure editor ─────────────────────────────────────────── */
-    #editor-panel {
-      position: absolute;
-      top: 74px;
-      left: 18px;
-      z-index: 11;
-      width: 226px;
-      padding: 14px;
-      display: none;
-      color: var(--text);
-      background: var(--panel-bg);
-      border: 1px solid var(--border);
-      border-radius: 9px;
-      backdrop-filter: blur(14px);
-      box-shadow: 0 8px 30px rgba(0,0,0,.45);
-      font-size: 9px;
-      letter-spacing: .08em;
-    }
-    #editor-panel.visible { display: block; }
-    body:has(#editor-panel.visible) #canvas { cursor: crosshair; }
-    .editor-title { color: var(--cyan); font-weight: 600; letter-spacing: .18em; margin-bottom: 10px; }
-    .editor-tools { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; }
-    .editor-tool, #create-grid, #set-atom-type, #delete-atom {
-      border: 1px solid rgba(255,255,255,.09);
-      border-radius: 4px;
-      padding: 7px 5px;
-      color: var(--muted);
-      background: var(--input-bg);
-      font: 600 8px var(--font);
-      letter-spacing: .08em;
-      cursor: pointer;
-    }
-    .editor-tool.active { color: var(--cyan); border-color: rgba(0,212,255,.35); background: var(--cyan-dim); }
-    .editor-tool { font-size: 15px; line-height: 1; }
-    .editor-bond-icon { font-size: 11px; letter-spacing: -.08em; }
-    .editor-mode-panel { display: none; }
-    .editor-mode-panel.visible { display: block; }
-    .editor-section { margin: 14px 0 7px; color: var(--cyan); opacity: .7; font-weight: 600; }
-    .editor-grid-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; }
-    .editor-grid-row label, .editor-field { color: var(--muted); }
-    .editor-grid-row input, .editor-field input, .editor-field select {
-      width: 100%; margin-top: 4px; padding: 6px;
-      border: 1px solid rgba(255,255,255,.08); border-radius: 4px;
-      outline: none; background: var(--input-bg); color: var(--text); font: 10px var(--font);
-    }
-    .editor-field { display: block; margin-top: 7px; }
-    .editor-field select option { background: #0d0f18; }
-    #create-grid, #set-atom-type, #delete-atom { width: 100%; margin-top: 7px; color: var(--cyan); border-color: rgba(0,212,255,.25); }
-    #set-atom-type { color: var(--text); }
-    #delete-atom { color: #ff7f8b; border-color: rgba(255,80,100,.24); }
-    #editor-status { min-height: 28px; margin-top: 11px; color: var(--text); line-height: 1.5; }
-    .editor-help { color: var(--muted); line-height: 1.5; opacity: .8; }
-
-    /* ── Camera hint ──────────────────────────────────────────────────────── */
-    #hint {
-      position: absolute;
-      bottom: 18px; left: 50%;
-      transform: translateX(-50%);
-      font-size: 10px; letter-spacing: 0.12em;
-      color: rgba(150,170,190,0.3);
-      pointer-events: none; white-space: nowrap; text-transform: uppercase;
-    }
+    *{box-sizing:border-box}:root{color-scheme:dark;--blue:#58c4dd;--yellow:#ffff00;--green:#83c167;--muted:#85858e;--serif:'STIX Two Text','Cambria','Georgia',serif}
+    body{margin:0;background:#080809;color:#ededf0;font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;-webkit-font-smoothing:antialiased}
+    a{color:inherit;text-decoration:none}a:hover{color:var(--blue)}button{font:inherit}
+    button:focus-visible,a:focus-visible{outline:2px solid var(--blue);outline-offset:4px}
+    .masthead{height:76px;border-bottom:1px solid #222226;padding:0 5%;display:flex;align-items:center;justify-content:space-between;gap:20px}
+    .wordmark{font-family:var(--serif);font-size:25px;letter-spacing:-1px}.wordmark span{font:11px monospace;color:#777;letter-spacing:0;margin-left:15px}
+    .edition{font-size:9px;letter-spacing:2px;color:#a2a2ad;display:flex;align-items:center;gap:15px}.edition i{height:3px;width:3px;background:var(--blue);border-radius:50%}
+    main{max-width:1320px;margin:auto;padding:0 48px 56px}
+    .intro{margin:46px 0 28px;max-width:78ch}
+    .eyebrow{font-size:9px;letter-spacing:2px;color:#8f8f99;font-weight:600}
+    h1{font-family:var(--serif);font-size:40px;font-weight:400;letter-spacing:-1.4px;margin:10px 0 12px}
+    .lede{font-size:13px;line-height:1.9;color:#92929c;margin:0}.lede code{font-family:ui-monospace,monospace;font-size:12px;color:#c9c9d2}
+    .grid{display:grid;grid-template-columns:1fr;gap:18px}
+    @media(min-width:920px){.grid{grid-template-columns:1fr 1fr}.wide{grid-column:1/-1}}
+    .panel{border:1px solid #26262b;background:#0b0b0d;border-radius:3px;overflow:hidden}
+    .panel-head{display:flex;align-items:center;gap:14px;padding:15px 18px;border-bottom:1px solid #1c1c20}
+    .panel-head .index{font-family:ui-monospace,monospace;font-size:11px;color:var(--blue)}
+    .panel-head h2{font-family:var(--serif);font-weight:400;font-size:19px;letter-spacing:-.4px;margin:0}
+    .panel-head p{margin:2px 0 0;font-size:10.5px;color:#7f7f89;font-family:ui-monospace,monospace}
+    .panel-head .tag{margin-left:auto;font-size:9px;letter-spacing:1.6px;color:#8f8f99;border:1px solid #2b2b31;border-radius:2px;padding:4px 8px}
+    .stage{position:relative;aspect-ratio:16/9;container-type:inline-size;background:#000}
+    .stage canvas{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none}
+    .labels{position:absolute;inset:0;pointer-events:none;font-family:var(--serif);font-style:italic;font-size:clamp(10px,1.6cqw,18px);text-shadow:0 1px 7px #000,0 0 3px #000}
+    .transport{display:flex;align-items:center;gap:18px;flex-wrap:wrap;margin-top:22px}
+    #pause{border:1px solid #2b2b31;background:#111114;color:#d8d8de;border-radius:3px;padding:9px 16px;font-size:12px;cursor:pointer}
+    #pause:hover{border-color:#3b3b43}.stats{font-family:ui-monospace,monospace;font-size:11.5px;color:#8f8f99}
+    .status{margin-top:18px;font-size:13px;line-height:1.7;color:#ff9d9d}
+    .note{margin:26px 0 0;font-size:11.5px;line-height:1.9;color:#7c7c85;max-width:90ch}
+    footer{max-width:1320px;margin:auto;padding:0 48px 48px;display:flex;justify-content:space-between;gap:20px;font-size:11px;color:#7c7c85}
+    @media(max-width:750px){.masthead{height:61px;padding:0 20px}.wordmark span,.edition{display:none}main{padding:0 16px 40px}h1{font-size:29px}footer{padding:0 16px 36px;flex-direction:column}}
   </style>
 </head>
 <body>
-  <canvas id="canvas"></canvas>
-  <div id="topbar"></div>
-  <div id="gui"></div>
-  <div id="hint">Left-drag: orbit &nbsp;·&nbsp; Right-drag: pan &nbsp;·&nbsp; Scroll: zoom</div>
-  <script type="module" src="dist/main.js"></script>
+  <header class="masthead"><span class="wordmark">edena<span> / mathematical motion</span></span><span class="edition">SHOWCASE <i></i> PLOTTING BREADTH</span></header>
+  <main>
+    <div class="intro">
+      <span class="eyebrow">LIVE WEBGPU · ONE LIBRARY</span>
+      <h1>A playground for mathematical motion.</h1>
+      <p class="lede">Build waves from harmonics, explore colored surfaces and implicit shapes, and assemble a lattice with a reversible animation. Four live views share one GPU device. Drag the 3D panels to orbit, scroll to zoom, then open the physics experiments below.</p>
+    </div>
+    <nav class="transport" aria-label="Explore examples" style="margin:0 0 24px;line-height:1.8">
+      <a href="particles.html">50K GPU particles · experimental ↗</a>
+      <a href="physics-lab.html">Physics laboratory ↗</a>
+      <a href="symmetry.html">Crystal symmetry ↗</a>
+      <a href="field.html">3D field explorer ↗</a>
+      <a href="electrostatics.html">Charged-ball animatic ↗</a>
+    </nav>
+    <div class="grid">
+      <section class="panel wide" aria-label="A one-dimensional function curve">
+        <div class="panel-head"><span class="index">01</span><div><h2>A square wave, built from sines</h2><p>Fourier synthesis · odd harmonics · Cartesian coordinates</p></div><span class="tag">1D</span></div>
+        <div class="stage"><canvas id="curve" aria-label="Fourier sum of odd sine harmonics with axes, ticks, and a grid"></canvas><div id="curve-labels" class="labels"></div></div>
+        <div class="controls"><label>Fourier harmonics <input id="harmonics" type="range" min="1" max="15" value="1" step="1"> <output id="harmonics-value">1</output></label><p id="curve-equation">f(x) = sin(x)</p><p>Add odd harmonics to watch a smooth sine wave approach a square wave. The overshoot near each jump is the Gibbs phenomenon.</p></div>
+      </section>
+      <section class="panel" aria-label="A two-dimensional height surface">
+        <div class="panel-head"><span class="index">02</span><div><h2>A surface, value-colored</h2><p>colorMappedSurface(f, x, y, viridis, [40, 40])</p></div><span class="tag">2D</span></div>
+        <div class="stage"><canvas id="surface" aria-label="A translucent height surface z equals sine of x times cosine of y, with coordinate axes"></canvas><div id="surface-labels" class="labels"></div></div>
+        <div class="controls"><label>Surface <select id="surface-kind"><option value="wave">Standing wave</option><option value="mobius">Möbius strip</option></select></label><label>Wave frequency <input id="frequency" type="range" min="0.5" max="4" value="1.5" step="0.1"></label><label>Palette <select id="palette"><option value="viridis">Viridis</option><option value="plasma">Plasma</option></select></label><p id="surface-caption">A standing-wave shape: f(x,y) = 0.55 sin(kx) cos(ky). Height is encoded in both geometry and color.</p></div>
+      </section>
+      <section class="panel" aria-label="A three-dimensional scalar field isosurface">
+        <div class="panel-head"><span class="index">03</span><div><h2>A level set, in perspective</h2><p>isosurface(f, bounds, 0, 48) · camera.projection = 'perspective'</p></div><span class="tag">3D</span></div>
+        <div class="stage"><canvas id="field" aria-label="The zero level set of the union of two balls, inside a wireframe domain box with coordinate axes"></canvas><div id="field-labels" class="labels"></div></div>
+        <div class="controls"><label>Shape <select id="level-shape"><option value="balls">Two overlapping balls</option><option value="torus">Torus</option><option value="gyroid">Gyroid</option></select></label><label>Projection <select id="projection"><option value="perspective">Perspective</option><option value="orthographic">Orthographic</option></select></label><p>Explore a surface defined implicitly by f(x,y,z) = 0. Drag to orbit; scroll to zoom. Extraction runs on the CPU when the shape changes.</p></div>
+      </section>
+    </div>
+    <div class="transport"><button id="pause" aria-pressed="false">Pause motion</button><span id="stats" class="stats">Measuring frame time…</span></div>
+    <section class="panel" style="margin-top:24px"><div class="panel-head"><span class="index">04</span><h2>From a unit cell to a lattice</h2><span class="tag">STRUCTURE</span></div><div class="stage"><canvas id="lattice" aria-label="Animated cubic lattice with atoms, bonds and a surrounding wire sphere"></canvas><div id="lattice-labels" class="labels"></div></div><div class="controls"><label>Build the structure <input id="build-lattice" type="range" min="0" max="6" step="0.01" value="6"></label><p>Scrub a reversible timeline: atoms appear, bonds connect, then a reference shell and axis arrow reveal the structure. Repeated atoms share one sphere mesh. Drag to orbit.</p></div></section>
+    <div id="status" class="status" role="alert" hidden></div>
+    <section class="experiments" aria-label="Physics and animation experiments">
+      <h2>From equations to experiments.</h2>
+      <p>Open an experiment here to run it live. Each has its own controls and can also open in a dedicated tab.</p>
+      <article class="panel"><div class="panel-head"><h2>Crystal symmetry: move it, match it</h2><a href="symmetry.html">Open full screen ↗</a></div><div class="controls"><p>Rotate a cubic cell about an axis or body diagonal, reflect it in a mirror plane, or invert it through its center. Scrub each transformation and watch equivalent lattice sites coincide.</p><button data-demo="symmetry.html">Explore crystal symmetry</button></div></article>
+      <article class="panel"><div class="panel-head"><h2>The physics laboratory</h2><a href="physics-lab.html">Open full screen ↗</a></div><div class="controls"><p>Explore five live experiments built from the library’s geometry, color maps, CPU and GPU simulation, and animation APIs.</p><button data-demo="physics-lab.html">Run physics laboratory</button></div></article>
+      <article class="panel"><div class="panel-head"><h2>50,000 particles in a force field</h2><a href="particles.html">Open full screen ↗</a></div><div class="controls"><p>GPU integration, ping-pong buffers, instanced sprites, reproducible initialization, and timing. The default force is a harmonic oscillator: a = −kx. This is a particle-throughput baseline.</p><button data-demo="particles.html">Run particle experiment</button></div></article>
+      <article class="panel"><div class="panel-head"><h2>A charged ball, derived from scratch</h2><a href="electrostatics.html">Open full screen ↗</a></div><div class="controls"><p>A complete mathematical animatic with equations, geometric primitives, labels, camera movement, and a seekable timeline. Follow the electric-field integral inside and outside the ball.</p><button data-demo="electrostatics.html">Run electric-field animatic</button></div></article>
+    </section>
+    <p class="note">Coverage: function curves, axes and ticks; height surfaces and Viridis/Plasma palettes; CPU isosurface extraction; orthographic and perspective cameras; spheres, circles, arrows, tubes and merged geometry; groups, transparency, projected text and seekable animation. The experiments add GPU particle integration and a complete equation-driven animatic. The frame counter measures the four gallery views; each embedded experiment reports its own timing.</p>
+  </main>
+  <footer><span>Edena TypeScript visualization library · geometry · WebGPU · fields · <a href="field.html">focused field example ↗</a></span><span>Archive: <a href="electrostatics.html">the electromagnetism animatic ↗</a></span></footer>
+  <script type="module" src="build/showcase/main.js"></script>
+  <style>
+    body{background:radial-gradient(ellipse at 12% 0%,#172c39 0,transparent 42%),#090e16;color:#e7edf5}
+    .masthead{height:82px;border-color:#ffffff10;background:#0b1119aa}.wordmark{font-size:30px;color:#eefaff}.wordmark span{color:#8ca0b0}.edition{color:#9db9c9}
+    main{max-width:1360px;padding:0 40px 64px}.intro{margin:64px 0 30px;max-width:850px}.eyebrow{color:#78cbd5;letter-spacing:3px}h1{font-size:clamp(36px,4.6vw,62px);line-height:1.12;letter-spacing:-2px;margin:18px 0 24px}.lede{font-size:15px;color:#a1b2c3;line-height:1.9}
+    nav.transport{gap:10px}nav a{background:#152331;border:1px solid #304354;border-radius:24px;padding:10px 17px;font-size:12px;transition:background .15s}nav a:hover{background:#223b49;color:#b7f2f5}
+    .grid{gap:24px}.panel{border:1px solid #2a3646;border-radius:18px;background:#101925;box-shadow:0 16px 42px #0003}.panel-head{padding:20px 24px;border-color:#263340;background:#14202e}.panel-head h2{font-size:23px;color:#f0f4fa}.panel-head p{margin-top:7px;color:#9cafc1;font-size:11px}.panel-head .index{color:#80d4df;font-size:12px}.panel-head .tag{border-color:#42606b;color:#93d4dc;border-radius:20px;padding:5px 10px}.stage{background:#04080e}
+    .controls{padding:22px 24px!important;color:#adbdcc!important;font-size:13px!important}.controls label{gap:12px!important;margin-bottom:14px!important}.controls p{max-width:72ch;line-height:1.8}.controls select{border-radius:8px!important;border-color:#3b4e64!important;background:#1b2b3d!important;padding:9px 12px!important}.controls button,#pause{background:#175d70!important;border:1px solid #398195!important;border-radius:9px!important;color:#eefcff!important;padding:11px 17px!important;cursor:pointer}.controls button:hover,#pause:hover{background:#207487!important}.controls input{accent-color:#79d3dd}.controls output{color:#f1d087}
+    .experiments{margin-top:64px!important}.experiments>h2{font-size:38px!important;letter-spacing:-1px}.experiments .panel{margin-top:24px!important}.panel-head a{font-size:12px;color:#93d5e3;white-space:nowrap}.stats{color:#a4b7c9}.note{border-top:1px solid #273546;padding-top:24px;color:#8da2b6;font-size:12px}footer{color:#8da2b6}input:focus-visible,select:focus-visible,button:focus-visible,a:focus-visible{outline:2px solid #f1d087;outline-offset:4px}
+    @media(max-width:750px){main{padding:0 16px 40px}.intro{margin-top:36px}.panel-head{padding:16px;flex-wrap:wrap}.panel-head h2{font-size:21px}.controls{padding:18px!important}.controls label{display:flex!important;justify-content:space-between}.experiments iframe{height:800px}.wordmark span{display:none}}
+  </style>
+  <style>
+    .controls{padding:16px 18px;color:#aaaab7;font-size:12px;line-height:1.7}.controls label{display:inline-flex;align-items:center;gap:10px;margin:0 16px 8px 0}.controls input{accent-color:#58c4dd;max-width:150px}.controls select,.controls button{background:#14151c;border:1px solid #393b48;color:#eee;padding:8px;border-radius:4px;font:inherit}.controls button{cursor:pointer}.controls p{margin:6px 0}.experiments{margin-top:48px}.experiments>h2{font:30px Georgia,serif}.experiments>p{color:#92929c;font-size:13px}.experiments .panel{margin:18px 0}.experiments .panel-head{justify-content:space-between}.experiments iframe{display:block;width:100%;height:720px;border:0;background:#000}
+  </style>
+  <script type="module">
+    document.querySelectorAll('[data-demo]').forEach(button=>button.addEventListener('click',()=>{
+      const existing=button.closest('article').querySelector('iframe');
+      if(existing){existing.remove();button.textContent='Run experiment';return;}
+      const frame=document.createElement('iframe');frame.src=button.dataset.demo;frame.title=button.closest('article').querySelector('h2').textContent;
+      button.closest('article').append(frame);button.textContent='Close experiment';
+    }));
+  </script>
 </body>
 </html>

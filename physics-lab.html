@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#080809">
+<meta name="description" content="Edena physics lab: Kepler orbits integrated through the CPU particle seam, all-pairs gravity on the GPU, a double pendulum, the Lorenz attractor, and two-source interference.">
+<title>Edena physics lab</title>
+<style>
+  *{box-sizing:border-box}
+  :root{color-scheme:dark;--blue:#58c4dd;--yellow:#ffff00;--green:#83c167;--serif:'STIX Two Text','Cambria','Georgia',serif}
+  body{margin:0;background:#080809;color:#ededf0;font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;-webkit-font-smoothing:antialiased}
+  a{color:inherit;text-decoration:none}a:hover{color:var(--blue)}button{font:inherit}
+  button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--blue);outline-offset:3px}
+  header{height:60px;border-bottom:1px solid #222226;padding:0 4%;display:flex;align-items:center;justify-content:space-between;gap:16px}
+  .wordmark{font-family:var(--serif);font-size:21px;letter-spacing:-1px}.wordmark span{font:10.5px ui-monospace,monospace;color:#777;margin-left:12px}
+  main{max-width:1180px;margin:auto;padding:0 24px 48px}
+  .intro{margin:26px 0 20px;max-width:80ch}
+  .eyebrow{font-size:9px;letter-spacing:2px;color:#8f8f99;font-weight:600}
+  h1{font-family:var(--serif);font-size:31px;font-weight:400;letter-spacing:-1.1px;margin:8px 0 10px}
+  .lede{font-size:12.5px;line-height:1.85;color:#92929c;margin:0}
+  .lede code{font-family:ui-monospace,monospace;font-size:11.5px;color:#c9c9d2}
+  .grid{display:grid;grid-template-columns:1fr;gap:16px}
+  @media(min-width:900px){.grid{grid-template-columns:1fr 1fr}.wide{grid-column:1/-1}}
+  .panel{border:1px solid #26262b;background:#0b0b0d;border-radius:3px;overflow:hidden}
+  .panel-head{display:flex;align-items:center;gap:12px;padding:13px 16px;border-bottom:1px solid #1c1c20}
+  .panel-head .index{font-family:ui-monospace,monospace;font-size:11px;color:var(--blue)}
+  .panel-head h2{font-family:var(--serif);font-weight:400;font-size:18px;letter-spacing:-.4px;margin:0}
+  .panel-head p{margin:2px 0 0;font-size:10.5px;color:#7f7f89;font-family:ui-monospace,monospace}
+  .panel-head .tag{margin-left:auto;font-size:9px;letter-spacing:1.6px;color:#8f8f99;border:1px solid #2b2b31;border-radius:2px;padding:4px 8px;white-space:nowrap}
+  .stage{position:relative;aspect-ratio:16/9;background:#000}
+  .stage canvas{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none}
+  .labels{position:absolute;inset:0;pointer-events:none;font-family:var(--serif);font-style:italic;font-size:clamp(10px,1.5cqw,16px);text-shadow:0 1px 7px #000,0 0 3px #000}
+  .controls{padding:14px 16px;color:#aaaab7;font-size:12px;line-height:1.7}
+  .controls label{display:inline-flex;align-items:center;gap:9px;margin:0 14px 8px 0}
+  .controls input[type=range]{accent-color:#58c4dd;max-width:140px}
+  .controls select,.controls button{background:#14151c;border:1px solid #393b48;color:#eee;padding:7px 9px;border-radius:4px;font:inherit;cursor:pointer}
+  .controls p{margin:6px 0}
+  .controls code{font-family:ui-monospace,monospace;font-size:11.5px;color:#c9c9d2}
+  .transport{display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin:20px 0 4px}
+  .transport button{border:1px solid #2b2b31;background:#111114;color:#d8d8de;border-radius:3px;padding:9px 15px;font-size:12px;cursor:pointer}
+  .transport button:hover{border-color:#3b3b43}
+  .stats{font-family:ui-monospace,monospace;font-size:11.5px;color:#8f8f99}
+  .status{margin-top:16px;font-size:13px;line-height:1.7;color:#ff9d9d}
+  .note{margin:24px 0 0;font-size:11.5px;line-height:1.85;color:#7c7c85;max-width:92ch}
+</style>
+</head>
+<body>
+<header><span class="wordmark">edena<span> / physics lab</span></span><a href="index.html">← Back to the gallery</a></header>
+<main>
+  <div class="intro">
+    <span class="eyebrow">SIX EXPERIMENTS · ONE LIBRARY</span>
+    <h1>Physics you can drag.</h1>
+    <p class="lede">Orbits integrated through the CPU particle seam, <code>O(N²)</code> gravity solved on the GPU, two chaotic systems, a two-source interference field, and the vibrational modes of a drumhead. The n-body panel runs its own compute and render pipelines over ping-pong storage buffers; the rest are ordinary <code>WebGPUView</code> panels sharing one device. Drag the 3D panels to orbit, scroll to zoom.</p>
+  </div>
+  <div class="transport"><button id="pause" aria-pressed="false">Pause motion</button><button id="replay">Replay animations</button><span id="stats" class="stats">Measuring frame time…</span></div>
+  <div id="status" class="status" role="alert" hidden></div>
+
+  <div class="grid" style="margin-top:20px">
+    <section class="panel wide" aria-label="Planets orbiting a star, integrated on the CPU">
+      <div class="panel-head"><span class="index">01</span><div><h2>Kepler orbits, integrated</h2><p>createParticleState → ParticleSimulation.step → reset</p></div><span class="tag">CPU SEAM</span></div>
+      <div class="stage"><canvas id="kepler" aria-label="Three elliptical orbits around a star with a planet on each, colored by distance"></canvas><div id="kepler-labels" class="labels"></div></div>
+      <div class="controls"><label>Step size Δt <input id="kepler-dt" type="range" min="0.004" max="0.05" value="0.008" step="0.002"> <output id="kepler-dt-value">0.008</output></label><label><button id="kepler-reset">Reset the system</button></label><p>Three planets with eccentricity 0, 0.35 and 0.65, all with GM = 1, advance through the library's <code>ParticleSimulation</code> — a shared state, an acceleration callback, and a <code>reset()</code> that restores the initial buffers exactly. The rings are coloured by distance; raise Δt far enough and the integrated path visibly drifts off its ring.</p></div>
+    </section>
+    <section class="panel wide" aria-label="An all-pairs gravitational n-body disc solved on the GPU">
+      <div class="panel-head"><span class="index">02</span><div><h2>Gravity, all-pairs, on the GPU</h2><p>GpuParticleSimulation({ mode: 'nbody', layout: 'disc' })</p></div><span class="tag">N-BODY</span></div>
+      <div class="stage"><canvas id="nbody" aria-label="A rotating disc of self-gravitating bodies forming spiral arms"></canvas><div id="nbody-labels" class="labels"></div></div>
+      <div class="controls"><label>Bodies <select id="bodies"><option value="2048">2,048</option><option value="8192" selected>8,192</option><option value="16384">16,384</option><option value="32768">32,768</option></select></label><label><button id="nbody-reset">Restart the disc</button></label><span id="nbody-timing" class="stats">measuring GPU step…</span><p>One thread per body loops over every other body — no tree, no neighbour grid, no atomics: raw <code>O(N²)</code> gravity with Plummer softening. Positions never leave the GPU; the render pass instances them straight out of the storage buffer, and the timing above is measured with timestamp queries. The disc begins on circular orbits, so the seeded noise is free to grow into spiral arms.</p></div>
+    </section>
+    <section class="panel" aria-label="Two double pendulums released a tenth of a degree apart">
+      <div class="panel-head"><span class="index">03</span><div><h2>Two pendulums, 0.1° apart</h2><p>ramp() → per-vertex colors → merge()</p></div><span class="tag">CHAOS</span></div>
+      <div class="stage"><canvas id="pendulum" aria-label="Two nearly identical double-pendulum traces diverging into different paths"></canvas><div id="pendulum-labels" class="labels"></div></div>
+      <div class="controls"><label>Release angle <input id="pendulum-angle" type="range" min="60" max="175" value="150" step="1"> <output id="pendulum-angle-value">150°</output></label><p>Both pendulums obey identical equations and start one tenth of a degree apart. The traces are coloured by time through a custom <code>ramp()</code>, so the instant the two histories diverge shows up as colours that stop matching.</p></div>
+    </section>
+    <section class="panel" aria-label="The Lorenz attractor drawn as a tube">
+      <div class="panel-head"><span class="index">04</span><div><h2>The Lorenz attractor</h2><p>RK4 → gradientTube(polyline bands)</p></div><span class="tag">CHAOS</span></div>
+      <div class="stage"><canvas id="lorenz" aria-label="A chaotic three-dimensional trajectory wound into two lobes"></canvas><div id="lorenz-labels" class="labels"></div></div>
+      <div class="controls"><label>Rayleigh number ρ <input id="rho" type="range" min="14" max="34" value="28" step="0.5"> <output id="rho-value">28.0</output></label><p>ẋ = σ(y − x), ẏ = x(ρ − z) − y, ż = xy − βz with σ = 10, β = 8/3. Below ρ ≈ 24.7 the trajectory spirals into a fixed point; above it the two lobes take over. Drag the slider and the curve is re-integrated and redrawn.</p></div>
+    </section>
+    <section class="panel wide" aria-label="Two-source interference rendered as a height field">
+      <div class="panel-head"><span class="index">05</span><div><h2>Two-source interference</h2><p>colorMappedSurface(amplitude, …, plasma, [48, 48])</p></div><span class="tag">WAVES</span></div>
+      <div class="stage"><canvas id="wave" aria-label="A rippled surface showing the interference pattern of two coherent sources"></canvas><div id="wave-labels" class="labels"></div></div>
+      <div class="controls"><label>Wavenumber k <input id="wave-k" type="range" min="2" max="14" value="6.5" step="0.1"> <output id="wave-k-value">6.5</output></label><label>Source separation <input id="wave-gap" type="range" min="0.2" max="2.6" value="1.6" step="0.05"> <output id="wave-gap-value">1.60</output></label><p>Two coherent sources add with 1/(1 + r) falloff, and the result is drawn as a height field with its value carried in colour. The hyperbolic nodal lines along the midline are where the two contributions cancel.</p></div>
+    </section>
+    <section class="panel wide" aria-label="Vibrating modes of a square drumhead">
+      <div class="panel-head"><span class="index">06</span><div><h2>Modes of a drumhead</h2><p>functionSurface(f, x, y, [48, 48]) + Group.visible</p></div><span class="tag">WAVES</span></div>
+      <div class="stage"><canvas id="drum" aria-label="A square membrane flexing in one of its vibrational modes, with nodal lines drawn on it"></canvas><div id="drum-labels" class="labels"></div></div>
+      <div class="controls"><label>Mode m <select id="drum-m"><option>1</option><option selected>2</option><option>3</option><option>4</option></select></label><label>Mode n <select id="drum-n"><option>1</option><option>2</option><option selected>3</option><option>4</option></select></label><label><input id="drum-nodes" type="checkbox" checked> Show nodal lines</label><p>The clamped square membrane z = sin(mπx/2)·sin(nπy/2) on [−1, 1]², built with <code>functionSurface</code> and coloured by displacement. Higher modes add nodal lines; the checkbox toggles a <code>Group</code>'s <code>visible</code> flag, and the surface breathes through a <code>Timeline</code> driven by <code>tick()</code> instead of an absolute seek.</p></div>
+    </section>
+  </div>
+
+  <p class="note">Coverage: the CPU particle seam (<code>createParticleState</code>, <code>ParticleSimulation</code>, <code>reset</code>, acceleration callbacks) and the GPU particle core (<code>mode: 'nbody'</code>, ping-pong storage buffers, instanced-from-storage rendering, timestamp-query timing, <code>reset</code>); RK4 and semi-implicit integration; geometry primitives and merged tubes; per-vertex colours from <code>ramp</code> and colormaps; <code>polyline</code>, <code>sphere</code>, <code>circle</code>, <code>merge</code>, <code>axes3d</code>; orthographic and perspective cameras; projected labels; and <code>Timeline</code> (cues, <code>tween</code>-driven reveals, and a <code>tick()</code>-looped vibration); <code>functionSurface</code> alongside <code>parametricSurface</code> and <code>colorMappedSurface</code>; <code>Group.visible</code>; and the view option <code>alphaMode</code>. Add <code>?samples=1</code> to drop MSAA, <code>?dpr=1</code> to cap resolution, or <code>?alpha=opaque</code> to skip premultiplied compositing on a slow backend.</p>
+</main>
+<script type="module" src="build/examples/physics-lab.js"></script>
+</body>
+</html>

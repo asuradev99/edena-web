@@ -1,15 +1,22 @@
 {
   "name": "edena-web",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "description": "Programmable mathematical visualization with WebGPU",
+  "main": "./build/index.js",
+  "types": "./build/index.d.ts",
+  "exports": { ".": { "types": "./build/index.d.ts", "import": "./build/index.js" } },
+  "files": ["build/index.*", "build/lib"],
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "build": "tsc -p tsconfig.library.json",
+    "dev": "npm run build && node scripts/serve.mjs",
+    "typecheck": "tsc -p tsconfig.library.json --noEmit",
+    "test": "npm run build && node --test tests/*.test.mjs",
+    "prepack": "npm run build"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "type": "commonjs",
+  "type": "module",
   "devDependencies": {
     "@webgpu/types": "^0.1.69",
     "typescript": "^5.9.3"
