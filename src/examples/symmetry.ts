@@ -675,7 +675,7 @@ function writeMapping(): void {
   // otherwise the report becomes a wall of numbers for a large cell.
   const orbitList = orbits.slice(0, 8).map(orbit => orbit.length > 12 ? `{${orbit.slice(0, 12).join(', ')}, …}` : `{${orbit.join(', ')}}`).join(' ');
   mappingPanel.innerHTML = `
-    <div class="report-line"><strong>${exact.length}</strong> of ${operations.length} listed operations map this cell onto itself.</div>
+    <div class="report-line"><strong>${exact.length}</strong> of ${operationsFromFile ? `${operations.length} listed operations` : `the lattice's ${latticeGroupSize} point-group operations`} map this cell onto itself.</div>
     <div class="report-line ${valid ? 'ok' : 'bad'}">${valid ? '✓ verified: every site maps to a distinct equivalent site, and the animation ends back inside the cell.' : '✗ this operation does not preserve the structure.'}</div>
     <div class="report-line"><strong>${orbits.length}</strong> symmetry orbit${orbits.length === 1 ? '' : 's'}: ${orbitList}${orbits.length > 8 ? ` … ${orbits.length - 8} more` : ''}</div>
     <div class="report-line">This operation <strong>permutes</strong> ${moved} of the cell's ${base.positions.length} sites; the caption counts the drawn sites that visibly move.</div>
@@ -755,6 +755,10 @@ function setOperation(index: number): void {
  * site with a corner image counts as moving it — which is exactly what the picture shows.
  */
 let movedCounts: { base: CrystalStructure; n: number; counts: Map<CrystalOperation, number> } | undefined;
+/** How many operations the lattice's point group has, against which the report compares the crystal. */
+let latticeGroupSize = 0;
+/** True once a phonopy file supplies the operations, so the report counts against that list instead. */
+let operationsFromFile = false;
 function visibleMovedCount(operation: CrystalOperation): number {
   const n = drawnRepeats();
   if (!movedCounts || movedCounts.base !== base || movedCounts.n !== n) movedCounts = { base, n, counts: new Map() };
@@ -835,6 +839,10 @@ function refreshOperationLabels(): void {
 }
 
 function recomputeOperations(): void {
+  // How many operations the lattice's own point group has, so the report can say how much of it the
+  // crystal actually realises ("6 of 24" for a decorated hexagonal cell).
+  operationsFromFile = false;
+  latticeGroupSize = latticePointGroup(base.lattice, 1e-4).length;
   operations = orderOperations(defaultOperations());
   populateOperationOptions();
 }
@@ -869,7 +877,7 @@ async function loadText(file: File, kind: 'poscar' | 'symmetry'): Promise<void> 
   try {
     const text = await file.text();
     if (kind === 'poscar') { base = parsePOSCAR(text); showFile(file, 'POSCAR'); setStatus(`${file.name} loaded`, 'ok'); }
-    else { const parsed = parsePhonopySymmetry(text); if (parsed.length) operations = orderOperations(parsed); showFile(file, 'PHONOPY'); setStatus(`${file.name} · ${parsed.length} operations`, 'ok'); }
+    else { const parsed = parsePhonopySymmetry(text); if (parsed.length) { operations = orderOperations(parsed); operationsFromFile = true; } showFile(file, 'PHONOPY'); setStatus(`${file.name} · ${parsed.length} operations`, 'ok'); }
     if (kind === 'poscar') recomputeOperations(); else populateOperationOptions();
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
