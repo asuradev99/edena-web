@@ -501,3 +501,29 @@ test('screw, glide and pure translations are carried along with the move', () =>
   assert.equal(operationIsometry(cubicCell, { rotation: [[-1, 0, 0], [0, -1, 0], [0, 0, 1]], translation: [0, 0, 0], label: '' }).trivial, false);
   assert.equal(operationIsometry(cubicCell, { rotation: [[1, 0, 0], [0, 1, 0], [0, 0, 1]], translation: [0, 0, 0], label: '' }).trivial, true);
 });
+
+test('an independent rotation and reflection agree with the isometry', () => {
+  // Written from scratch on purpose: rotateAboutAxis lives in the library under test, so comparing
+  // the isometry with it would only prove the library agrees with itself.
+  const rotate = (v, n, angle) => {
+    const c = Math.cos(angle), s = Math.sin(angle), k = 1 - c;
+    const along = v[0] * n[0] + v[1] * n[1] + v[2] * n[2];
+    const x = [n[1] * v[2] - n[2] * v[1], n[2] * v[0] - n[0] * v[2], n[0] * v[1] - n[1] * v[0]];
+    return [0, 1, 2].map(axis => v[axis] * c + x[axis] * s + n[axis] * along * k);
+  };
+  const reflect = (v, n) => { const along = v[0] * n[0] + v[1] * n[1] + v[2] * n[2]; return [0, 1, 2].map(axis => v[axis] - 2 * along * n[axis]); };
+  for (const operation of CUBIC_POINT_GROUP) {
+    const isometry = operationIsometry(cubicCell, operation);
+    for (const fractional of [[.1, .2, .3], [.25, .5, .75], [-.4, .15, .05]]) {
+      const start = fractionalToCartesian(fractional, cubicCell);
+      const reached = isometryPoint(isometry, start, 1);
+      // A reflection and a rotation about the same axis commute, so R·sigma or sigma·R describe the
+      // same map; the library walks the rotation first.
+      const expected = isometry.inversion ? start.map(value => -value)
+        : isometry.improper ? reflect(rotate(start, isometry.axis, isometry.angle), isometry.axis)
+        : rotate(start, isometry.axis, isometry.angle);
+      const difference = cartesianToFractional([0, 1, 2].map(axis => reached[axis] - expected[axis]), cubicCell);
+      for (const value of difference) close(value - Math.round(value), 0, 1e-8);
+    }
+  }
+});
