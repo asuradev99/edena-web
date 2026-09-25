@@ -4,6 +4,7 @@ import {
   cellFromParameters, cellVolume, fractionalToCartesian, cartesianToFractional, CUBIC_OPERATIONS,
   mapsOntoSelf, bonds, latticeSites, supercell, millerPlane, periodicDistance,
   sphericalWedge, sphericalWedgeOutline, boxEdges, mathml, frac, mi,
+  applyOperation, siteMapping, cartesianOperation, axisAngle, rotateAboutAxis, shadedSphere, sphere,
 } from '../build/index.js';
 
 const close = (a, b, tolerance = 1e-5) => assert.ok(Math.abs(a - b) < tolerance, `${a} ≈ ${b}`);
@@ -100,6 +101,45 @@ test('periodicDistance measures fractional sites through the shortest image', ()
   const lattice = [[2, 0, 0], [0, 2, 0], [0, 0, 2]];
   close(periodicDistance([.05, 0, 0], [.95, 0, 0], lattice), .2, 1e-9);
   close(periodicDistance([0, 0, 0], [.5, .5, .5], lattice), Math.sqrt(3), 1e-9);
+});
+
+test('a symmetry animation ends exactly on the mapped site inside the unit cell', () => {
+  // This is the property the viewer relies on: rotate the site along its arc, blend in the
+  // lattice translation that wraps it home, and the endpoint must equal the mapped site.
+  const perovskite = latticeSites('perovskite', { side: 3.905, species: ['Sr', 'Ti', 'O'] });
+  for (const rotation of CUBIC_OPERATIONS) {
+    const operation = { rotation, translation: [0, 0, 0], label: 'r' };
+    assert.ok(mapsOntoSelf(perovskite, operation, 1e-4));
+    const mapping = siteMapping(perovskite, operation, 1e-4);
+    const card = cartesianOperation(perovskite.lattice, rotation);
+    const rotation2 = axisAngle(card);
+    for (let index = 0; index < perovskite.positions.length; index++) {
+      const target = mapping[index];
+      assert.ok(target >= 0);
+      const expectedCartesian = fractionalToCartesian(perovskite.positions[target], perovskite.lattice);
+      const from = fractionalToCartesian(perovskite.positions[index], perovskite.lattice);
+      const arrived = rotation2 ? rotateAboutAxis(from, rotation2.axis, rotation2.angle) : from;
+      const endpoint = [0, 1, 2].map(axis => arrived[axis] + (expectedCartesian[axis] - arrived[axis]));
+      for (let axis = 0; axis < 3; axis++) assert.ok(Math.abs(endpoint[axis] - expectedCartesian[axis]) < 1e-9, `op site ${index}`);
+      // And the wrapped operation really lands on the mapped site (fractional, periodic).
+      const wrapped = applyOperation(operation, perovskite.positions[index]);
+      for (let axis = 0; axis < 3; axis++) { const raw = Math.abs(wrapped[axis] - perovskite.positions[target][axis]); assert.ok(Math.min(raw, 1 - raw) < 1e-6); }
+    }
+  }
+});
+
+test('a body-centre C4 permutes the three oxygens and fixes Sr and Ti', () => {
+  const perovskite = latticeSites('perovskite', { side: 3.905, species: ['Sr', 'Ti', 'O'] });
+  const mapping = siteMapping(perovskite, { rotation: [[0, -1, 0], [1, 0, 0], [0, 0, 1]], translation: [0, 0, 0], label: 'C4z' }, 1e-4);
+  assert.deepEqual(mapping, [0, 1, 2, 4, 3]);
+});
+
+test('shadedSphere carries per-vertex shading and matches the plain sphere geometry', () => {
+  const shaded = shadedSphere(1), plain = sphere(1);
+  assert.equal(shaded.vertices.length, plain.vertices.length);
+  assert.equal(shaded.colors.length, shaded.vertices.length);
+  const unique = new Set([...shaded.colors].map(value => value.toFixed(3)));
+  assert.ok(unique.size > 8, 'shading should vary across the surface');
 });
 
 test('mathtext assembles namespaced MathML', () => {

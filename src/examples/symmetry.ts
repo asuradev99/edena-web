@@ -1,5 +1,5 @@
 import {
-  WebGPUView, Visual, Group, Geometry, LabelLayer, rgba, smooth, clamp, polyline, merge, sphere, circle, arrow, wireSphere,
+  WebGPUView, Visual, Group, Geometry, LabelLayer, rgba, smooth, clamp, polyline, merge, sphere, shadedSphere, circle, arrow, wireSphere,
   parsePOSCAR, parsePhonopySymmetry,
   latticeSites, supercell as makeSupercell, bonds as findBonds,
   fractionalToCartesian, cartesianToFractional, structureBounds, shortestDistance, appearanceFor,
@@ -39,6 +39,7 @@ const bondsToggle = $<HTMLInputElement>('bonds');
 const cellToggle = $<HTMLInputElement>('cell');
 const trailsToggle = $<HTMLInputElement>('trails');
 const legendAnchor = $<HTMLElement>('legend-anchor');
+const atomLabelsToggle = $<HTMLInputElement>('atom-labels');
 
 const SITE_COLORS = ['#62d6e8', '#f7d681', '#ef9273', '#b5a1ff', '#9ae6b4', '#ff9ec4', '#8ff0b0', '#9ad0ff'];
 const ELEMENT_COLOR = (() => { const map = new Map<string, string>(); return (symbol: string) => { if (!map.has(symbol)) map.set(symbol, appearanceFor(symbol).color); return map.get(symbol)!; }; })();
@@ -60,6 +61,10 @@ type Built = {
   trailVisual?: Visual;
   elementVisuals: Visual[];
   selectionVisuals: Visual[];
+  /** Soft glow copies behind each atom, and faded "start" markers shown while animating. */
+  haloVisuals: Visual[];
+  startVisuals: Visual[];
+  atomLabels: HTMLSpanElement[];
   elementLabel: string;
   elementAnchor: Vec3 | undefined;
   motion: Motion;
@@ -140,14 +145,28 @@ function motionFor(operation: CrystalOperation): Motion {
 function motionPoint(motion: Motion, fromFractional: Vec3, t: number): Vec3 {
   const from = fracToCart(fromFractional);
   if (motion.kind === 'identity') return from;
+  // The operation's true target, wrapped back into the unit cell: the animation must end on a
+  // real site of the crystal, not on a periodic copy floating in a neighbouring cell.
+  const target = fracToCart(applyOperation(motion.operation, fromFractional));
   if (motion.kind === 'rotate') {
+    const arrived = rotateAboutAxis(from, motion.axis, motion.angle);
+    // The gap between "where the arc lands" and "the wrapped site" is a lattice translation;
+    // blending it in along the arc carries the atom home without a jump.
+    const correction: Vec3 = [0, 1, 2].map(axis => target[axis] - arrived[axis] - motion.translation[axis]) as Vec3;
     const rotated = rotateAboutAxis(from, motion.axis, motion.angle * t);
-    return [rotated[0] + motion.translation[0] * t, rotated[1] + motion.translation[1] * t, rotated[2] + motion.translation[2] * t];
+    return [
+      rotated[0] + (motion.translation[0] + correction[0]) * t,
+      rotated[1] + (motion.translation[1] + correction[1]) * t,
+      rotated[2] + (motion.translation[2] + correction[2]) * t,
+    ];
   }
-  const target = applyOperation(motion.operation, fromFractional);
-  const delta: Vec3 = [0, 1, 2].map(axis => { const raw = target[axis] - fromFractional[axis]; return raw - Math.round(raw); }) as Vec3;
-  const deltaCart = fracToCart(delta);
-  return [from[0] + deltaCart[0] * t, from[1] + deltaCart[1] * t, from[2] + deltaCart[2] * t];
+  // Improper maps and glides slide in fractional space and wrap every frame, so the site crosses
+  // the periodic boundary and reappears inside the cell exactly where the operation sends it.
+  const linear: Vec3 = [0, 1, 2].map(axis => {
+    const moved = motion.operation.rotation[axis][0] * fromFractional[0] + motion.operation.rotation[axis][1] * fromFractional[1] + motion.operation.rotation[axis][2] * fromFractional[2] + motion.operation.translation[axis];
+    return fromFractional[axis] + (moved - fromFractional[axis]) * t;
+  }) as Vec3;
+  return fracToCart(linear.map(value => ((value % 1) + 1) % 1) as Vec3);
 }
 
 function cellWire(lattice: Supercell['lattice'], width: number): Geometry {
@@ -266,7 +285,10 @@ function rebuild(): void {
   const appearance = new Map(elements.map(symbol => [symbol, appearanceFor(symbol)]));
   const widest = Math.max(...[...appearance.values()].map(entry => entry.radius));
   const unit = Math.min(1, shortest * .26 / widest);
-  const meshes = new Map(elements.map(symbol => [symbol, sphere(1)]));
+  // Shaded spheres: the light-model shade rides in the vertex colors and the element hue is the
+  // Visual color, so the renderer's multiply makes each atom read as a lit ball, not a flat disc.
+  const meshes = new Map(elements.map(symbol => [symbol, shadedSphere(1)]));
+  const halos = new Map(elements.map(symbol => [symbol, sphere(1)]));
   const ideal = big.positions.map(position => fractionalToCartesian(position, big.lattice));
   const atomScales: Vec3[] = big.positions.map((_, index) => { const radius = Math.max(shortest * .08, appearance.get(big.species[index])!.radius * unit); return [radius, radius, radius]; });
   const atomVisuals = big.positions.map((_, index) => {
@@ -274,6 +296,20 @@ function rebuild(): void {
     visual.position = ideal[index];
     visual.scale = atomScales[index];
     return visual;
+  });
+  // A larger, faint copy of each sphere gives the silhouette a soft glow.
+  const haloVisuals = big.positions.map((_, index) => {
+    const halo = new Visual(halos.get(big.species[index])!, rgba(atomColor(index, big.species[index]), .12));
+    halo.position = ideal[index];
+    halo.scale = atomScales[index].map(value => value * 1.45) as Vec3;
+    return halo;
+  });
+  // Faded markers at the starting sites: drawn while an operation runs, they make "before → after" legible.
+  const startVisuals = big.positions.map((_, index) => {
+    const marker = new Visual(meshes.get(big.species[index])!, rgba(atomColor(index, big.species[index]), .32));
+    marker.position = ideal[index];
+    marker.scale = atomScales[index].map(value => value * .6) as Vec3;
+    return marker;
   });
 
   const bondVisuals: Visual[] = [];
@@ -330,16 +366,22 @@ function rebuild(): void {
     selectionVisuals.push(...selectionDetail(selectedAtom, ideal).visuals);
   }
 
-  built = { big, baseCount, ideal, atomVisuals, atomScales, bondVisuals, ghostVisuals, cellVisual, trailVisual, elementVisuals: element.visuals, selectionVisuals, elementLabel: element.label, elementAnchor: element.anchor, motion, centre: bounds.centre, extent: bounds.extent };
-  view.world.add(...atomVisuals, ...ghostVisuals, ...bondVisuals, ...(cellVisual ? [cellVisual] : []), ...(trailVisual ? [trailVisual] : []), ...element.visuals, ...selectionVisuals);
+  built = { big, baseCount, ideal, atomVisuals, atomScales, bondVisuals, ghostVisuals, haloVisuals, startVisuals, atomLabels: [], cellVisual, trailVisual, elementVisuals: element.visuals, selectionVisuals, elementLabel: element.label, elementAnchor: element.anchor, motion, centre: bounds.centre, extent: bounds.extent };
+  view.world.add(...haloVisuals, ...atomVisuals, ...ghostVisuals, ...bondVisuals, ...(cellVisual ? [cellVisual] : []), ...(trailVisual ? [trailVisual] : []), ...element.visuals, ...selectionVisuals, ...startVisuals);
 
-  // Labels: lattice vectors, the symmetry element, and the selected site.
+  // Labels: lattice vectors, the symmetry element, the selected site, and (optionally) element symbols.
   const axes: [string, Vec3][] = [['a', fractionalToCartesian([1, 0, 0], big.lattice)], ['b', fractionalToCartesian([0, 1, 0], big.lattice)], ['c', fractionalToCartesian([0, 0, 1], big.lattice)]];
   for (const [name, direction] of axes) labels.addHTML(mathml(mi(name)), () => [direction[0] * 1.06, direction[1] * 1.06, direction[2] * 1.06], '#a4b3c6', 'math-label');
   if (element.anchor) labels.add(element.label, () => element.anchor!, '#83c167');
   if (selectedAtom >= 0 && selectedAtom < ideal.length) {
     const point = ideal[selectedAtom];
     labels.addHTML(mathml(msub(mi('r'), mn(selectedAtom + 1))), () => point, '#ffff00', 'math-label');
+  }
+  if (atomLabelsToggle.checked && big.positions.length <= 36) {
+    for (let index = 0; index < big.positions.length; index++) {
+      const span = labels.addHTML(mathml(mi(big.species[index])), () => atomVisuals[index].position, '#ffffff', 'math-label atom-tag');
+      built.atomLabels.push(span);
+    }
   }
 
   writeStructureInfo();
@@ -351,13 +393,10 @@ function rebuild(): void {
 function writeStructureInfo(): void {
   const lengths = base.lattice.map(vector => Math.hypot(...vector));
   const angle = (a: Vec3, b: Vec3) => Math.acos(clamp((a[0] * b[0] + a[1] * b[1] + a[2] * b[2]) / (Math.hypot(...a) * Math.hypot(...b)), -1, 1)) * 180 / Math.PI;
-  const html = mathml(row(
-    msub(mi('a'), mn(1)), mo('='), mn(lengths[0].toFixed(3)), mo(','),
-    msub(mi('b'), mn(1)), mo('='), mn(lengths[1].toFixed(3)), mo(','),
-    msub(mi('c'), mn(1)), mo('='), mn(lengths[2].toFixed(3)), mo(' Å'), mo('θ'), mo('='),
-    mn(angle(base.lattice[1], base.lattice[2]).toFixed(1)), mo('°'),
-  ), 'block');
-  info.innerHTML = `<div class="info-title">${base.comment || 'Crystal structure'}</div><div class="info-math">${html}</div><div class="info-line">${base.positions.length} atoms · ${[...new Set(base.species)].join(', ')}</div>`;
+  // Two short lines instead of one long row, so nothing needs a horizontal scrollbar.
+  const lengthsLine = mathml(row(msub(mi('a'), mn(1)), mo('='), mn(lengths[0].toFixed(3)), mo(','), msub(mi('b'), mn(1)), mo('='), mn(lengths[1].toFixed(3)), mo(','), msub(mi('c'), mn(1)), mo('='), mn(lengths[2].toFixed(3)), mo(' Å')));
+  const anglesLine = mathml(row(mi('α'), mo('='), mn(angle(base.lattice[1], base.lattice[2]).toFixed(1)), mo('°'), mo(','), mi('β'), mo('='), mn(angle(base.lattice[0], base.lattice[2]).toFixed(1)), mo('°'), mo(','), mi('γ'), mo('='), mn(angle(base.lattice[0], base.lattice[1]).toFixed(1)), mo('°')));
+  info.innerHTML = `<div class="info-title">${base.comment || 'Crystal structure'}</div><div class="info-math">${lengthsLine}</div><div class="info-math">${anglesLine}</div><div class="info-line">${base.positions.length} atoms · ${[...new Set(base.species)].join(', ')}</div>`;
 }
 
 function writeLegend(elements: string[], appearance: Map<string, { radius: number; color: string }>, big: Supercell): void {
@@ -380,12 +419,18 @@ function writeMapping(): void {
   const orbits = symmetryOrbits(base, exact.length ? exact : [operations[operationIndex]], 1e-3);
   const mapping = siteMapping(base, operations[operationIndex], 1e-3);
   const moved = mapping.filter((target, index) => target >= 0 && target !== index).length;
+  // Validation: a symmetry operation must send every site to a distinct, same-species site.
+  const targets = mapping.filter(target => target >= 0);
+  const bijective = targets.length === base.positions.length && new Set(targets).size === targets.length;
+  const speciesKept = mapping.every((target, index) => target >= 0 && base.species[target] === base.species[index]);
+  const valid = bijective && speciesKept;
   const rows = mapping.slice(0, 14).map((target, index) => {
     const species = base.species[index];
     return `<span class="map-cell" style="--accent:${ELEMENT_COLOR(species)}">${species}<sub>${index}</sub> → ${target < 0 ? '∉' : `${base.species[target]}<sub>${target}</sub>`}</span>`;
   }).join('');
   mappingPanel.innerHTML = `
     <div class="report-line"><strong>${exact.length}</strong> of ${operations.length} listed operations map this cell onto itself.</div>
+    <div class="report-line ${valid ? 'ok' : 'bad'}">${valid ? '✓ verified: every site maps to a distinct equivalent site, and the animation ends back inside the cell.' : '✗ this operation does not preserve the structure.'}</div>
     <div class="report-line"><strong>${orbits.length}</strong> symmetry orbit${orbits.length === 1 ? '' : 's'}: ${orbits.map(orbit => `{${orbit.join(', ')}}`).join(' ')}</div>
     <div class="report-line">Selected operation moves <strong>${moved}</strong> site${moved === 1 ? '' : 's'}.</div>
     <div class="map-grid">${rows}${mapping.length > 14 ? `<span class="map-cell muted">+${mapping.length - 14} more</span>` : ''}</div>`;
@@ -418,8 +463,11 @@ function update(): void {
   const state = built;
   if (!state || !view) return;
   const t = smooth(progress);
-  const bondOpacity = 1 - smooth(clamp(progress * 7));
-  const trailOpacity = showTrails ? (.12 + .78 * clamp(smooth(progress * 4))) : 0;
+  // Bonds and ghosts dim while atoms are in flight, then come back so the finished state reads as
+  // a complete crystal; trails fade out at the end for the same reason.
+  const flight = smooth(clamp(progress * 4)) * (1 - smooth(clamp((progress - .82) / .18)));
+  const bondOpacity = 1 - .78 * flight;
+  const trailOpacity = showTrails ? (.12 + .78 * clamp(smooth(progress * 4))) * (1 - smooth(clamp((progress - .88) / .12))) : 0;
   state.bondVisuals.forEach(visual => { visual.opacity = showBonds ? bondOpacity : 0; });
   state.ghostVisuals.forEach(visual => { visual.opacity = showBonds ? bondOpacity : 0; });
   if (state.trailVisual) state.trailVisual.opacity = trailOpacity;
@@ -428,11 +476,20 @@ function update(): void {
     const baseIndex = index % state.baseCount;
     const local = motionPoint(state.motion, base.positions[baseIndex], t);
     const shift = fractionalToCartesian(state.big.offsets[index], base.lattice);
-    visual.position = [local[0] + shift[0], local[1] + shift[1], local[2] + shift[2]];
-    const pulse = index === selectedAtom ? 1 + .12 * Math.sin(clock * 4) : 1;
+    const position: Vec3 = [local[0] + shift[0], local[1] + shift[1], local[2] + shift[2]];
+    visual.position = position;
+    // A gentle breathing keeps the scene alive; the selected site beats harder.
+    const selected = index === selectedAtom;
+    const pulse = 1 + (selected ? .14 : .015) * Math.sin(clock * (selected ? 4 : 1.6) + index);
     const scale = state.atomScales[index];
     visual.scale = [scale[0] * pulse, scale[1] * pulse, scale[2] * pulse];
+    const halo = state.haloVisuals[index];
+    if (halo) { halo.position = position; halo.scale = [scale[0] * 1.6 * pulse, scale[1] * 1.6 * pulse, scale[2] * 1.6 * pulse]; }
   });
+  // Start markers: faint "before" rings that fade in as atoms leave their sites and out again
+  // as the operation returns them home, so before → after is unambiguous.
+  const startOpacity = showTrails ? smooth(progress * 3) * (1 - smooth((progress - .82) / .18)) * .55 : 0;
+  state.startVisuals.forEach(marker => { marker.opacity = startOpacity; });
   progressInput.value = String(progress);
   playButton.textContent = playing ? 'Ⅱ' : progress >= 1 ? '↺' : '▶';
   playButton.setAttribute('aria-label', playing ? 'Pause' : progress >= 1 ? 'Replay' : 'Play');
@@ -448,36 +505,49 @@ function setOperation(index: number): void {
   const operation = operations[operationIndex];
   $('description').innerHTML = `<div class="op-name">${describeOperation(operation)}</div>
     <div class="op-matrix">R = [${operation.rotation.map(rowValues => `[${rowValues.join(', ')}]`).join(', ')}]${operation.translation.some(Boolean) ? ` + (${operation.translation.join(', ')})` : ''}</div>`;
+  $('stage-op').textContent = `${describeOperation(operation)} — moves ${movedCount(operation)} site${movedCount(operation) === 1 ? '' : 's'}`;
   rebuild();
   update();
 }
 
-/** Fill the picker from the current operation list, then select the first rotation so the
- *  page opens on motion rather than on the identity. */
-function populateOperationOptions(preferFirstRotation: boolean): void {
-  operationSelect.replaceChildren(...operations.map((operation, index) => new Option(`${index + 1}. ${describeOperation(operation)}`, String(index))));
-  const rotationIndex = operations.findIndex(operation => /^C₄/.test(describeOperation(operation)));
-  const fallbackRotation = operations.findIndex(operation => /^C/.test(describeOperation(operation)));
-  const initial = preferFirstRotation && rotationIndex >= 0 ? rotationIndex : preferFirstRotation && fallbackRotation >= 0 ? fallbackRotation : 0;
-  setOperation(initial);
+/** Teaching order: identity, rotations by size, then roto-reflections, mirrors, inversion. */
+function operationRank(operation: CrystalOperation): number {
+  const name = describeOperation(operation);
+  if (name.startsWith('E')) return 0;
+  if (name.startsWith('C₄')) return 1;
+  if (name.startsWith('C₃')) return 2;
+  if (name.startsWith('C₂')) return 3;
+  if (name.startsWith('C₆')) return 4;
+  if (name.startsWith('S')) return 5;
+  if (name.startsWith('σ')) return 6;
+  if (name.startsWith('i')) return 7;
+  return 8;
+}
+/** How many sites the operation actually relocates — the ones worth showing first. */
+function movedCount(operation: CrystalOperation): number {
+  return siteMapping(base, operation, 1e-3).filter((target, index) => target >= 0 && target !== index).length;
+}
+function orderOperations(list: CrystalOperation[]): CrystalOperation[] {
+  return [...list].sort((a, b) => operationRank(a) - operationRank(b) || movedCount(b) - movedCount(a));
 }
 
-/** A structure edit changes the symmetry group; loading a symmetry file supplies its own list. */
-function refreshOperationOptions(): void {
-  populateOperationOptions(true);
+/** Fill the picker (name + how many sites move) and open on an operation that visibly moves sites. */
+function populateOperationOptions(): void {
+  operationSelect.replaceChildren(...operations.map((operation, index) => new Option(`${index + 1}. ${describeOperation(operation)} · ${movedCount(operation)} moved`, String(index))));
+  const firstMoving = operations.findIndex((operation, index) => index > 0 && movedCount(operation) > 0);
+  setOperation(firstMoving >= 0 ? firstMoving : 0);
 }
 
 function recomputeOperations(): void {
-  operations = defaultOperations();
-  populateOperationOptions(true);
+  operations = orderOperations(defaultOperations());
+  populateOperationOptions();
 }
 
 function defaultOperations(): CrystalOperation[] {
   if (isCubic(base.lattice)) {
     const generated = CUBIC_OPERATIONS.map(rotation => ({ rotation, translation: [0, 0, 0] as Vec3, label: '' }));
     const exact = generated.filter(operation => mapsOntoSelf(base, operation, 1e-3));
-    const chosen = exact.length >= 2 ? exact : generated;
-    return chosen.map(operation => ({ ...operation, label: '' }));
+    return exact.length >= 2 ? exact : generated;
   }
   const identity: number[][] = [[1, 0, 0], [0, 1, 0], [0, 0, 1]];
   return [
@@ -515,8 +585,8 @@ async function loadText(file: File, kind: 'poscar' | 'symmetry'): Promise<void> 
   try {
     const text = await file.text();
     if (kind === 'poscar') { base = parsePOSCAR(text); selectedAtom = -1; showFile(file, 'POSCAR'); status.textContent = `${file.name} loaded`; }
-    else { const parsed = parsePhonopySymmetry(text); if (parsed.length) operations = parsed; selectedAtom = -1; showFile(file, 'PHONOPY'); status.textContent = `${file.name} · ${parsed.length} operations`; }
-    if (kind === 'poscar') recomputeOperations(); else populateOperationOptions(true);
+    else { const parsed = parsePhonopySymmetry(text); if (parsed.length) operations = orderOperations(parsed); selectedAtom = -1; showFile(file, 'PHONOPY'); status.textContent = `${file.name} · ${parsed.length} operations`; }
+    if (kind === 'poscar') recomputeOperations(); else populateOperationOptions();
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     showFile(file, kind === 'poscar' ? 'POSCAR' : 'PHONOPY', message);
@@ -550,6 +620,7 @@ async function init(): Promise<void> {
   bondsToggle.addEventListener('change', () => { showBonds = bondsToggle.checked; rebuild(); update(); }, events);
   cellToggle.addEventListener('change', () => { showCell = cellToggle.checked; rebuild(); update(); }, events);
   trailsToggle.addEventListener('change', () => { showTrails = trailsToggle.checked; rebuild(); update(); }, events);
+  atomLabelsToggle.addEventListener('change', () => { rebuild(); update(); }, events);
   // Select on click, not on drag: the camera also listens for pointerdown, so a tiny
   // movement threshold keeps orbiting from changing the selection.
   let pressX = 0, pressY = 0, pressed = false;

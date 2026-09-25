@@ -2,109 +2,126 @@
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Edena · Crystal symmetry</title>
 <style>
-:root{color-scheme:dark;font-family:system-ui,sans-serif;--bg:#0b1019;--panel:#111b29;--line:#293648;--ink:#e9eff7;--muted:#8fa2b8;--accent:#83d4df;--gold:#f7d681}
-*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink)}
-main{max-width:1360px;margin:auto;padding:32px}a{color:var(--accent)}
-header{display:flex;justify-content:space-between;align-items:center;gap:16px}
-h1{font:42px Georgia,serif;margin:22px 0 6px;letter-spacing:-1px}
-.lede{color:var(--muted);line-height:1.7;max-width:60ch}
-.layout{display:grid;grid-template-columns:minmax(0,1fr) 380px;gap:22px;margin-top:22px}
-.stage{position:relative;height:640px;border:1px solid var(--line);border-radius:18px;overflow:hidden;background:radial-gradient(circle at 50% 42%,#0d1521,#05080d 72%)}
+:root{color-scheme:dark;font-family:system-ui,sans-serif;--bg:#0b1019;--panel:#111b29;--line:#293648;--ink:#e9eff7;--muted:#8fa2b8;--accent:#83d4df;--gold:#f7d681;--ok:#7ee0a8;--bad:#ff9d9d}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--ink);display:flex;flex-direction:column;overflow:hidden}
+a{color:var(--accent);text-decoration:none}
+.app-bar{height:50px;flex:none;display:flex;align-items:center;justify-content:space-between;gap:16px;padding:0 18px;border-bottom:1px solid var(--line)}
+.app-bar .title{display:flex;align-items:baseline;gap:10px;font-family:Georgia,serif;font-size:19px;letter-spacing:-.3px}
+.app-bar .title span{font:10px ui-monospace,monospace;letter-spacing:.14em;color:var(--muted)}
+.app-bar .hint{font-size:11px;color:var(--muted)}
+main{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) 372px;gap:14px;padding:14px;max-width:1560px;width:100%;margin:0 auto}
+.stage{position:relative;min-height:0;border:1px solid var(--line);border-radius:16px;overflow:hidden;background:radial-gradient(circle at 50% 42%,#0e1724,#05080d 74%)}
 .stage canvas{width:100%;height:100%;display:block;touch-action:none}
 #labels{position:absolute;inset:0;pointer-events:none}
-.math-label{font-family:"STIX Two Math","STIXGeneral","Cambria Math","DejaVu Serif",serif;font-size:14px;font-style:normal;text-shadow:0 1px 6px #000,0 0 3px #000}
-.hint{position:absolute;left:14px;bottom:12px;font-size:11px;color:#7d90a6;letter-spacing:.02em}
-aside{display:flex;flex-direction:column;gap:14px;min-width:0}
-.card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:16px 18px}
-.card h2{margin:0 0 10px;font-size:11px;letter-spacing:.16em;color:var(--muted);font-weight:700;text-transform:uppercase}
-.file{border:1px dashed #4b677a;border-radius:12px;padding:12px;margin:0 0 12px;color:#a9c4ce;font-size:13px;text-align:center}
+.math-label{font-family:"STIX Two Math","STIXGeneral","Cambria Math","DejaVu Serif",serif;font-style:normal;font-size:13px;text-shadow:0 1px 6px #000,0 0 3px #000}
+.atom-tag{font-size:10px;font-weight:700;background:rgba(6,10,16,.66);border-radius:5px;padding:1px 3px;text-shadow:none}
+.stage-op{position:absolute;left:14px;top:12px;font-family:Georgia,serif;font-size:15px;color:var(--gold);text-shadow:0 1px 6px #000;pointer-events:none}
+.stage-hint{position:absolute;left:14px;bottom:10px;font-size:10.5px;color:#7d90a6;pointer-events:none}
+aside{min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:10px;padding-right:2px;scrollbar-width:thin}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:13px;padding:11px 13px}
+.card[open]{padding-bottom:13px}
+summary{cursor:pointer;font-size:10.5px;letter-spacing:.15em;color:var(--muted);font-weight:700;text-transform:uppercase;list-style:none;display:flex;justify-content:space-between;align-items:center}
+summary::-webkit-details-marker{display:none}
+summary::after{content:'▾';color:#5d7086;font-size:9px}
+details:not([open]) summary::after{content:'▸'}
+.file{border:1px dashed #4b677a;border-radius:10px;padding:9px;margin:10px 0;color:#a9c4ce;font-size:12px;text-align:center}
 .file.active{background:#183441;border-color:var(--accent)}
-label{display:block;margin:12px 0 6px;font-size:12px;color:#c3d2e2}
-select,button,input[type=file]{font:inherit;padding:9px 10px;background:#19283a;color:#eef8ff;border:1px solid #40526a;border-radius:9px;width:100%}
-input[type=range]{width:100%;accent-color:#70d7df}
+label{display:block;margin:9px 0 5px;font-size:11.5px;color:#c3d2e2}
+select,button,input[type=file]{font:inherit;font-size:12px;padding:7px 9px;background:#19283a;color:#eef8ff;border:1px solid #40526a;border-radius:8px;width:100%}
 button{cursor:pointer;background:#175d70;border-color:#2b7f95}
 button:hover{background:#1d718a}
-.row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-.transport{display:grid;grid-template-columns:auto auto 1fr auto;gap:10px;align-items:center}
-.transport button{width:auto;min-width:44px;padding:9px 14px;margin:0}
-.transport .value{font:13px monospace;color:var(--gold);text-align:right}
-.toggles{display:flex;flex-wrap:wrap;gap:14px;margin-top:12px;font-size:12px;color:#c3d2e2}
-.toggles label{display:flex;align-items:center;gap:6px;margin:0;cursor:pointer}
+input[type=range]{width:100%;accent-color:#70d7df;margin:2px 0}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.transport{display:grid;grid-template-columns:auto auto 1fr auto;gap:8px;align-items:center}
+.transport button{width:auto;min-width:40px;padding:7px 12px;margin:0}
+.transport .value{font:12px ui-monospace,monospace;color:var(--gold);text-align:right;min-width:3.5ch}
+.toggles{display:flex;flex-wrap:wrap;gap:10px;margin-top:9px;font-size:11.5px;color:#c3d2e2}
+.toggles label{display:flex;align-items:center;gap:5px;margin:0;cursor:pointer}
 .toggles input{width:auto}
-.info-title{font-family:Georgia,serif;font-size:17px;margin-bottom:6px}
-.info-math{overflow-x:auto}
-.info-math math{font-family:"STIX Two Math","STIXGeneral","Cambria Math","DejaVu Serif",serif}
-.info-line{color:var(--muted);font-size:12px;margin-top:6px}
-.file-list{display:grid;gap:6px;margin-top:10px}
-.file-item{padding:7px 9px;border-radius:8px;background:#162536;color:#cde5e9;font:11px ui-monospace,monospace;word-break:break-all}
+.info-title{font-family:Georgia,serif;font-size:15px;margin-bottom:4px}
+.info-math{overflow:visible;line-height:1.5}
+.info-math math,.readout-row math{font-family:"STIX Two Math","STIXGeneral","Cambria Math","DejaVu Serif",serif}
+.info-line{color:var(--muted);font-size:11.5px;margin-top:4px}
+.file-list{display:grid;gap:4px;margin-top:8px}
+.file-item{padding:5px 8px;border-radius:6px;background:#162536;color:#cde5e9;font:10.5px ui-monospace,monospace;word-break:break-all}
 .file-item.error{color:#ffaaa1;background:#30202a}
-.legend-head{display:flex;justify-content:space-between;align-items:center;cursor:pointer}
-.legend-row{display:grid;grid-template-columns:14px 1fr auto auto;gap:9px;align-items:center;padding:5px 0;font-size:13px}
-.legend-row .swatch{width:13px;height:13px;border-radius:4px;box-shadow:0 0 8px currentColor}
-.legend-size{color:var(--muted);font-size:11px;font-variant-numeric:tabular-nums}
+.legend-head{display:flex;justify-content:space-between;align-items:center;cursor:pointer;margin-top:10px}
+.legend-row{display:grid;grid-template-columns:13px 1fr auto auto;gap:8px;align-items:center;padding:3px 0;font-size:12px}
+.legend-row .swatch{width:12px;height:12px;border-radius:4px;box-shadow:0 0 7px currentColor}
+.legend-size{color:var(--muted);font-size:10.5px;font-variant-numeric:tabular-nums}
 #legend.collapsed .legend-row{display:none}
 .muted{color:var(--muted)}
-.report-line{font-size:12.5px;color:#c3d2e2;margin:4px 0;line-height:1.5}
-.map-grid{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px}
-.map-cell{font:11px ui-monospace,monospace;padding:3px 6px;border-radius:6px;background:#162536;border-left:3px solid var(--accent)}
-.selection-title{font-family:Georgia,serif;font-size:18px;margin-bottom:8px}
-.selection-title sub{font-size:11px}
-.readout-row{display:flex;justify-content:space-between;gap:10px;font-size:12px;padding:3px 0;border-bottom:1px dashed #22303f}
+#description{margin-top:8px}
+.op-name{font-family:Georgia,serif;font-size:14px;color:var(--gold)}
+.op-matrix{font:10.5px ui-monospace,monospace;color:var(--muted);margin-top:4px;word-break:break-all}
+.report-line{font-size:11.5px;color:#c3d2e2;margin:3px 0;line-height:1.45}
+.report-line.ok{color:var(--ok)}
+.report-line.bad{color:var(--bad)}
+.map-grid{display:flex;flex-wrap:wrap;gap:4px;margin-top:7px}
+.map-cell{font:10.5px ui-monospace,monospace;padding:2px 5px;border-radius:5px;background:#162536;border-left:3px solid var(--accent)}
+.selection-title{font-family:Georgia,serif;font-size:16px;margin-bottom:5px}
+.selection-title sub{font-size:10px}
+.readout-row{display:flex;justify-content:space-between;gap:10px;font-size:11.5px;padding:2px 0;border-bottom:1px dashed #22303f}
 .readout-row span{color:var(--muted)}
 .readout-row code{color:var(--gold);font-variant-numeric:tabular-nums}
-.op-name{font-family:Georgia,serif;font-size:16px;color:var(--gold)}
-.op-matrix{font:11px ui-monospace,monospace;color:var(--muted);margin-top:5px;word-break:break-all}
-#status{color:#ffaca4;font-size:12px;min-height:1em}
-@media(max-width:900px){main{padding:18px}.layout{grid-template-columns:1fr}.stage{height:440px}h1{font-size:32px}}
+#status{color:#ffaca4;font-size:11px;min-height:1em}
+@media(max-width:900px){body{overflow:auto}main{grid-template-columns:1fr;height:auto}.stage{height:52vh}.app-bar .hint{display:none}aside{overflow:visible}}
 </style></head>
-<body><main>
-<header><a href="/">← Edena playground</a><span style="font-size:10px;letter-spacing:.18em;color:#8fa2b8">CRYSTAL SYMMETRY / 02</span></header>
-<h1>Same crystal. Different positions.</h1>
-<p class="lede">Load a VASP POSCAR/CONTCAR and an optional phonopy <code>symmetry.yaml</code>. The viewer finds bonds, builds a supercell, and animates each symmetry operation — rotating atoms along true arcs — while reporting which sites map onto which.</p>
-<div class="layout">
-  <div class="stage"><canvas id="scene" aria-label="Crystal structure with symmetry operation animation"></canvas><div id="labels"></div><div class="hint">drag to orbit · scroll to zoom · click an atom for its spherical coordinates</div><div id="loading" hidden></div></div>
+<body>
+<div class="app-bar">
+  <div class="title">Crystal symmetry <span>EDENA / STRUCTURE</span></div>
+  <div class="hint">drag to orbit · scroll to zoom · click an atom</div>
+  <a href="/">← playground</a>
+</div>
+<main>
+  <div class="stage">
+    <canvas id="scene" aria-label="Crystal structure with animated symmetry operations"></canvas>
+    <div id="labels"></div>
+    <div class="stage-op" id="stage-op"></div>
+    <div class="stage-hint">shaded balls = atoms · translucent balls = periodic neighbours · white trails = the path</div>
+  </div>
   <aside>
-    <section class="card">
-      <h2>Files</h2>
+    <details class="card" open><summary>Files</summary>
       <div id="drop-zone" class="file">Drop a POSCAR and/or symmetry.yaml here</div>
-      <label for="files-input">Load files together</label><input id="files-input" type="file" multiple>
+      <input id="files-input" type="file" multiple aria-label="Load files together">
       <div class="row"><div><label for="poscar-file">POSCAR / CONTCAR</label><input id="poscar-file" type="file"></div><div><label for="symmetry-file">phonopy symmetry</label><input id="symmetry-file" type="file"></div></div>
       <div id="file-list" class="file-list" aria-live="polite"></div>
       <p id="status" role="alert"></p>
-    </section>
-    <section class="card">
-      <h2>Structure</h2>
+    </details>
+
+    <details class="card" open><summary>Structure</summary>
       <div id="structure-info"></div>
-      <div class="legend-head" id="legend-anchor"><h2 style="margin:12px 0 6px">Elements</h2><span class="muted" style="font-size:11px">click to fold</span></div>
+      <div class="legend-head" id="legend-anchor"><span class="muted" style="font-size:10.5px;letter-spacing:.12em">ELEMENTS</span><span class="muted" style="font-size:10.5px">fold</span></div>
       <div id="legend"></div>
-      <label for="supercell">Supercell</label>
-      <select id="supercell"><option value="1" selected>1 × 1 × 1</option><option value="2">2 × 2 × 2</option><option value="3">3 × 3 × 3</option></select>
-      <label for="colour">Atom colour</label>
-      <select id="colour"><option value="species" selected>by element</option><option value="site">by site index</option></select>
-      <div class="toggles"><label><input type="checkbox" id="bonds" checked> bonds</label><label><input type="checkbox" id="cell" checked> cell</label><label><input type="checkbox" id="trails" checked> orbit trails</label></div>
-    </section>
-    <section class="card">
-      <h2>Symmetry operation</h2>
-      <select id="operation" size="1"></select>
-      <div id="description" style="margin-top:10px"></div>
-      <div class="transport" style="margin-top:14px">
+      <div class="row">
+        <div><label for="supercell">Supercell</label><select id="supercell"><option value="1" selected>1 × 1 × 1</option><option value="2">2 × 2 × 2</option><option value="3">3 × 3 × 3</option></select></div>
+        <div><label for="colour">Atom colour</label><select id="colour"><option value="species" selected>by element</option><option value="site">by site index</option></select></div>
+      </div>
+      <div class="toggles"><label><input type="checkbox" id="bonds" checked> bonds</label><label><input type="checkbox" id="cell" checked> cell</label><label><input type="checkbox" id="trails" checked> trails</label><label><input type="checkbox" id="atom-labels"> symbols</label></div>
+    </details>
+
+    <details class="card" open><summary>Symmetry operation</summary>
+      <select id="operation" aria-label="Symmetry operation"></select>
+      <div id="description"></div>
+      <div class="transport" style="margin-top:10px">
         <button id="play" aria-label="Play">▶</button>
         <button id="reset" aria-label="Reset">↺</button>
         <input id="progress" type="range" min="0" max="1" step="0.002" value="0" aria-label="Operation progress">
         <span class="value" id="progress-value">0%</span>
       </div>
-      <label for="speed">Playback speed</label>
+      <label for="speed">Speed</label>
       <select id="speed"><option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="2">2×</option></select>
-    </section>
-    <section class="card">
-      <h2>Symmetry report</h2>
+    </details>
+
+    <details class="card" open><summary>Symmetry report</summary>
       <div id="mapping"></div>
-    </section>
-    <section class="card">
-      <h2>Selected site</h2>
+    </details>
+
+    <details class="card" open><summary>Selected site</summary>
       <div id="selection"></div>
-    </section>
+    </details>
   </aside>
-</div>
 </main>
 <script type="module" src="build/examples/symmetry.js"></script></body></html>

@@ -80,6 +80,29 @@ export function parametricSurface(fn:(u:number,v:number)=>Vec3, uRange:[number,n
   return new Geometry(out);
 }
 export const sphere = (radius=1) => parametricSurface((u,v)=>[radius*Math.sin(u)*Math.cos(v),radius*Math.cos(u),radius*Math.sin(u)*Math.sin(v)],[0,Math.PI],[0,2*Math.PI]);
+/**
+ * A sphere whose per-vertex colors carry a light-model shade, so the unlit triangle pipeline
+ * still reads as a solid ball instead of a flat disc. The shade is greyscale; set the
+ * `Visual` color to the element hue and the renderer multiplies the two together. Render a
+ * larger, faint copy of the same mesh for a glow rim.
+ */
+export function shadedSphere(radius=1,options:{light?:Vec3;fill?:Vec3;ambient?:number;shininess?:number}={}):Geometry {
+  const base=sphere(radius);
+  const light=normalize(options.light??[-.45,.72,.52]);
+  const fill=normalize(options.fill??[.65,-.4,-.35]);
+  const ambient=options.ambient??.32,shininess=options.shininess??30;
+  const half=normalize([light[0],light[1],light[2]+1]);
+  const colors=new Float32Array(base.vertices.length);
+  for(let i=0;i<base.vertices.length;i+=3){
+    const n=normalize([base.vertices[i],base.vertices[i+1],base.vertices[i+2]]);
+    const diffuse=Math.max(0,n[0]*light[0]+n[1]*light[1]+n[2]*light[2]);
+    const back=Math.max(0,n[0]*fill[0]+n[1]*fill[1]+n[2]*fill[2])*.24;
+    const specular=Math.pow(Math.max(0,n[0]*half[0]+n[1]*half[1]+n[2]*half[2]),shininess)*.85;
+    const shade=Math.max(.22,Math.min(1.75,ambient+diffuse*.82+back+specular));
+    colors[i]=shade;colors[i+1]=shade;colors[i+2]=shade;
+  }
+  return new Geometry(base.vertices,colors);
+}
 export const functionSurface = (f:(x:number,y:number)=>number,x:[number,number],y:[number,number],resolution:[number,number]=[32,32]) => parametricSurface((u,v)=>[u,f(u,v),v],x,y,resolution);
 export function functionCurve(fn:(x:number)=>number, domain:[number,number], samples=200, width=.015, maxJump=Infinity): Geometry {
   if (!domain.every(Number.isFinite)||domain[1]<=domain[0]||!Number.isInteger(samples)||samples<2||samples>100_000) throw new Error('Invalid curve domain or sampling budget');
