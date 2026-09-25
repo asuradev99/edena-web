@@ -44,7 +44,7 @@ const atHalfway = isometryPoint(isometry, start, 0.5);   // the identity at t = 
 const resting = isometryTarget(isometry, start, structure.lattice);
 ```
 
-Improper operations are reported as the rotoreflection they are, `S(θ, n) = R(θ, n)·σ_n`, so a mirror plane is labelled and drawn normal to `n` and a roto-reflection shows both the plane and its spin.
+Improper operations are reported as the rotoreflection they are, `S(θ, n) = R(θ, n)·σ_n`, and every animation performs exactly the move its matrix expresses rather than an interpolation invented for the occasion. A rotation turns about the operation's own axis; a mirror slides straight through its plane; an inversion slides straight through the centre; and a roto-reflection runs as two moves in sequence — the whole rotation, then the whole fold. At the halfway point of a roto-reflection the rotation is complete and the fold has not begun, so the label can name both moves in the order they play.
 
 ## Library quick start
 

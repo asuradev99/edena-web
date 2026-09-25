@@ -231,7 +231,14 @@ function operationElement(motion: Motion, centre: Vec3, extent: number): { visua
     visuals.push(new Visual(polyline(ring, .01), blue));
     visuals.push(new Visual(arrow(ring[ring.length - 3], ring[ring.length - 1], .022), blue));
   }
-  return { visuals, anchor, label: Math.abs(motion.angle) < 1e-6 ? `mirror plane ⟂ ${axisLabel(motion.axis)}` : `${degrees}° rotoreflection about ${axisLabel(motion.axis)}` };
+  // Name the two moves in the order they play, so the label matches what the animation does.
+  return {
+    visuals,
+    anchor,
+    label: Math.abs(motion.angle) < 1e-6
+      ? `mirror plane ⟂ ${axisLabel(motion.axis)}`
+      : `rotate ${degrees}° about ${axisLabel(motion.axis)}, then mirror ⟂ ${axisLabel(motion.axis)}`,
+  };
 }
 
 function atomColor(index: number, species: string): string {

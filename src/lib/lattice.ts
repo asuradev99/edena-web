@@ -483,15 +483,35 @@ export function operationIsometry(lattice: Lattice, operation: CrystalOperation)
 
 /**
  * The motion of `operationIsometry`, evaluated part-way: the identity at t = 0 and the full map at
- * t = 1. An improper map folds through its plane while it spins about the plane normal.
+ * t = 1.
+ *
+ * Each family performs exactly the geometric move its matrix expresses, rather than an interpolation
+ * invented for the occasion:
+ *
+ * - a proper rotation turns about the operation's own axis, by the angle of the matrix;
+ * - a mirror is a reflection, so the site travels straight through the plane;
+ * - an inversion is a point operation, so the site travels straight through the centre;
+ * - a roto-reflection is two moves in sequence — first the rotation about the axis, then the
+ *   reflection in the plane normal to it — because that is literally how `R(θ, n)·σ_n` acts. At the
+ *   halfway point the rotation is complete and the fold has not begun.
  */
 export function isometryPoint(isometry: Isometry, point: Vec3, t: number): Vec3 {
   if (isometry.trivial) return point;
-  const { axis, angle, improper, translation } = isometry;
-  const along = improper ? 2 * t * dot(point, axis) : 0;
-  const source: Vec3 = improper ? [point[0] - along * axis[0], point[1] - along * axis[1], point[2] - along * axis[2]] : point;
-  const rotated = rotateAboutAxis(source, axis, angle * t);
-  return [rotated[0] + translation[0] * t, rotated[1] + translation[1] * t, rotated[2] + translation[2] * t];
+  const { axis, angle, improper, inversion, translation } = isometry;
+  let moved: Vec3;
+  if (inversion) {
+    moved = [point[0] * (1 - 2 * t), point[1] * (1 - 2 * t), point[2] * (1 - 2 * t)];
+  } else if (!improper) {
+    moved = rotateAboutAxis(point, axis, angle * t);
+  } else if (Math.abs(angle) < 1e-9) {
+    const through = 2 * t * dot(point, axis);
+    moved = [point[0] - through * axis[0], point[1] - through * axis[1], point[2] - through * axis[2]];
+  } else {
+    const spun = rotateAboutAxis(point, axis, angle * Math.min(1, 2 * t));
+    const through = 2 * Math.max(0, 2 * t - 1) * dot(spun, axis);
+    moved = [spun[0] - through * axis[0], spun[1] - through * axis[1], spun[2] - through * axis[2]];
+  }
+  return [moved[0] + translation[0] * t, moved[1] + translation[1] * t, moved[2] + translation[2] * t];
 }
 
 /**

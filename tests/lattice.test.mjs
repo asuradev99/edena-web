@@ -272,6 +272,36 @@ test('a rotating site follows a circular arc about the axis', () => {
   }
 });
 
+test('each family performs its own geometric move, and roto-reflections do two of them in turn', () => {
+  const point = [1.1, .4, -.7];
+  const along = (v, n) => dot(v, n);
+  const across = (v, n) => { const a = along(v, n); return [v[0] - a * n[0], v[1] - a * n[1], v[2] - a * n[2]]; };
+  const pick = predicate => CUBIC_POINT_GROUP.find(operation => predicate(operationIsometry(cubicCell, operation)));
+
+  // A roto-reflection: the whole rotation happens first, then the whole fold.
+  const rotoreflection = pick(iso => iso.improper && Math.abs(iso.angle) > 1e-6 && Math.abs(Math.abs(iso.angle) - Math.PI) > 1e-6);
+  assert.ok(rotoreflection, 'm-3m has roto-reflections');
+  const spin = operationIsometry(cubicCell, rotoreflection);
+  const rotated = rotateAboutAxis(point, spin.axis, spin.angle);
+  const halfway = isometryPoint(spin, point, .5);
+  for (let axis = 0; axis < 3; axis++) close(halfway[axis], rotated[axis], 1e-9);
+  const finished = isometryPoint(spin, point, 1);
+  close(along(finished, spin.axis), -along(rotated, spin.axis), 1e-9);          // the fold flips the axis
+  for (let axis = 0; axis < 3; axis++) close(across(finished, spin.axis)[axis], across(rotated, spin.axis)[axis], 1e-9);  // and leaves the plane alone
+
+  // A mirror is a reflection: straight through the plane, no spin of its own.
+  const mirror = pick(iso => iso.improper && !iso.inversion && Math.abs(iso.angle) < 1e-6);
+  assert.ok(mirror, 'm-3m has mirrors');
+  const reflect = operationIsometry(cubicCell, mirror);
+  const halfFolded = isometryPoint(reflect, point, .5);
+  for (let axis = 0; axis < 3; axis++) close(halfFolded[axis], point[axis] - along(point, reflect.axis) * reflect.axis[axis], 1e-9);
+
+  // An inversion is a point operation: straight through the centre.
+  const centre = operationIsometry(cubicCell, pick(iso => iso.inversion));
+  const quarter = isometryPoint(centre, point, .25);
+  for (let axis = 0; axis < 3; axis++) close(quarter[axis], point[axis] * .5, 1e-9);
+});
+
 test('isometryTarget only corrects a cell that needs it', () => {
   const hexagonal = cellFromParameters(3, 3, 5, 90, 90, 120);
   const oblique = { rotation: [[0, -1, 0], [1, 0, 0], [0, 0, 1]], translation: [0, 0, 0], label: '' };

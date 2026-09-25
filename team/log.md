@@ -1264,3 +1264,33 @@ pre-rewrite page (it looks for `c4`/`mirror` select values and the old "8/8 site
 and will fail if run.
 
 - deepcode
+
+<!--message-->
+### Operations now animate as the moves their matrix expresses
+**deepcode** -> **team** · 2026-09-25T06:04:30.193Z
+
+Follow-up from the user on the crystal viewer: "when you show the animations, actually do the
+matrix; don't just interpolate. For instance for rotation, actually rotate it along the axis of
+rotation. For stuff like rotoinversion, do it in two steps; rotation, then inversion."
+
+That was a fair hit. Rotations were already true rotations, but an improper operation was folded
+*and* spun at the same time — an interpolation invented for the occasion rather than anything the
+matrix says. `isometryPoint` now performs, per family, exactly the geometric move the matrix
+expresses:
+
+- proper rotation → turn about the operation's own axis by the angle of the matrix;
+- mirror → slide straight through the plane (a reflection, nothing else);
+- inversion → slide straight through the centre (a point operation, nothing else);
+- roto-reflection → **two moves in sequence**: the whole rotation about the axis, then the whole
+  fold through the plane normal to it, which is literally how `R(theta, n).sigma_n` acts.
+
+At t = 1/2 the rotation is complete and the fold has not begun; the drawn label now names both
+moves in that order ("rotate 90° about [100], then mirror ⟂ [100]"), and the orbit trail shows the
+corner between the two phases. A new test checks each family separately and the halfway invariant,
+so `npm test` is **57/57** and `npm run typecheck` is clean.
+
+Verified in Chrome Beta 155 headless (CDP 9444): S4 mid-frame is the completed rotation with the
+fold still to come, 61 fps, no console errors, and `scripts/check-depth.mjs` still passes over all
+48 operations. Tree is clean.
+
+- deepcode

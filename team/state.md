@@ -6,9 +6,9 @@ Last updated: 2026-09-25 by **deepcode** (crystal viewer: centred-lattice animat
 
 - Branch `main`, tree **clean**. This line of work is committed: `451ed82` (legend element folding),
   `c300957` (centred, correct operation animation; halos and clicking removed), `8804a30`
-  (lattice isometry API + tests), `a333247` (supercell trail legibility). Earlier: `3054fd1`
+  (lattice isometry API + tests), `a333247` (supercell trail legibility), `ed22831` (docs + harness), `fda9879` (auto-play, outlined markers). Earlier: `3054fd1`
   (library + pages), `5bb690a`, `5e28935`, `134ff03`, `edad9c1`, `f83ee5e`.
-- `npm run typecheck` → clean. `npm test` → **56/56** pass (~1.2 s; the sample-budget boundary
+- `npm run typecheck` → clean. `npm test` → **57/57** pass (~1.2 s; the sample-budget boundary
   test alone costs ~0.9 s). `npm run build` → `build/`.
 - Pages all serve 200 from `npm run dev` (http://localhost:5173): `/`, `/field.html`,
   `/particles.html`, `/physics-lab.html`, `/symmetry.html`, `/electrostatics.html`, `/legacy.html`.
@@ -98,7 +98,7 @@ Last updated: 2026-09-25 by **deepcode** (crystal viewer: centred-lattice animat
 
 ## Open items / good next steps
 
-1. Tree is clean and committed; `npm test` is 56/56.
+1. Tree is clean and committed; `npm test` is 57/57.
 2. **astra:** Phase 5 remainder in `src/lib/simulation.ts` — fixed-step accumulation, pause,
    and single-step as explicit runtime policies. Unclaimed by deepcode.
 3. Spatial interaction kernels (neighbour search, Barnes-Hut, all-pairs) are explicitly **out of
@@ -127,11 +127,19 @@ Last updated: 2026-09-25 by **deepcode** (crystal viewer: centred-lattice animat
     was dragged home along a straight chord after sweeping its arc. An atom now ends at the
     operation's own image, corrected by a lattice vector only if it leaves the box — which a cubic
     cell never needs, so each atom travels its true arc.
+  - **Every family animates as its own geometric move** (user follow-up: "actually do the matrix;
+    don't just interpolate"). `isometryPoint` used to fold and spin an improper operation at once — an
+    interpolation invented for the occasion. A proper rotation turns about the operation's own axis; a
+    mirror slides straight through its plane; an inversion slides straight through the centre; and a
+    roto-reflection runs as **two moves in sequence** — the whole rotation, then the whole fold —
+    because that is literally how `R(θ, n)·σ_n` acts. At t = ½ the rotation is complete and the fold
+    has not begun, so the label names both moves in the order they play.
   - **Removed** the transparent halo behind every atom and all click-to-select/measurement UI: the
-    stage is camera-only. The legend still folds elements in and out, and dense supercell trails thin
-    out so 38 orbit arcs stay legible.
+    stage is camera-only. The legend still folds elements in and out, the "before" markers are wire
+    outlines, and dense supercell trails thin out so 38 orbit arcs stay legible. Choosing an operation
+    plays it immediately.
   - Verified in Chrome Beta 155 (headless, CDP 9444, AMD rdna-2): 61 fps, no console errors, frame
-    montages per operation (`/tmp/edena/montage-*.png`), `npm test` 45 → **56/56**.
+    montages per operation (`/tmp/edena/montage-*.png`), `npm test` 45 → **57/57**.
 - **Crystal viewer, library layer (chatgpt):** `src/lib/crystal.ts` — `parsePOSCAR` (VASP 4/5,
   selective dynamics, Cartesian or direct, negative scale as target volume) and
   `parsePhonopySymmetry`, exported through `src/index.ts` with `tests/crystal.test.mjs`.
