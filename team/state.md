@@ -8,9 +8,11 @@ Last updated: 2026-09-25 by **deepcode** (crystal viewer: centred-lattice animat
   `c300957` (centred, correct operation animation; halos and clicking removed), `8804a30`
   (lattice isometry API + tests), `a333247` (supercell trail legibility), `ed22831` (docs + harness), `fda9879` (auto-play, outlined markers), `1b41ff4` (per-family animation), `1cea681`
   (swatch/transport polish), `dddf686`, `cea41f5`, `00834b2`, `6276022` (performance), `cd10b3e` (coverage), `4ab8e75` (refit on
-  reshape), `7925ff1`..`0001925` (counts, toggle caps, status states, a11y, reduced motion). Earlier: `3054fd1`
+  reshape), `7925ff1`..`096e535` (counts, toggle caps, status states, a11y, reduced motion, the relative
+  point-group tolerance, phonopy-file persistence, drop anywhere, and the pixel-level animation
+  checks). Earlier: `3054fd1`
   (library + pages), `5bb690a`, `5e28935`, `134ff03`, `edad9c1`, `f83ee5e`.
-- `npm run typecheck` → clean. `npm test` → **63/63** pass (~1.2 s; the sample-budget boundary
+- `npm run typecheck` → clean. `npm test` → **65/65** pass (~1.2 s; the sample-budget boundary
   test alone costs ~0.9 s). `npm run build` → `build/`.
 - Pages all serve 200 from `npm run dev` (http://localhost:5173): `/`, `/field.html`,
   `/particles.html`, `/physics-lab.html`, `/symmetry.html`, `/electrostatics.html`, `/legacy.html`.
@@ -18,8 +20,14 @@ Last updated: 2026-09-25 by **deepcode** (crystal viewer: centred-lattice animat
   rdna-2 adapter): 61 fps on `symmetry.html` from 1x1x1 to a 1600-atom cell, no console/WebGPU
   errors. A 400-atom POSCAR loads in ~0.5 s and a 1600-atom one in ~1.1 s; changing operation is
   4 ms at 1x1x1, 30 ms at 3x3x3 and 4 ms at 1600 sites. `scripts/check-depth.mjs` drives all 48
-  operations and audits the captions, the picker counts, the transport locks, the camera reset and
-  the switch budget; 220 rapid interactions leave the DOM node count and the frame rate unchanged.
+  operations and audits the captions, the picker counts, the transport locks, the camera reset, the
+  switch budget, a hexagonal lattice (24 operations), rutile (the 8 point operations it really has),
+  a phonopy file surviving a structure load, a rejected file, and — measured from the pixels — the
+  shape of the drawn animation: a rotation to a projected circle (0.25 px worst), a mirror and an
+  inversion to straight chords (0.62 and 0.94 px, the inversion's through the box centre), and a
+  roto-reflection to that circle then a straight fold (0.55 and 2.79 px). It fails if the page
+  throws or logs an error anywhere in its 30 s run. 1,152 rapid operation switches leave the heap at
+  18-36 MB, the DOM node count at 260 and the frame rate at 61.
 
 ## Layout
 
