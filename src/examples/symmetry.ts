@@ -390,6 +390,12 @@ function rebuild(): void {
     markerCache.clear();
     // The picker's "N moved" counts the drawn cell, so it has to be restated when that changes.
     refreshOperationLabels();
+    // Symbols on 40+ sites are an unreadable pile, so the toggle says why it does nothing. Bonds
+    // stop at 1,200 atoms for the same reason: the search is O(n²).
+    atomLabelsToggle.disabled = big.positions.length > 36;
+    atomLabelsToggle.title = atomLabelsToggle.disabled ? 'Symbols are drawn for cells of up to 36 sites' : 'Label every site with its element';
+    bondsToggle.disabled = big.positions.length > 1200;
+    bondsToggle.title = bondsToggle.disabled ? 'Bonds are found for cells of up to 1,200 atoms' : 'Draw a bond between neighbouring sites';
   }
 
   // The nearest-neighbour search and the bond list describe the structure, not the operation, and
@@ -545,7 +551,8 @@ function rebuild(): void {
   // Labels: lattice vectors, the symmetry element, and (optionally) element symbols.
   labels?.dispose();
   labels = new LabelLayer($('labels'), view.camera);
-  for (const [name, direction] of [['a', 0], ['b', 1], ['c', 2]] as [string, number][]) {
+  // The vector labels mark the cell's own axes, so they follow the cell toggle.
+  if (showCell) for (const [name, direction] of [['a', 0], ['b', 1], ['c', 2]] as [string, number][]) {
     const point = sub(times(big.lattice[direction], 1.06), pivot);
     labels.addHTML(mathml(mi(name)), () => point, '#a4b3c6', 'math-label');
   }
