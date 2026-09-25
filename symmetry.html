@@ -50,7 +50,13 @@ input[type=range]{width:100%;accent-color:#70d7df;margin:2px 0}
 .file-item{padding:5px 8px;border-radius:6px;background:#162536;color:#cde5e9;font:10.5px ui-monospace,monospace;word-break:break-all}
 .file-item.error{color:#ffaaa1;background:#30202a}
 .legend-head{display:flex;justify-content:space-between;align-items:center;cursor:pointer;margin-top:10px}
-.legend-row{display:grid;grid-template-columns:13px 1fr auto auto;gap:8px;align-items:center;padding:3px 0;font-size:12px}
+.legend-actions{display:flex;align-items:center;gap:8px}
+.ghost-button{width:auto;padding:2px 8px;font-size:10.5px;background:#1b2c3f;border:1px solid #40526a;border-radius:999px}
+.legend-row{display:grid;grid-template-columns:13px 1fr auto auto;gap:8px;align-items:center;width:100%;padding:3px 6px;font:inherit;font-size:12px;text-align:left;color:inherit;background:transparent;border:0;border-radius:8px;cursor:pointer}
+.legend-row:hover{background:#182a3c}
+.legend-row.off{opacity:.42}
+.legend-row.off .legend-name{text-decoration:line-through;color:var(--muted)}
+.legend-row.off .swatch{filter:grayscale(1);box-shadow:none}
 .legend-row .swatch{width:12px;height:12px;border-radius:4px;box-shadow:0 0 7px currentColor}
 .legend-size{color:var(--muted);font-size:10.5px;font-variant-numeric:tabular-nums}
 #legend.collapsed .legend-row{display:none}
@@ -95,7 +101,7 @@ input[type=range]{width:100%;accent-color:#70d7df;margin:2px 0}
 
     <details class="card" open><summary>Structure</summary>
       <div id="structure-info"></div>
-      <div class="legend-head" id="legend-anchor"><span class="muted" style="font-size:10.5px;letter-spacing:.12em">ELEMENTS</span><span class="muted" style="font-size:10.5px">fold</span></div>
+      <div class="legend-head" id="legend-anchor"><span class="muted" style="font-size:10.5px;letter-spacing:.12em">ELEMENTS</span><span class="legend-actions"><button type="button" id="legend-all" class="ghost-button" hidden>show all</button><span class="muted" style="font-size:10.5px">collapse</span></span></div>
       <div id="legend"></div>
       <div class="row">
         <div><label for="supercell">Supercell</label><select id="supercell"><option value="1" selected>1 × 1 × 1</option><option value="2">2 × 2 × 2</option><option value="3">3 × 3 × 3</option></select></div>

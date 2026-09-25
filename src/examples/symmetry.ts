@@ -29,6 +29,8 @@ const dropZone = $<HTMLElement>('drop-zone');
 const fileList = $<HTMLElement>('file-list');
 const info = $<HTMLElement>('structure-info');
 const legend = $<HTMLElement>('legend');
+/** Clears every fold at once; present only while at least one element is folded away. */
+const showAllButton = document.querySelector<HTMLButtonElement>('#legend-all');
 const status = $<HTMLElement>('status');
 const mappingPanel = $<HTMLElement>('mapping');
 const selectionPanel = $<HTMLElement>('selection');
@@ -59,6 +61,9 @@ type Built = {
   atomVisuals: Visual[];
   atomScales: Vec3[];
   bondVisuals: Visual[];
+  /** Which element each bond / ghost belongs to, so the legend can fold elements away. */
+  bondSymbols: Map<Visual, string>;
+  ghostSymbols: string[];
   ghostVisuals: Visual[];
   cellVisual?: Visual;
   trailVisual?: Visual;
@@ -89,6 +94,8 @@ let showCell = true;
 let showTrails = true;
 /** Keep the faint "before" markers visible after the operation, for side-by-side comparison. */
 let holdStart = false;
+/** Elements folded away from the scene by clicking the legend. */
+const hiddenElements = new Set<string>();
 let colourMode: 'species' | 'site' = 'species';
 let selectedAtom = -1;
 let built: Built | undefined;
@@ -292,6 +299,9 @@ function rebuild(): void {
   view.camera.height = bounds.extent * 1.45;
   const shortest = shortestDistance(big.positions, big.lattice);
   const elements = [...new Set(big.species)];
+  // Forget folded elements the new structure does not contain, so a stale fold cannot blank a
+  // freshly loaded crystal.
+  for (const symbol of [...hiddenElements]) if (!elements.includes(symbol)) hiddenElements.delete(symbol);
   const appearance = new Map(elements.map(symbol => [symbol, appearanceFor(symbol)]));
   const widest = Math.max(...[...appearance.values()].map(entry => entry.radius));
   const unit = Math.min(1, shortest * .26 / widest);
@@ -324,6 +334,8 @@ function rebuild(): void {
 
   const bondVisuals: Visual[] = [];
   const ghostVisuals: Visual[] = [];
+  const ghostSymbols: string[] = [];
+  const bondSymbols = new Map<Visual, string>();
   if (showBonds && big.positions.length <= 1200) {
     const halves = new Map<string, Geometry[]>();
     const width = Math.min(.16, Math.max(.02, shortest * .055));
@@ -333,9 +345,11 @@ function rebuild(): void {
       const shifted: Vec3 = [big.positions[bond.j][0] + bond.image[0], big.positions[bond.j][1] + bond.image[1], big.positions[bond.j][2] + bond.image[2]];
       const b = fractionalToCartesian(shifted, big.lattice);
       const middle: Vec3 = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2];
-      const colorI = ELEMENT_COLOR(big.species[bond.i]), colorJ = ELEMENT_COLOR(big.species[bond.j]);
-      const listI = halves.get(colorI) ?? []; listI.push(polyline([a, middle], width, 5)); halves.set(colorI, listI);
-      const listJ = halves.get(colorJ) ?? []; listJ.push(polyline([middle, b], width, 5)); halves.set(colorJ, listJ);
+      // Half-bonds are grouped by element symbol — not by colour — so the legend can fold one
+      // element away without disturbing another that happens to share a colour.
+      const symbolI = big.species[bond.i], symbolJ = big.species[bond.j];
+      const listI = halves.get(symbolI) ?? []; listI.push(polyline([a, middle], width, 5)); halves.set(symbolI, listI);
+      const listJ = halves.get(symbolJ) ?? []; listJ.push(polyline([middle, b], width, 5)); halves.set(symbolJ, listJ);
       // A bond with a non-zero image offset ends on a periodic copy, not on a drawn atom.
       // Show that neighbour as a faded ghost so the coordination shell reads as complete.
       const periodicImage = bond.i !== bond.j && (bond.image[0] !== 0 || bond.image[1] !== 0 || bond.image[2] !== 0);
@@ -347,10 +361,15 @@ function rebuild(): void {
           ghost.position = b;
           ghost.scale = atomScales[bond.j];
           ghostVisuals.push(ghost);
+          ghostSymbols.push(big.species[bond.j]);
         }
       }
     }
-    for (const [color, list] of halves) bondVisuals.push(new Visual(merge(...list), rgba(color, .8)));
+    for (const [symbol, list] of halves) {
+      const visual = new Visual(merge(...list), rgba(ELEMENT_COLOR(symbol), .8));
+      bondSymbols.set(visual, symbol);
+      bondVisuals.push(visual);
+    }
   }
 
   const cellVisual = showCell ? new Visual(cellWire(big.lattice, Math.max(.006, bounds.extent * .0018)), rgba('#a4b3c6', .55)) : undefined;
@@ -390,7 +409,7 @@ function rebuild(): void {
     }
   }
 
-  built = { big, baseCount, ideal, atomVisuals, atomScales, bondVisuals, ghostVisuals, haloVisuals, startVisuals, atomLabels: [], cellVisual, trailVisual, elementVisuals: element.visuals, selectionVisuals, elementLabel: element.label, elementAnchor: element.anchor, motion, centre: bounds.centre, extent: bounds.extent };
+  built = { big, baseCount, ideal, atomVisuals, atomScales, bondVisuals, bondSymbols, ghostSymbols, ghostVisuals, haloVisuals, startVisuals, atomLabels: [], cellVisual, trailVisual, elementVisuals: element.visuals, selectionVisuals, elementLabel: element.label, elementAnchor: element.anchor, motion, centre: bounds.centre, extent: bounds.extent };
   view.world.add(...haloVisuals, ...atomVisuals, ...ghostVisuals, ...bondVisuals, ...(cellVisual ? [cellVisual] : []), ...(trailVisual ? [trailVisual] : []), ...element.visuals, ...selectionVisuals, ...startVisuals);
 
   // Labels: lattice vectors, the symmetry element, the selected site, and (optionally) element symbols.
@@ -427,15 +446,47 @@ function writeLegend(elements: string[], appearance: Map<string, { radius: numbe
   legend.replaceChildren(...elements.map(symbol => {
     const { color, radius } = appearance.get(symbol)!;
     const count = big.species.filter(species => species === symbol).length;
-    const rowElement = document.createElement('div');
-    rowElement.className = 'legend-row';
+    const rowElement = document.createElement('button');
+    rowElement.type = 'button';
+    rowElement.dataset.symbol = symbol;
+    rowElement.className = `legend-row${hiddenElements.has(symbol) ? ' off' : ''}`;
+    rowElement.title = `Hide or show every ${symbol} site`;
+    rowElement.setAttribute('aria-pressed', String(hiddenElements.has(symbol)));
     const swatch = document.createElement('span'); swatch.className = 'swatch'; swatch.style.background = color;
-    const name = document.createElement('span'); name.textContent = symbol;
+    const name = document.createElement('span'); name.className = 'legend-name'; name.textContent = symbol;
     const countElement = document.createElement('span'); countElement.className = 'muted'; countElement.textContent = `×${count}`;
     const size = document.createElement('span'); size.className = 'legend-size'; size.textContent = `${radius.toFixed(2)} Å`;
     rowElement.append(swatch, name, countElement, size);
+    rowElement.addEventListener('click', () => toggleElement(symbol));
     return rowElement;
   }));
+  syncLegendControls();
+}
+
+/** Fold one element in or out of the scene; the scene reacts on the next frame. */
+function toggleElement(symbol: string): void {
+  if (hiddenElements.has(symbol)) hiddenElements.delete(symbol); else hiddenElements.add(symbol);
+  // A folded element cannot stay selected: its readout and orbit rings would survive the fold.
+  if (built && selectedAtom >= 0 && hiddenElements.has(built.big.species[selectedAtom])) {
+    selectedAtom = -1;
+    rebuild();
+  } else {
+    syncLegendRows();
+  }
+  update();
+}
+
+function syncLegendRows(): void {
+  for (const rowElement of legend.querySelectorAll<HTMLElement>('.legend-row')) {
+    const off = hiddenElements.has(rowElement.dataset.symbol ?? '');
+    rowElement.classList.toggle('off', off);
+    rowElement.setAttribute('aria-pressed', String(off));
+  }
+  syncLegendControls();
+}
+
+function syncLegendControls(): void {
+  if (showAllButton) showAllButton.hidden = hiddenElements.size === 0;
 }
 
 function writeMapping(): void {
@@ -492,28 +543,33 @@ function update(): void {
   const flight = smooth(clamp(progress * 4)) * (1 - smooth(clamp((progress - .82) / .18)));
   const bondOpacity = 1 - .78 * flight;
   const trailOpacity = showTrails ? (.12 + .78 * clamp(smooth(progress * 4))) * (1 - smooth(clamp((progress - .88) / .12))) : 0;
-  state.bondVisuals.forEach(visual => { visual.opacity = showBonds ? bondOpacity : 0; });
-  state.ghostVisuals.forEach(visual => { visual.opacity = showBonds ? bondOpacity : 0; });
+  // Folding an element away from the legend silences everything that carries it: its half-bonds,
+  // its periodic ghosts, its atoms and halos, its "before" markers, and its floating symbols.
+  state.bondVisuals.forEach(visual => { visual.opacity = showBonds && !hiddenElements.has(state.bondSymbols.get(visual) ?? '') ? bondOpacity : 0; });
+  state.ghostVisuals.forEach((visual, index) => { visual.opacity = showBonds && !hiddenElements.has(state.ghostSymbols[index]) ? bondOpacity : 0; });
   if (state.trailVisual) state.trailVisual.opacity = trailOpacity;
   state.elementVisuals.forEach(visual => { visual.opacity = showTrails ? .35 + .65 * (1 - t) : 1; });
   state.atomVisuals.forEach((visual, index) => {
     const baseIndex = index % state.baseCount;
+    const hidden = hiddenElements.has(state.big.species[index]);
     const local = motionPoint(state.motion, base.positions[baseIndex], t);
     const shift = fractionalToCartesian(state.big.offsets[index], base.lattice);
     const position: Vec3 = [local[0] + shift[0], local[1] + shift[1], local[2] + shift[2]];
     visual.position = position;
+    visual.opacity = hidden ? 0 : 1;
     // A gentle breathing keeps the scene alive; the selected site beats harder.
     const selected = index === selectedAtom;
     const pulse = 1 + (selected ? .14 : .015) * Math.sin(clock * (selected ? 4 : 1.6) + index);
     const scale = state.atomScales[index];
     visual.scale = [scale[0] * pulse, scale[1] * pulse, scale[2] * pulse];
     const halo = state.haloVisuals[index];
-    if (halo) { halo.position = position; halo.scale = [scale[0] * 1.6 * pulse, scale[1] * 1.6 * pulse, scale[2] * 1.6 * pulse]; }
+    if (halo) { halo.position = position; halo.scale = [scale[0] * 1.6 * pulse, scale[1] * 1.6 * pulse, scale[2] * 1.6 * pulse]; halo.opacity = hidden ? 0 : 1; }
   });
   // Start markers: faint "before" rings that fade in as atoms leave their sites and out again
   // as the operation returns them home, so before → after is unambiguous.
   const startOpacity = showTrails ? (holdStart ? .55 : smooth(progress * 3) * (1 - smooth((progress - .82) / .18)) * .55) : 0;
-  state.startVisuals.forEach(marker => { marker.opacity = startOpacity; });
+  state.startVisuals.forEach((marker, index) => { marker.opacity = hiddenElements.has(state.big.species[index]) ? 0 : startOpacity; });
+  state.atomLabels.forEach((label, index) => { label.style.display = hiddenElements.has(state.big.species[index]) ? 'none' : ''; });
   progressInput.value = String(progress);
   playButton.textContent = playing ? 'Ⅱ' : progress >= 1 ? '↺' : '▶';
   playButton.setAttribute('aria-label', playing ? 'Pause' : progress >= 1 ? 'Replay' : 'Play');
@@ -584,10 +640,13 @@ function defaultOperations(): CrystalOperation[] {
 
 function pick(clientX: number, clientY: number): number {
   if (!view || !built) return -1;
+  const state = built;
   const rect = stage.getBoundingClientRect();
   const x = clientX - rect.left, y = clientY - rect.top;
   let best = -1, bestDistance = 26;
-  built.atomVisuals.forEach((visual, index) => {
+  state.atomVisuals.forEach((visual, index) => {
+    // A folded element is not there to click: without this the invisible ball still swallows picks.
+    if (hiddenElements.has(state.big.species[index])) return;
     const [px, py] = view!.camera.project(visual.position, rect.width, rect.height);
     const distance = Math.hypot(px - x, py - y);
     if (distance < bestDistance) { bestDistance = distance; best = index; }
@@ -682,6 +741,13 @@ async function init(): Promise<void> {
   for (const name of ['dragleave', 'drop']) dropZone.addEventListener(name, event => { event.preventDefault(); dropZone.classList.remove('active'); }, events);
   dropZone.addEventListener('drop', event => { for (const file of [...(event as DragEvent).dataTransfer!.files]) void loadUnknown(file); }, events);
   legendAnchor.addEventListener('click', () => { legend.classList.toggle('collapsed'); }, events);
+  showAllButton?.addEventListener('click', event => {
+    // The button lives inside the clickable header, so stop fold-all from also collapsing it.
+    event.stopPropagation();
+    hiddenElements.clear();
+    syncLegendRows();
+    update();
+  }, events);
 
   const tick = (now: number) => {
     if (disposed) return;
