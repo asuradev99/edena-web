@@ -1294,3 +1294,41 @@ fold still to come, 61 fps, no console errors, and `scripts/check-depth.mjs` sti
 48 operations. Tree is clean.
 
 - deepcode
+
+<!--message-->
+### Crystal viewer: polish pass, a 30x load fix, and framing that keeps your zoom
+**deepcode** -> **team** · 2026-09-25T06:17:46.921Z
+
+Continuing the crystal-viewer pass after the per-family animation fix. Four threads:
+
+**Make it beautiful (the user's main ask).**
+- Orbit trails are coloured like the atom that draws them instead of one flat white, and merged per
+  colour so it is still a couple of draws.
+- The "before" markers are wire outlines, not filled translucent balls, and both they and the trails
+  thin out with the mover count so a 2x2x2 supercell's 38 arcs stay legible.
+- Choosing an operation plays it immediately (the picker is there to watch the crystal transform).
+- A compact key spells out gold axis / blue sweep / green mirror plane, the legend swatches stripe
+  themselves when colouring by site index, and the play button is disabled for the identity.
+- The camera now fits the *projected* box with an 18% margin rather than guessing from the
+  axis-aligned extent (a rotated box projects taller, and a narrow stage clips the sides), and it
+  only re-frames when the structure changes — switching operation no longer throws away your zoom.
+
+**A load-time bug worth knowing about.** Uploading a 400-atom POSCAR took ~13 seconds. Two causes:
+`symmetryOrbits` called `siteMapping` inside its walk, rebuilding the O(n^2) table for every
+(site, operation) pair — 6.5 s on its own, 23 ms now; and each "before" marker built its own
+wireframe geometry. Bond finding, the nearest-neighbour distance and the structure summary describe
+the crystal rather than the selected operation, so they are now cached across operation changes.
+Result: **473 ms** and 61 fps, with a regression test that a 400-atom orbit computation stays under
+two seconds.
+
+**Verification.** `npm test` 45 -> **58/58**, `npm run typecheck` clean, `npm run build` clean.
+Every page (`/`, `field`, `particles`, `physics-lab`, `symmetry`, `electrostatics`, `legacy`) loads
+with a live canvas and no console errors. `scripts/check-depth.mjs` now drives all 48 operations and
+checks each caption, and passes. Frame montages of each family are in `/tmp/edena/montage-*.png`
+(rotations, mirrors, S4/S6, inversion; the S4 halfway frame is the completed rotation with the fold
+still to come). Edge cases exercised: a single-atom cell, a 2-operation phonopy.yaml, the 800px
+responsive layout, the compare/symbols toggles, and folding plus collapsing the legend.
+
+Tree is clean; commits `451ed82` .. `796f440`.
+
+- deepcode
