@@ -318,19 +318,6 @@
         </div>
       </section>
 
-      <section class="panel" id="transform" aria-label="The transform stack">
-        <div class="panel-head"><span class="index">22</span><div><h2>What a node's transform is made of</h2><p>position · scale · rotation · orientation · matrix · matrix()</p></div><span class="tag">TRANSFORM</span></div>
-        <div class="stage"><canvas id="transform-canvas" aria-label="One pointer shape under a scale, a yaw and a tilt, with the matrix it produces printed below"></canvas><div class="labels" id="transform-labels"></div></div>
-        <div class="controls">
-          <label>Scale x <input id="transform-sx" type="range" min="0.3" max="2.4" step="0.05" value="1.3"> <output id="transform-sx-value">1.30</output></label>
-          <label>Scale y <input id="transform-sy" type="range" min="0.3" max="2.4" step="0.05" value="0.8"> <output id="transform-sy-value">0.80</output></label>
-          <label>Yaw <input id="transform-yaw" type="range" min="-180" max="180" step="1" value="-35"> <output id="transform-yaw-value">-35°</output></label>
-          <label>Tilt <input id="transform-tilt" type="range" min="-75" max="75" step="1" value="28"> <output id="transform-tilt-value">28°</output></label>
-          <p class="readout" id="transform-readout">M</p>
-          <p>Every node carries one 4×4 matrix, built from its position, scale, rotation and optional Euler orientation — <code>rotation</code> first, then <code>orientation</code> (x, then y, then z), then the scale, applied in the node's own frame. The characters below are that matrix, read back from the node and typeset with the library's MathML <code>matrix</code> builder.</p>
-        </div>
-      </section>
-
       <section class="panel" id="follow" aria-label="A camera that follows">
         <div class="panel-head"><span class="index">21</span><div><h2>A camera that follows</h2><p>camera.target · smooth · polyline</p></div><span class="tag">FOLLOW</span></div>
         <div class="stage"><canvas id="follow-canvas" aria-label="A marker travelling a closed path while the camera keeps it centred"></canvas><div class="labels" id="follow-labels"></div></div>
@@ -341,6 +328,19 @@
           <label>Distance <input id="follow-distance" type="range" min="5" max="15" step="0.1" value="9.5"> <output id="follow-distance-value">9.5</output></label>
           <p class="readout" id="follow-readout">target</p>
           <p><code>camera.target</code> is the point the camera looks at, so animating it is how a shot follows its subject: the whole path is drawn in advance, the marker slides along it, and only the looked-at point changes. Turn following off and the same motion happens in the corner of a still frame — which is the difference between a shot and a diagram.</p>
+        </div>
+      </section>
+
+      <section class="panel" id="transform" aria-label="The transform stack">
+        <div class="panel-head"><span class="index">22</span><div><h2>What a node's transform is made of</h2><p>position · scale · rotation · orientation · matrix · matrix()</p></div><span class="tag">TRANSFORM</span></div>
+        <div class="stage"><canvas id="transform-canvas" aria-label="One pointer shape under a scale, a yaw and a tilt, with the matrix it produces printed below"></canvas><div class="labels" id="transform-labels"></div></div>
+        <div class="controls">
+          <label>Scale x <input id="transform-sx" type="range" min="0.3" max="2.4" step="0.05" value="1.3"> <output id="transform-sx-value">1.30</output></label>
+          <label>Scale y <input id="transform-sy" type="range" min="0.3" max="2.4" step="0.05" value="0.8"> <output id="transform-sy-value">0.80</output></label>
+          <label>Yaw <input id="transform-yaw" type="range" min="-180" max="180" step="1" value="-35"> <output id="transform-yaw-value">-35°</output></label>
+          <label>Tilt <input id="transform-tilt" type="range" min="-75" max="75" step="1" value="28"> <output id="transform-tilt-value">28°</output></label>
+          <p class="readout" id="transform-readout">M</p>
+          <p>Every node carries one 4×4 matrix, built from its position, scale, rotation and optional Euler orientation — <code>rotation</code> first, then <code>orientation</code> (x, then y, then z), then the scale, applied in the node's own frame. The characters below are that matrix, read back from the node and typeset with the library's MathML <code>matrix</code> builder.</p>
         </div>
       </section>
     </div>
