@@ -75,6 +75,11 @@ try {
     select.value='7';select.dispatchEvent(new Event('change'));await wait(300);await pause();await wait(200);
     const zoomedAfterSwitch=await drawnHeight();
 
+    // Double-clicking the stage puts the camera back where it started.
+    scene.dispatchEvent(new MouseEvent('dblclick',{bubbles:true}));
+    await wait(300);
+    const afterReset=await drawnHeight();
+
     // Choosing an operation rebuilds the scene; it used to cost 55-95 ms because the shaded sphere
     // was rebuilt per element, which is thousands of vertices.
     const switchTimes=[];
@@ -84,7 +89,7 @@ try {
       switchTimes.push(performance.now()-started);
     }
     return {first,reversed,translucentBehind,translucentFront,captions,report:document.getElementById('mapping').textContent,status:document.getElementById('status').textContent,
-      distinctLabels,beforeZoom,zoomed,zoomedAfterSwitch,slowestSwitch:Math.max(...switchTimes),identityPlayDisabled,rotationPlayDisabled};
+      distinctLabels,beforeZoom,zoomed,zoomedAfterSwitch,afterReset,slowestSwitch:Math.max(...switchTimes),identityPlayDisabled,rotationPlayDisabled};
   })()`});
   if(result.exceptionDetails)throw new Error(result.exceptionDetails.text+JSON.stringify(result.exceptionDetails));
   const value=result.result.value;
@@ -118,6 +123,7 @@ try {
   assert.equal(value.rotationPlayDisabled,false,'a rotation must be playable');
   assert.ok(value.zoomed>value.beforeZoom+5,`zooming must enlarge the drawn box (${value.beforeZoom} -> ${value.zoomed})`);
   assert.ok(Math.abs(value.zoomedAfterSwitch-value.zoomed)<=3,`choosing an operation must keep the zoom (${value.zoomed} -> ${value.zoomedAfterSwitch})`);
+  assert.ok(Math.abs(value.afterReset-value.beforeZoom)<=2,`a double-click must put the camera back (${value.beforeZoom} -> ${value.afterReset})`);
   assert.ok(value.slowestSwitch<80,`choosing an operation must stay inside a frame budget (slowest ${value.slowestSwitch.toFixed(1)} ms)`);
   console.log('PASS: opaque depth, draw-order independence, translucent depth, every operation captioned, and the viewer interaction locks',
     {operations:value.captions.length,moving:counts.filter(count=>count.movers>0).length,movedPerOperation:counts.map(count=>count.movers),slowestSwitchMs:Number(value.slowestSwitch.toFixed(1)),status:value.status});
