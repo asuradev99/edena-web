@@ -41,23 +41,25 @@ view.world.add(new Visual(axes3d(1.9, .012), rgba('#dbe9f5', .9)));
 second.world.add(new Visual(box([-1, -1, -1], [1, 1, 1]), rgba('#58c4dd', .18)));
 ```
 
-The fifteen ideas, in the order the page presents them: the frame (`axes3d`, `boundsBox`, tick labels
-through `LabelLayer`, perspective or orthographic camera); motion (`Timeline`, `tween`, `smooth`,
-`lerp`, absolute-time seeking); volume (`box`, `sphere` and `cylinder` faces, per-face alpha,
-draw-order-independent sorting, wire cages); shape (`polyline`, `arrow`, `circle`, `sphere`,
-`shadedSphere`, `wireSphere`, `parametricSurface`, `merge`); hierarchy (`Group.add`, inherited
-`position`/`scale`/`rotation`, and `opacity` that multiplies down the tree); text (`LabelLayer.addHTML`
-with `mathml` nodes, so labels stay sharp, selectable and styleable at any zoom); colour
-(`new Geometry(vertices, colors)`, with `viridis`/`plasma`/`ramp` as functions from [0, 1] to a
-colour); plotting (`plotFrame` with `niceStep`/`tickValues`/`formatTick`, a `functionCurve`, and
-`msup`/`mn` in the equation label); depth (opaque geometry first, then translucent faces sorted
-back to front, so slab order never matters); and sharing (`Geometry` moved and scaled across many nodes,
-which the renderer buckets into one instanced draw per geometry-and-colour); the camera (yaw, pitch
-and distance driven as a shot, and scrubbed like a storyboard); and simulation (the CPU seam —
-`createParticleState`/`stepParticles` with an acceleration you write, stepping allocation-free); and
-implicit surfaces (`isosurface` extracting `f(x, y, z) = level` on the CPU, inside a `boundsBox`); and
-vector fields (`streamlines` integrated with RK4 from `sphereSeeds`, with markers riding the polylines); and story (four cues on one `Timeline`, group opacity and per-visual
-`reveal`, scrubbed by seeking the same clock).
+The fifteen ideas, in the order the page presents them:
+
+| # | Idea | What it shows |
+| --- | --- | --- |
+| 01 | The frame | `axes3d`, `boundsBox`, tick marks, a grid, projected `LabelLayer` text, orthographic or perspective |
+| 02 | Motion | one `Timeline`, three easings (`lerp`, `smooth`, `tween`), absolute-time seeking |
+| 03 | Volume | `box`, `sphere` and `cylinder` faces, per-face alpha, wire outlines, draw-order independence |
+| 04 | Shape | `polyline`, `arrow`, `circle`, `sphere`, `shadedSphere`, `wireSphere`, `parametricSurface`, `merge`, and a 3D tumble |
+| 05 | Hierarchy | `Group.add`, inherited `position`/`scale`/`rotation`/`orientation`, opacity that multiplies down the tree |
+| 06 | Text | `LabelLayer.addHTML` with `mathml` nodes, so labels stay sharp and selectable at any zoom |
+| 07 | Colour | `new Geometry(vertices, colors)`, with `viridis`/`plasma`/`ramp` as functions from [0, 1] to a colour |
+| 08 | Plotting | `plotFrame` with `niceStep`/`tickValues`/`formatTick`, a `functionCurve`, equation labels |
+| 09 | Depth | opaque geometry first, then translucent faces sorted back to front, so slab order never matters |
+| 10 | Sharing | one `Geometry` scaled across hundreds of nodes, bucketed into one instanced draw per geometry and colour |
+| 11 | Camera | `yaw`, `pitch` and `distance` driven as a shot, and scrubbed like a storyboard |
+| 12 | Simulation | the CPU seam: `createParticleState`/`stepParticles` with an acceleration you write |
+| 13 | Implicit surfaces | `isosurface` extracting `f(x, y, z) = level` on the CPU, inside a `boundsBox` |
+| 14 | Vector fields | `streamlines` integrated with RK4 from `sphereSeeds`, with markers riding the polylines |
+| 15 | Story | four cues on one `Timeline`, group opacity and per-visual `reveal`, scrubbed by seeking the same clock |
 
 ## Crystal workflow
 
