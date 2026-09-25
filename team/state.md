@@ -1,12 +1,13 @@
 # Shared state
 
-Last updated: 2026-09-24 by **deepcode** (color lane, Phase 6 docs, simulation cleanup, all-pairs n-body + physics lab, crystal docs) and **astra** (perspective camera, Phase 5 seam, landing gallery, crystal viewer uploads + appearance). Update the date and author when you change this.
+Last updated: 2026-09-25 by **deepcode** (lattice/streamline/MathML library layer, crystal viewer rewrite, electromagnetism upgrade, interactive field example, showcase typesetting). Prior: color lane, Phase 6 docs, simulation cleanup, all-pairs n-body + physics lab, crystal docs; **astra** (perspective camera, Phase 5 seam, landing gallery, crystal viewer uploads). Update the date and author when you change this.
 
 ## Where things stand
 
-- Branch `main`. **Nothing from this line of work is committed yet** — the tree is dirty
-  (`index.html` modified; most new files untracked). Check `git status` before assuming.
-- `npm run typecheck` → clean. `npm test` → **29/29** pass (~1.2 s; the sample-budget boundary
+- Branch `main`, tree **clean**. The session is committed: `3054fd1` (library + pages), `5bb690a`
+  (first log note), `5e28935` (lattice/vectorfield/mathtext foundations), `134ff03` (crystal viewer
+  rewrite), `edad9c1` (electromagnetism upgrade), `f83ee5e` (field example + showcase typesetting).
+- `npm run typecheck` → clean. `npm test` → **45/45** pass (~1.2 s; the sample-budget boundary
   test alone costs ~0.9 s). `npm run build` → `build/`.
 - Pages all serve 200 from `npm run dev` (http://localhost:5173): `/`, `/field.html`,
   `/particles.html`, `/physics-lab.html`, `/symmetry.html`, `/electrostatics.html`, `/legacy.html`.
@@ -38,6 +39,20 @@ Last updated: 2026-09-24 by **deepcode** (color lane, Phase 6 docs, simulation c
   Selective dynamics) and `parsePhonopySymmetry` (bracketed and flat row-oriented `symmetry.yaml`,
   translations preserved for screw/glide operations)
 - `src/lib/colormap.ts`: `ramp`, `viridis`, `plasma`, `colorMappedSurface`
+- `src/lib/lattice.ts`: `cellFromParameters`, `fractionalToCartesian`/`cartesianToFractional`,
+  `periodicDistance`, `supercell`, `latticeSites` (sc/bcc/fcc/diamond/rock-salt/perovskite),
+  `bonds` (every periodic image within the cutoff), `nearestNeighbours`, `millerPlane`,
+  `CUBIC_OPERATIONS` (all 48), `applyOperation`, `mapsOntoSelf`, `siteMapping`, `symmetryOrbits`,
+  `cartesianOperation`/`axisAngle`/`rotateAboutAxis`, `structureBounds`, `shortestDistance`, `isCubic`
+- `src/lib/vectorfield.ts`: `streamline`/`streamlines` (RK4, arc-length stepping) and `sphereSeeds`
+- `src/lib/elements.ts`: `ELEMENTS` + `appearanceFor` (CPK-brightened colours, covalent radii)
+- `src/lib/mathtext.ts`: MathML builders (`mi`/`mn`/`mo`/`row`/`frac`/`msup`/`msub`/`sqrt`/`vec`/
+  `hat`/`matrix`/`integral`/`summation`/`mathml`, …) — note `msub`/`msup` are prefixed to avoid the
+  `math.sub` clash
+- `src/lib/geometry.ts`: **also** `sphericalPoint`, `sphericalWedge`, `sphericalWedgeOutline`,
+  `boxEdges`
+- `src/lib/view.ts`: `LabelLayer.addHTML(html, point, color, className)` typesets MathML over the
+  canvas; `Visual.geometry` is writable for animated shapes
 - `src/lib/geometry.ts`: `Geometry.vertices` + optional `Geometry.colors`; `merge` carries colors
 - `src/lib/camera.ts`: `projection: 'orthographic' | 'perspective'` (ortho default), `fovY`,
   `near`, `far`, `distance`, `projectWith(matrix, point, w, h)` (perspective-correct)
@@ -180,3 +195,13 @@ Last updated: 2026-09-24 by **deepcode** (color lane, Phase 6 docs, simulation c
   decorrelates the phases; the on-screen ratio now stays ~0.95–1.03. — deepcode
 - **`src/examples/particles.ts` + `particles.html` (astra):** the benchmark page — frame time,
   GPU step time, pause, and a particle-count selector.
+- **Upgrade session (deepcode, 2026-09-25):** library layer `lattice.ts`/`vectorfield.ts`/
+  `elements.ts`/`mathtext.ts` + `sphericalWedge`/`boxEdges` and `LabelLayer.addHTML`; the crystal
+  viewer rewritten around bonds/periodic ghosts/supercells/arc-animated operations/orbit trails/a
+  site-mapping report/a spherical `dV` readout (click a site); the electromagnetism animatic given
+  an animated `dq` wedge with `ds`, `s dθ`, `s sinθ dφ` edges and a φ-sweep ring, RK4 field lines,
+  equipotential shells, MathML labels and an element explorer; `field.html` made interactive
+  (field/isovalue/resolution/melt); the showcase typeset in MathML with a point riding the curve.
+  Two real lattice bugs fixed: `periodicDistance` misread fractional sites as Cartesian (bonds were
+  empty), and `bonds` kept only the closest periodic image (an octahedral Ti lost three oxygens).
+  Verified in Chrome/Vulkan, no console errors; suite 29 → **45/45**.

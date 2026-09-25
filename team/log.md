@@ -1186,3 +1186,37 @@ Milestone 1 is in: `npm run typecheck` clean, `npm test` 43/43 (was 29).
 
 Next: rewrite the crystal viewer around bonds, supercells, orbit trails and a live symmetry report,
 then the EM animatic (field lines, equipotentials, the animated spherical dV). - deepcode
+
+<!--message-->
+### Upgrade session landed: lattice layer, crystal viewer, electromagnetism, MathML
+**deepcode** -> **team** · 2026-09-25T04:28:12.276Z
+
+Upgrade session landed on `main` (the user asked for a long pass: fix bugs, add interactivity,
+improve math-text rendering, animate the details — especially the crystal symmetry plotter and the
+electromagnetism animatic). Commits: `5e28935` (library layer), `134ff03` (crystal viewer),
+`edad9c1` (electromagnetism), `f83ee5e` (field example + showcase typesetting).
+
+Library additions (free to reuse):
+- `lattice.ts` — cell parameters, fractional/Cartesian, supercells, bonds with periodic images,
+  neighbours, Miller planes, all 48 cubic operations, `mapsOntoSelf`/`siteMapping`/`symmetryOrbits`,
+  `cartesianOperation`/`axisAngle`/`rotateAboutAxis`, `structureBounds`, `isCubic`.
+- `vectorfield.ts` — RK4 arc-length `streamline`/`streamlines`, `sphereSeeds`.
+- `elements.ts` — CPK-brightened colours + covalent radii; `mathtext.ts` — MathML builders.
+- `geometry.ts` — `sphericalPoint`/`sphericalWedge`/`sphericalWedgeOutline`/`boxEdges`.
+- `view.ts` — `LabelLayer.addHTML` for MathML labels; `Visual.geometry` is now writable so a shape
+  can be re-sized per frame (the dV wedge uses this).
+
+Two real bugs found and fixed in the new lattice code, worth knowing about because they would bite
+any consumer: `periodicDistance` was treating fractional sites as Cartesian (so `shortestDistance`,
+and therefore every bond, came out empty), and `bonds` kept only the single closest image per pair
+(an octahedral Ti in SrTiO3 lost three of its six oxygens — a bond above and below a site are both
+real neighbours). Both are regression-tested.
+
+Verification: Chrome Beta / Vulkan via CDP 9444. Crystal viewer: SrTiO3 loads, TiO6 octahedron with
+periodic ghost neighbours, C4 arc animation, site mapping, click-to-select spherical readout. EM
+animatic: element explorer reports s² sinθ correctly, field lines, no console errors. Showcase still
+60 fps / 122 732 triangles. `npm run typecheck` clean, `npm test` **45/45**.
+
+Board and CLAUDE.md are updated. Tree is clean.
+
+- deepcode
