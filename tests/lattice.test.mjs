@@ -4,7 +4,7 @@ import {
   cellFromParameters, cellVolume, fractionalToCartesian, cartesianToFractional, CUBIC_OPERATIONS,
   mapsOntoSelf, bonds, latticeSites, supercell, millerPlane, periodicDistance,
   sphericalWedge, sphericalWedgeOutline, boxEdges, mathml, frac, mi,
-  applyOperation, siteMapping, cartesianOperation, axisAngle, rotateAboutAxis, shadedSphere, sphere,
+  applyOperation, siteMapping, cartesianOperation, axisAngle, rotateAboutAxis, shadedSphere, sphere, latticePointGroup,
 } from '../build/index.js';
 
 const close = (a, b, tolerance = 1e-5) => assert.ok(Math.abs(a - b) < tolerance, `${a} ≈ ${b}`);
@@ -132,6 +132,34 @@ test('a body-centre C4 permutes the three oxygens and fixes Sr and Ti', () => {
   const perovskite = latticeSites('perovskite', { side: 3.905, species: ['Sr', 'Ti', 'O'] });
   const mapping = siteMapping(perovskite, { rotation: [[0, -1, 0], [1, 0, 0], [0, 0, 1]], translation: [0, 0, 0], label: 'C4z' }, 1e-4);
   assert.deepEqual(mapping, [0, 1, 2, 4, 3]);
+});
+
+test('latticePointGroup returns the correct point group for each cell shape', () => {
+  const metricPreserved = (lattice, m) => {
+    const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+    const g = (u, v) => dot(lattice[u], lattice[v]);
+    for (let p = 0; p < 3; p++) for (let q = 0; q < 3; q++) {
+      let sum = 0;
+      for (let r = 0; r < 3; r++) for (let s = 0; s < 3; s++) sum += m[r][p] * g(r, s) * m[s][q];
+      if (Math.abs(sum - g(p, q)) > 1e-6) return false;
+    }
+    return true;
+  };
+  const cubic = cellFromParameters(4, 4, 4);
+  const hexagonal = cellFromParameters(3, 3, 5, 90, 90, 120);
+  const tetragonal = cellFromParameters(3, 3, 5);
+  assert.equal(latticePointGroup(cubic).length, 48);
+  assert.equal(latticePointGroup(hexagonal).length, 24);
+  assert.equal(latticePointGroup(tetragonal).length, 16);
+  for (const lattice of [cubic, hexagonal, tetragonal]) {
+    const group = latticePointGroup(lattice);
+    for (const m of group) assert.ok(metricPreserved(lattice, m), 'every operation must preserve the metric');
+    // And closure: the product of any two operations is again in the group.
+    const key = m => m.flat().join(',');
+    const present = new Set(group.map(key));
+    const multiply = (a, b) => a.map((row, i) => [0, 1, 2].map(j => row[0] * b[0][j] + row[1] * b[1][j] + row[2] * b[2][j]));
+    for (const a of group) for (const b of group) assert.ok(present.has(key(multiply(a, b))));
+  }
 });
 
 test('shadedSphere carries per-vertex shading and matches the plain sphere geometry', () => {

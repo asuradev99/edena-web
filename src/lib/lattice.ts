@@ -248,6 +248,36 @@ export const CUBIC_OPERATIONS: number[][][] = (() => {
   return operations;
 })();
 
+/**
+ * Every integer matrix with entries in {−1, 0, 1} that preserves the lattice metric, i.e. the
+ * point group of the cell written in its own basis. The Gram matrix `G` (G_ij = aᵢ·aⱼ) defines
+ * the metric, and a fractional map `M` is a symmetry exactly when `Mᵀ G M = G`.
+ *
+ * This is what makes the viewer correct for non-cubic cells: a cubic cell yields 48 operations,
+ * a hexagonal cell 24, tetragonal 16, and so on. (Crystals whose basis breaks the lattice
+ * symmetry keep the lattice operations, and {@link mapsOntoSelf} reports which ones survive.)
+ */
+export function latticePointGroup(lattice: Lattice, tolerance = 1e-6): number[][][] {
+  const metric = lattice.map(a => lattice.map(b => a[0] * b[0] + a[1] * b[1] + a[2] * b[2]));
+  const values = [-1, 0, 1];
+  const operations: number[][][] = [];
+  for (const a of values) for (const b of values) for (const c of values)
+    for (const d of values) for (const e of values) for (const f of values)
+      for (const h of values) for (const i of values) for (const j of values) {
+        const m = [[a, b, c], [d, e, f], [h, i, j]];
+        const det = a * (e * j - f * i) - b * (d * j - f * h) + c * (d * i - e * h);
+        if (Math.abs(Math.abs(det) - 1) > 1e-9) continue;
+        let ok = true;
+        for (let p = 0; p < 3 && ok; p++) for (let q = 0; q < 3 && ok; q++) {
+          let sum = 0;
+          for (let r = 0; r < 3; r++) for (let s = 0; s < 3; s++) sum += m[r][p] * metric[r][s] * m[s][q];
+          if (Math.abs(sum - metric[p][q]) > tolerance) ok = false;
+        }
+        if (ok) operations.push(m);
+      }
+  return operations;
+}
+
 /** Apply a symmetry operation to a fractional position and wrap it back into the cell. */
 export function applyOperation(operation: CrystalOperation, fractional: Vec3): Vec3 {
   const m = operation.rotation, t = operation.translation;

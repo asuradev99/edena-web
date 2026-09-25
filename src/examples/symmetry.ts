@@ -3,7 +3,7 @@ import {
   parsePOSCAR, parsePhonopySymmetry,
   latticeSites, supercell as makeSupercell, bonds as findBonds,
   fractionalToCartesian, cartesianToFractional, structureBounds, shortestDistance, appearanceFor,
-  CUBIC_OPERATIONS, mapsOntoSelf, siteMapping, symmetryOrbits, applyOperation,
+  CUBIC_OPERATIONS, latticePointGroup, mapsOntoSelf, siteMapping, symmetryOrbits, applyOperation,
   cartesianOperation, axisAngle, rotateAboutAxis, isCubic,
   sphericalWedge, sphericalWedgeOutline,
   mathml, mi, mn, mo, msub, msup, frac, row,
@@ -568,19 +568,14 @@ function recomputeOperations(): void {
 }
 
 function defaultOperations(): CrystalOperation[] {
-  if (isCubic(base.lattice)) {
-    const generated = CUBIC_OPERATIONS.map(rotation => ({ rotation, translation: [0, 0, 0] as Vec3, label: '' }));
-    const exact = generated.filter(operation => mapsOntoSelf(base, operation, 1e-3));
-    return exact.length >= 2 ? exact : generated;
-  }
-  const identity: number[][] = [[1, 0, 0], [0, 1, 0], [0, 0, 1]];
-  return [
-    { rotation: identity, translation: [0, 0, 0], label: 'E — identity' },
-    { rotation: [[0, -1, 0], [1, 0, 0], [0, 0, 1]], translation: [0, 0, 0], label: 'C₄ — 90° about z' },
-    { rotation: [[0, 0, 1], [1, 0, 0], [0, 1, 0]], translation: [0, 0, 0], label: 'C₃ — 120° about [111]' },
-    { rotation: [[-1, 0, 0], [0, 1, 0], [0, 0, 1]], translation: [0, 0, 0], label: 'σ — mirror x = 0' },
-    { rotation: [[-1, 0, 0], [0, -1, 0], [0, 0, -1]], translation: [0, 0, 0], label: 'i — inversion' },
-  ];
+  // The point group of the cell itself — 48 for cubic, 24 for hexagonal, 16 for tetragonal, and
+  // so on — so every operation shown is a genuine symmetry of the lattice, not just of a cube.
+  const group = latticePointGroup(base.lattice, 1e-4).map(rotation => ({ rotation, translation: [0, 0, 0] as Vec3, label: '' }));
+  if (!group.length) return [{ rotation: [[1, 0, 0], [0, 1, 0], [0, 0, 1]], translation: [0, 0, 0], label: 'E — identity' }];
+  const exact = group.filter(operation => mapsOntoSelf(base, operation, 1e-3));
+  // Prefer the operations that preserve this structure; otherwise list the lattice group and let
+  // the report say how many of them survive the basis.
+  return exact.length >= 2 ? exact : group;
 }
 
 function pick(clientX: number, clientY: number): number {
