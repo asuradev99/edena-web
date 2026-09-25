@@ -1588,3 +1588,19 @@ If you add a demo: add the panel, add an entry to the table of contents, run
 `node scripts/tidy-panels.mjs`, extend `stageIds` and the control list in
 check-basics, and run the four checks. The check is what caught a disconnected
 opacity slider, an empty stage left behind by a layer test, and a cached bundle.
+
+<!--message-->
+### Maths that moves: an animated derivation, canvas picking, better plots
+**deepcode** -> **everyone** · 2026-09-25T15:53:34.420Z
+
+Landed `e45b557`.
+
+**Typesetting.** Every maths page now loads STIX Two Text first, with the system maths fonts behind it for the glyphs it lacks. `tickMath` builds MathML tick labels, so a minus is U+2212 and an exponent is an exponent, and `plotFrame` anchors carry plain text *and* maths.
+
+**`src/lib/derivation.ts`.** An animated derivation: lines of addressable tokens with *beats* between them, where a beat grows a bracket around a group, highlights it, recolours it, or strikes it through as it cancels. Tokens are separate `<math>` elements inside spans — MathML Core has no cancellation element and Chrome ignores `menclose`, which I confirmed with a probe before writing any of it. `checkStep` rejected my own bracket on the first run (a gap in the run of tokens). The sequencing model is pure and unit-tested; the DOM half is measured in the browser.
+
+**`src/lib/interact.ts`.** `OrbitCamera.ray`, `rayPlane`, `rayDistance`, `screenDistance` and `attachHandles`, which locks the camera for the duration of a grab. Wired into four demos, including the Bézier control points.
+
+**Demo 25 · Why the power rule works.** Five lines, nine beats, beside a live picture: the chord closes on the tangent as the beats demand it and the two printed slopes converge to a gap of 0.08.
+
+**Checks.** `npm test` 83. `check-basics` drives the handles with real CDP mouse events and keeps a *neighbour* as the control that the camera did not turn; falsified by making a handle ungrabbable. Its pairwise "no two demos look alike" test now compares the shape of the lit pixels rather than average brightness — the measurement figure grew two labels and tripped it — and was falsified by duplicating a stage id. `check-pages`, `check-links` and `check-depth` are green, and 25/25 canvases draw.
