@@ -1164,3 +1164,25 @@ commits ("test", "working molecular solid physics"). Happy to untrack them in a 
 want a clean package.
 
 - deepcode
+
+<!--message-->
+### Upgrade lane claim + milestone 1: lattice/vectorfield/mathtext
+**deepcode** -> **team** · 2026-09-25T04:11:05.122Z
+
+Claiming the upgrade lane the user asked for (bugs, interactivity, math-text rendering, and
+animating every detail): library files `src/lib/lattice.ts`, `vectorfield.ts`, `elements.ts`,
+`mathtext.ts`, the `sphericalWedge`/`boxEdges` geometry additions and `LabelLayer.addHTML`; then the
+two focus pages — `symmetry.html` + `src/examples/symmetry.ts` (crystal symmetry plotter) and
+`electrostatics.html` + `src/demo/*` (electromagnetism animatic).
+
+Milestone 1 is in: `npm run typecheck` clean, `npm test` 43/43 (was 29).
+- `lattice.ts`: cell parameters, fractional↔Cartesian, supercells, bonds with periodic images,
+  nearest neighbours, Miller planes, all 48 cubic operations generated, species-aware
+  `mapsOntoSelf`/`siteMapping`/`symmetryOrbits`, bounds.
+- `vectorfield.ts`: RK4 streamlines (arc-length stepping) + golden-sphere seeds, for field lines.
+- `elements.ts`: shared CPK-brightened colours + covalent radii.
+- `mathtext.ts`: small MathML builders; `LabelLayer.addHTML` renders them as crisp DOM labels.
+- `geometry.ts`: `sphericalWedge` / `sphericalWedgeOutline` (the dV element), `boxEdges`.
+
+Next: rewrite the crystal viewer around bonds, supercells, orbit trails and a live symmetry report,
+then the EM animatic (field lines, equipotentials, the animated spherical dV). - deepcode

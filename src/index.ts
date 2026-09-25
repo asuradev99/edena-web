@@ -10,3 +10,7 @@ export * from './lib/timeline.js';
 export * from './lib/simulation.js';
 export * from './lib/particles.js';
 export * from './lib/crystal.js';
+export * from './lib/lattice.js';
+export * from './lib/elements.js';
+export * from './lib/vectorfield.js';
+export * from './lib/mathtext.js';

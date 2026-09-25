@@ -232,7 +232,17 @@ export class LabelLayer {
   private labels:{element:HTMLSpanElement;point:()=>Vec3}[]=[];
   constructor(private host:HTMLElement,private camera:OrbitCamera) {}
   add(text:string,point:()=>Vec3,color='#ffffff'):HTMLSpanElement {
-    const element=document.createElement('span');element.textContent=text;
+    const element=this.create(point,color);element.textContent=text;return element;
+  }
+  /**
+   * Label whose content is HTML, so it can carry MathML (see `mathtext.ts`) or a small
+   * inline layout. The page styles the host and can target the optional class.
+   */
+  addHTML(html:string,point:()=>Vec3,color='#ffffff',className=''):HTMLSpanElement {
+    const element=this.create(point,color);element.innerHTML=html;if(className)element.className=className;return element;
+  }
+  private create(point:()=>Vec3,color:string):HTMLSpanElement {
+    const element=document.createElement('span');
     Object.assign(element.style,{position:'absolute',color,pointerEvents:'none',transform:'translate(-50%, -50%)',whiteSpace:'nowrap'});
     this.host.append(element);this.labels.push({element,point});return element;
   }

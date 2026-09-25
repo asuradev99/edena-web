@@ -94,6 +94,52 @@ export function functionCurve(fn:(x:number)=>number, domain:[number,number], sam
   }
   flush(); return merge(...lines);
 }
+/** Point in the library's spherical convention: θ from +Y, φ in the xz-plane. */
+export const sphericalPoint = (radius:number, theta:number, phi:number):Vec3 => [radius*Math.sin(theta)*Math.cos(phi),radius*Math.cos(theta),radius*Math.sin(theta)*Math.sin(phi)];
+
+function gridFace(out:number[],surface:(u:number,v:number)=>Vec3,uRange:[number,number],vRange:[number,number],nu:number,nv:number) {
+  for(let i=0;i<nu;i++) for(let j=0;j<nv;j++) {
+    const u0=uRange[0]+(uRange[1]-uRange[0])*i/nu,u1=uRange[0]+(uRange[1]-uRange[0])*(i+1)/nu;
+    const v0=vRange[0]+(vRange[1]-vRange[0])*j/nv,v1=vRange[0]+(vRange[1]-vRange[0])*(j+1)/nv;
+    const a=surface(u0,v0),b=surface(u1,v0),c=surface(u1,v1),d=surface(u0,v1);
+    if([...a,...b,...c,...d].every(Number.isFinite)) { triangle(out,a,b,c); triangle(out,a,c,d); }
+  }
+}
+/**
+ * The curvilinear box a volume element cuts out of a spherical shell: radii `r0…r1`, polar
+ * angles `theta0…theta1`, azimuths `phi0…phi1`. Small extents read as one `dV`; large ones
+ * read as a wedge of the ball. The six faces are subdivided so the curvature stays smooth.
+ */
+export function sphericalWedge(r0:number,r1:number,theta0:number,theta1:number,phi0:number,phi1:number,subdivision=6): Geometry {
+  if(![r0,r1,theta0,theta1,phi0,phi1].every(Number.isFinite)||r1<=r0||theta1<=theta0||phi1<=phi0) throw new Error('Invalid spherical wedge bounds');
+  const n=Math.max(1,Math.round(subdivision)),out:number[]=[];
+  const radialP=(r:number,theta:number,phi:number)=>sphericalPoint(r,theta,phi);
+  gridFace(out,(v,u)=>radialP(r1,u,v),[theta0,theta1],[phi0,phi1],n,n);          // outer shell
+  gridFace(out,(v,u)=>radialP(r0,u,v),[theta0,theta1],[phi0,phi1],n,n);          // inner shell
+  gridFace(out,(r,v)=>radialP(r,theta0,v),[r0,r1],[phi0,phi1],n,n);              // θ = θ0
+  gridFace(out,(r,v)=>radialP(r,theta1,v),[r0,r1],[phi0,phi1],n,n);              // θ = θ1
+  gridFace(out,(r,u)=>radialP(r,u,phi0),[r0,r1],[theta0,theta1],n,n);            // φ = φ0
+  gridFace(out,(r,u)=>radialP(r,u,phi1),[r0,r1],[theta0,theta1],n,n);            // φ = φ1
+  return new Geometry(out);
+}
+/** The twelve edges of a spherical wedge as tubes, for a crisp wireframe over a translucent fill. */
+export function sphericalWedgeOutline(r0:number,r1:number,theta0:number,theta1:number,phi0:number,phi1:number,width=.01,arc=24): Geometry {
+  const edges:Geometry[]=[];
+  const polar=(r:number,phi:number)=>polyline(Array.from({length:arc+1},(_,i)=>sphericalPoint(r,theta0+(theta1-theta0)*i/arc,phi)),width);
+  const azimuth=(r:number,theta:number)=>polyline(Array.from({length:arc+1},(_,i)=>sphericalPoint(r,theta,phi0+(phi1-phi0)*i/arc)),width);
+  const radial=(theta:number,phi:number)=>polyline([sphericalPoint(r0,theta,phi),sphericalPoint(r1,theta,phi)],width);
+  for(const r of [r0,r1]) for(const phi of [phi0,phi1]) edges.push(polar(r,phi));
+  for(const r of [r0,r1]) for(const theta of [theta0,theta1]) edges.push(azimuth(r,theta));
+  for(const theta of [theta0,theta1]) for(const phi of [phi0,phi1]) edges.push(radial(theta,phi));
+  return merge(...edges);
+}
+/** The twelve edges of an axis-aligned box, for cell and unit-cube wireframes. */
+export function boxEdges(min:Vec3,max:Vec3,width=.008): Geometry {
+  const [x0,y0,z0]=min,[x1,y1,z1]=max,corner=(x:number,y:number,z:number):Vec3=>[x?x1:x0,y?y1:y0,z?z1:z0];
+  const edges:Geometry[]=[];
+  for(const a of [0,1]) for(const b of [0,1]) edges.push(polyline([corner(a,b,0),corner(a,b,1)],width),polyline([corner(a,0,b),corner(a,1,b)],width),polyline([corner(0,a,b),corner(1,a,b)],width));
+  return merge(...edges);
+}
 export function arrow(start:Vec3,end:Vec3,width=.018): Geometry {
   const d=sub(end,start), size=Math.hypot(...d), dir=normalize(d);
   if(size<1e-8) return new Geometry([]);
