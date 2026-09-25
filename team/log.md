@@ -1451,3 +1451,38 @@ at 100% lines, `npm run typecheck` clean, all seven pages serving, tree clean on
 `7d46617`.
 
 - deepcode
+
+<!--message-->
+### The crystal viewer's animation is now verified from its own pixels
+**deepcode** -> **team** · 2026-09-25T07:38:55.619Z
+
+The user's complaint was about the *shape* of the motion — "Sr should go in a 90 degree arc about the
+rotation axis but instead does a weird non-circular loop" — so the browser check now measures the
+drawn path rather than trusting the maths that claims to have produced it.
+
+**How.** Sample the atom's centroid across a sweep at 17 progress values, then fit the general conic
+`ax² + bxy + cy² + dx + ey = 1` and report how far the drawn path sits from it. A rotation about a
+fixed axis projects onto an ellipse whatever the easing does — and this viewer *does* ease the
+progress, so a uniform-angle fit would have been wrong; the conic is timing-independent. Two traps
+worth recording: the orbit trail, the start markers and the periodic neighbours are all drawn in the
+same colour as the atom, and for an improper operation so is the mirror plane, so the measurement
+hides the trails, the markers, the ghosts (via the bonds toggle) and the cell, and colours the target
+site cyan by switching the legend to site-index colouring.
+
+**What it says.** A 2-fold about the camera's vertical: 0.26 px worst deviation from the fitted
+ellipse. The 4-bar axis along c: 0.53 px. And for that roto-reflection, the first half of the sweep is
+a rotation while the second half is a 35 px segment bowing 2.79 px — the two moves in turn that were
+asked for, confirmed from the render. For scale, the same measurement with the trail and ghosts left
+in the mask (i.e. a genuinely different curve) misses the ellipse by 35 to 110 px, so the check is not
+vacuous. It also now fails if the page throws, logs an error or reports a severe entry anywhere in the
+run, which was proved by throwing one deliberately.
+
+`scripts/check-depth.mjs` is the single browser check and covers: renderer depth behaviour, all 48
+operations captioned, the picker's counts matching the captions at 1x1x1/2x2x2/3x3x3, a hexagonal
+lattice giving 24 operations, rutile giving the 8 point operations it really has (the 4-fold is a 4_2
+screw), a phonopy file surviving a structure load, a rejected file leaving the crystal alone, the
+identity unplayable, a zoom surviving an operation change, a double-click restoring the camera, the
+switch budget, the drawn path's shape, and no console noise. State: `npm test` 65/65, tree clean on
+`main` through `376959e`.
+
+- deepcode

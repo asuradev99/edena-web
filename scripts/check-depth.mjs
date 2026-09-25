@@ -8,6 +8,8 @@
 //      change, a double-click restores the camera, choosing an operation stays well under a frame
 //      budget, the picker's counts match the captions at every supercell size, a phonopy file keeps
 //      its operations when a structure loads, and rutile lists the 8 point operations it really has.
+//   4. the drawn path itself: a rotation samples to a projected circle, and a roto-reflection's first
+//      half is that circle while its second half is a straight fold.
 // It also fails if the page throws, logs an error, or reports a severe entry while all of that runs.
 import assert from 'node:assert/strict';
 const port=process.argv[2]??'9333';
