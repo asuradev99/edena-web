@@ -419,17 +419,31 @@ function writeStructureInfo(): void {
   info.innerHTML = `<div class="info-title">${base.comment || 'Crystal structure'}</div><div class="info-math">${lengthsLine}</div><div class="info-math">${anglesLine}</div><div class="info-line">${base.positions.length} atoms · ${[...new Set(base.species)].join(', ')} · ${cellVolume(base.lattice).toFixed(1)} Å³</div>`;
 }
 
+/**
+ * A swatch that shows every colour an element uses. Colour-by-element is one flat colour; colour-by-
+ * site gives the element's sites several palette colours, so the swatch becomes hard-stopped stripes
+ * rather than a single hue that would not match the atoms.
+ */
+function swatchFill(colors: string[]): string {
+  if (colors.length < 2) return colors[0] ?? '#888';
+  const stops = colors.map((color, index) => `${color} ${index / colors.length * 100}% ${(index + 1) / colors.length * 100}%`);
+  return `linear-gradient(135deg, ${stops.join(', ')})`;
+}
+
 function writeLegend(elements: string[], appearance: Map<string, { radius: number; color: string }>, big: Supercell): void {
   legend.replaceChildren(...elements.map(symbol => {
     const { color, radius } = appearance.get(symbol)!;
     const count = big.species.filter(species => species === symbol).length;
+    const siteColors = colourMode === 'site'
+      ? base.species.map((species, index) => species === symbol ? SITE_COLORS[index % SITE_COLORS.length] : undefined).filter((entry): entry is string => Boolean(entry))
+      : [];
     const rowElement = document.createElement('button');
     rowElement.type = 'button';
     rowElement.dataset.symbol = symbol;
     rowElement.className = `legend-row${hiddenElements.has(symbol) ? ' off' : ''}`;
     rowElement.title = `Hide or show every ${symbol} site`;
     rowElement.setAttribute('aria-pressed', String(hiddenElements.has(symbol)));
-    const swatch = document.createElement('span'); swatch.className = 'swatch'; swatch.style.background = color;
+    const swatch = document.createElement('span'); swatch.className = 'swatch'; swatch.style.background = swatchFill(siteColors.length ? siteColors : [color]);
     const name = document.createElement('span'); name.className = 'legend-name'; name.textContent = symbol;
     const countElement = document.createElement('span'); countElement.className = 'muted'; countElement.textContent = `×${count}`;
     const size = document.createElement('span'); size.className = 'legend-size'; size.textContent = `${radius.toFixed(2)} Å`;
@@ -517,6 +531,8 @@ function update(): void {
   });
   state.atomLabels.forEach((label, index) => { label.style.display = hiddenElements.has(state.big.species[index]) ? 'none' : ''; });
   progressInput.value = String(progress);
+  // The identity relocates nothing, so there is nothing to play.
+  playButton.disabled = state.movers.size === 0;
   playButton.textContent = playing ? 'Ⅱ' : progress >= 1 ? '↺' : '▶';
   playButton.setAttribute('aria-label', playing ? 'Pause' : progress >= 1 ? 'Replay' : 'Play');
   $('progress-value').textContent = `${Math.round(progress * 100)}%`;
