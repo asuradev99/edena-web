@@ -62,7 +62,7 @@ const count = (geometry: Geometry): Geometry => { triangles += geometry.vertices
  * ------------------------------------------------------------------------------------------ */
 
 function coordinateDemo(view: WebGPUView): Demo {
-  look(view, .64, .33, 6.6);
+  look(view, .64, .33, 5.9);
   const labels = new LabelLayer($('coordinates-labels'), view.camera);
   // Look slightly above the origin: the marker rides up to y = 2.4 with a label over it.
   view.camera.target = [0, .35, 0];
@@ -122,7 +122,7 @@ function coordinateDemo(view: WebGPUView): Demo {
     view.camera.projection = mode;
     // Both are always set, so switching modes cannot land on a stale zoom.
     view.camera.height = 4.9;
-    view.camera.distance = 6.6;
+    view.camera.distance = 5.9;
   });
   $<HTMLInputElement>('coordinates-grid').addEventListener('change', event => { grid.visible = (event.target as HTMLInputElement).checked; });
   $<HTMLInputElement>('coordinates-height').addEventListener('input', event => {
@@ -350,6 +350,15 @@ function groupsDemo(view: WebGPUView): Demo {
   }
   view.world.add(system, new Visual(count(axes3d(.9, .006)), rgba('#dbe9f5', .22)));
 
+  const spinButton = $<HTMLButtonElement>('groups-spin');
+  let spinning = !reducedMotion, phase = 0;
+  const button = (): void => {
+    spinButton.textContent = spinning ? 'Spinning' : 'Still';
+    spinButton.setAttribute('aria-pressed', String(spinning));
+  };
+  spinButton.addEventListener('click', () => { spinning = !spinning; button(); });
+  button();
+
   const scaleInput = $<HTMLInputElement>('groups-scale');
   const opacityInput = $<HTMLInputElement>('groups-opacity');
   scaleInput.addEventListener('input', () => {
@@ -362,11 +371,13 @@ function groupsDemo(view: WebGPUView): Demo {
 
   return {
     labels,
-    update: (_delta, time) => {
-      system.rotation = time * .22;
+    // An accumulated phase, so stopping holds the arms where they are instead of snapping back.
+    update: delta => {
+      if (spinning) phase += delta;
+      system.rotation = phase * .22;
       for (const arm of arms) {
-        arm.group.rotation = arm.base + time * arm.rate;
-        arm.satellite.rotation = time * 1.6;
+        arm.group.rotation = arm.base + phase * arm.rate;
+        arm.satellite.rotation = phase * 1.6;
       }
     },
   };

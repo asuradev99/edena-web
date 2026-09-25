@@ -202,4 +202,19 @@ npm run build
 
 WebGPU rendering requires a compatible browser with hardware acceleration. Chrome Beta on Vulkan is the verification path used for the demos. Use `?dpr=1` or `?samples=1` on the showcase when testing a slower adapter.
 
+Two browser checks drive a live page over the DevTools protocol and assert on what it draws, rather
+than trusting the code that drew it:
+
+```sh
+node scripts/check-depth.mjs [port]    # renderer depth + the crystal viewer, pixel by pixel
+node scripts/check-basics.mjs [port]   # the basics tour: six demos, every control, every assertion
+```
+
+`check-basics` captures from the compositor and measures the regions back inside the page, because a
+WebGPU canvas cannot be read once it has been presented. It asserts that each demo draws something
+distinct, that each control moves its own stage and no other (compared against how much that stage
+drifts on its own, since some of them animate), that both spin toggles hold still and start again, that
+the helix and the timeline advance, that the transport seeks and resumes, and that nothing logs an
+error. Disconnecting any single control makes it fail.
+
 The project is early and intentionally focused. PDE solvers, spatial interaction structures, lighting/material systems, richer text layout, SVG import, and broader Manim feature coverage remain future work. See [VISUALIZATION_LIBRARY_PLAN.md](VISUALIZATION_LIBRARY_PLAN.md) for the roadmap.
