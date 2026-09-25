@@ -1,7 +1,7 @@
 // Run against a Chrome debugging session: node scripts/check-basics.mjs [port]
 //
 // Checks the basics tour the way a reader meets it:
-//   1. every one of the twenty-two demos draws something, and each draws something distinct;
+//   1. every one of the twenty-three demos draws something, and each draws something distinct;
 //   2. every control changes its own stage — projection, grid, marker height, opacity, spin, the mesh
 //      selector, the group's spread and opacity, and the helix's turn count — and leaves the others be;
 //   3. the two moving demos advance on their own, and the transport seeks;
@@ -168,13 +168,13 @@ try {
   ];
   // Stop the demos that spin, so every control can be judged against a still picture. The spin buttons
   // themselves are checked afterwards, by measuring exactly this drift.
-  await evaluate(`document.getElementById('transparency-spin').click(); document.getElementById('groups-spin').click(); document.getElementById('depth-spin').click(); document.getElementById('instances-spin').click(); document.getElementById('field-spin').click(); document.getElementById('streamlines-turn').click(); document.getElementById('vectors-spin').click(); document.getElementById('normals-spin').click(); document.getElementById('layers-turn').click(); document.getElementById('bars-spin').click();`);
+  await evaluate(`document.getElementById('transparency-spin').click(); document.getElementById('groups-spin').click(); document.getElementById('depth-spin').click(); document.getElementById('instances-spin').click(); document.getElementById('field-spin').click(); document.getElementById('streamlines-turn').click(); document.getElementById('vectors-spin').click(); document.getElementById('normals-spin').click(); document.getElementById('layers-turn').click(); document.getElementById('bars-spin').click(); document.getElementById('measure-turn').click();`);
   await evaluate(`{ const node = document.getElementById('follow-play'); if (node.textContent === 'Pause') node.click(); }`);
   await evaluate(`{ const node = document.getElementById('path-play'); if (node.textContent === 'Pause') node.click(); }`);
   await evaluate(`{ const node = document.getElementById('story-play'); if (node.textContent === 'Pause') node.click(); }`);
   await wait(500);
   // Only these hold still on their own, so only they can prove that a control left them alone.
-  const still = new Set(['coordinates', 'shapes', 'groups', 'colour', 'plot', 'depth', 'instances', 'field', 'streamlines', 'story', 'vectors', 'path', 'normals', 'layers', 'bars', 'follow', 'transform']);
+  const still = new Set(['coordinates', 'shapes', 'groups', 'colour', 'plot', 'depth', 'instances', 'field', 'streamlines', 'story', 'vectors', 'path', 'normals', 'layers', 'bars', 'follow', 'transform', 'measure']);
   for (const [control, value, stageId] of changes) {
     // The helix keeps moving, so stop it first: then the turn count is the only thing that changes.
     if (control === 'labels-turns' || control.startsWith('camera-') || control.startsWith('simulation-') || control.startsWith('follow-')) {
@@ -210,7 +210,7 @@ try {
 
   // The spin button is a state rather than a nudge: prove it by holding the stage still, then letting
   // it go again. A rotating scene drifts on its own, which is exactly what this measures.
-  for (const [button, stageId] of [['transparency-spin', 'transparency'], ['groups-spin', 'groups'], ['depth-spin', 'depth'], ['instances-spin', 'instances'], ['field-spin', 'field'], ['streamlines-turn', 'streamlines'], ['vectors-spin', 'vectors'], ['normals-spin', 'normals'], ['layers-turn', 'layers'], ['bars-spin', 'bars']]) {
+  for (const [button, stageId] of [['transparency-spin', 'transparency'], ['groups-spin', 'groups'], ['depth-spin', 'depth'], ['instances-spin', 'instances'], ['field-spin', 'field'], ['streamlines-turn', 'streamlines'], ['vectors-spin', 'vectors'], ['normals-spin', 'normals'], ['layers-turn', 'layers'], ['bars-spin', 'bars'], ['measure-turn', 'measure']]) {
     // Give each measurement a second: a slow turn through a small diagram needs time to show up.
     const heldStill = difference(await region(stageId), await wait(1000).then(() => region(stageId)));
     assert.ok(heldStill < .02, `${stageId} should hold still once stopped (drift ${heldStill.toFixed(5)})`);
@@ -312,11 +312,11 @@ try {
   const stats = await evaluate(`document.getElementById('stats').textContent`);
   const fps = Number(/· (\d+) fps/.exec(stats)?.[1] ?? 0);
   assert.ok(fps >= 50, `expected a healthy frame rate, saw ${stats}`);
-  assert.match(stats, /22 views/);
+  assert.match(stats, /23 views/);
   const problems = events.filter(event => event.method === 'Runtime.exceptionThrown' || (event.method === 'Runtime.consoleAPICalled' && event.params.type === 'error') || (event.method === 'Log.entryAdded' && event.params.entry.level === 'error'));
   assert.equal(problems.length, 0, `the page reported ${problems.length} problem(s): ${JSON.stringify(problems[0]?.params ?? {}).slice(0, 300)}`);
 
-  console.log('PASS: twenty-two demos drawing distinct scenes, every control moving its own stage alone,');
+  console.log('PASS: twenty-three demos drawing distinct scenes, every control moving its own stage alone,');
   console.log('      the helix and the timeline running, the transport seeking and resuming,', stats);
   console.log('     ', JSON.stringify(Object.fromEntries(stageIds.map(stageId => [stageId, Number(signatures[stageId].mean.toFixed(3))]))));
 } finally {

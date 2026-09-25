@@ -554,6 +554,93 @@ function colourDemo(view: WebGPUView): Demo {
 }
 
 /* --------------------------------------------------------------------------------------------
+ * 23 · Measuring a distance and an angle: annotation is geometry plus text.
+ * ------------------------------------------------------------------------------------------ */
+
+function measureDemo(view: WebGPUView): Demo {
+  look(view, .62, .3, 9.6);
+  // The figure lives between A at (-1.6, -0.4) and B at up to (4.4, 2.6): look at its middle.
+  view.camera.target = [1.4, .3, 0];
+  const labels = new LabelLayer($('measure-labels'), view.camera);
+  const turning = new Group();
+  view.world.add(turning, new Visual(count(axes3d(1.3, .006)), rgba('#dbe9f5', .22)));
+  const pointA: Vec3 = [-1.6, -.4, 0];
+
+  let across = 3.2, up = 1.1, phase = 0, spinning = !reducedMotion;
+  let attached: HTMLElement[] = [];
+  const dimension = labels.addHTML(mathml(mn('')), () => [0, -2.7, 0], '#cfe4ea', 'math-label');
+  const panelReadout = $('measure-readout');
+  const turnButton = $<HTMLButtonElement>('measure-turn');
+
+  /** The short way round between two directions, as a polyline through the origin's corner. */
+  const arc = (from: Vec3, to: Vec3, radius: number, steps = 20): Vec3[] => {
+    const out: Vec3[] = [];
+    for (let index = 0; index <= steps; index++) {
+      const t = index / steps;
+      const x = from[0] * (1 - t) + to[0] * t, y = from[1] * (1 - t) + to[1] * t;
+      const length = Math.hypot(x, y) || 1;
+      out.push([pointA[0] + radius * x / length, pointA[1] + radius * y / length, 0]);
+    }
+    return out;
+  };
+
+  const build = (): void => {
+    turning.clear();
+    // Labels live in the DOM, so a rebuild has to take the old ones with it.
+    for (const node of attached) node.remove();
+    attached = [];
+    const pointB: Vec3 = [across, up, 0];
+    const dx = pointB[0] - pointA[0], dy = pointB[1] - pointA[1];
+    const distance = Math.hypot(dx, dy);
+    const angle = Math.atan2(dy, dx) * 180 / Math.PI;
+    const markers: Geometry[] = [sphere(.14), sphere(.14)];
+    const legX: Vec3 = [pointB[0], pointA[1], 0];
+    turning.add(
+      // The measured segment, then the two legs that name which way each component goes.
+      new Visual(count(polyline([pointA, pointB], .022, 6)), rgba('#f7d681')),
+      new Visual(count(merge(
+        polyline([pointA, legX], .01),
+        polyline([legX, pointB], .01),
+        // The angle at A, swept from the x direction to AB.
+        polyline(arc([1, 0, 0], [dx, dy, 0], .95), .008),
+      )), rgba('#9db0c2', .55)),
+      new Visual(count(arrow(pointA, [pointA[0] + 1.5, pointA[1], 0], .02)), rgba('#58c4dd', .7)),
+    );
+    const a = new Visual(count(markers[0]), rgba('#58c4dd'));
+    a.position = pointA;
+    const b = new Visual(count(markers[1]), rgba('#f7d681'));
+    b.position = pointB;
+    turning.add(a, b);
+    dimension.innerHTML = mathml(mtext(`|AB| = ${distance.toFixed(2)} · \u0394x = ${dx.toFixed(2)} · \u0394y = ${dy.toFixed(2)} \u00b7 \u03b8 = ${angle.toFixed(1)}\u00b0`));
+    panelReadout.textContent = `|AB| = ${distance.toFixed(2)} · \u03b8 = ${angle.toFixed(1)}\u00b0`;
+    attached.push(
+      labels.addHTML(mathml(mtext(`|AB| = ${distance.toFixed(2)}`)), () => [(pointA[0] + pointB[0]) / 2, (pointA[1] + pointB[1]) / 2 + .28, 0], '#f7d681', 'math-label'),
+      labels.addHTML(mathml(row(mo('\u03b8'), mo('='), mn(`${angle.toFixed(0)}\u00b0`))), () => [pointA[0] + 1.35, pointA[1] + .35, 0], '#9db0c2', 'math-label'),
+    );
+  };
+  const button = (): void => {
+    turnButton.textContent = spinning ? 'Turning' : 'Still';
+    turnButton.setAttribute('aria-pressed', String(spinning));
+  };
+  for (const [id, apply] of [['measure-x', (value: number) => { across = value; $('measure-x-value').textContent = value.toFixed(2); }],
+                             ['measure-y', (value: number) => { up = value; $('measure-y-value').textContent = value.toFixed(2); }]] as [string, (value: number) => void][]) {
+    const input = $<HTMLInputElement>(id);
+    input.addEventListener('input', () => { apply(Number(input.value)); build(); });
+  }
+  turnButton.addEventListener('click', () => { spinning = !spinning; button(); });
+  build();
+  button();
+
+  return {
+    labels,
+    update: delta => {
+      if (spinning) phase += delta * .25;
+      turning.rotation = phase;
+    },
+  };
+}
+
+/* --------------------------------------------------------------------------------------------
  * 22 · What a node's transform is made of: read the matrix back and typeset it.
  * ------------------------------------------------------------------------------------------ */
 
@@ -1684,7 +1771,7 @@ function plotDemo(view: WebGPUView): Demo {
  * ------------------------------------------------------------------------------------------ */
 
 async function initialize(): Promise<void> {
-  const canvases = ['coordinates-canvas', 'interpolation-canvas', 'transparency-canvas', 'shapes-canvas', 'groups-canvas', 'labels-canvas', 'colour-canvas', 'plot-canvas', 'depth-canvas', 'instances-canvas', 'camera-canvas', 'simulation-canvas', 'field-canvas', 'streamlines-canvas', 'story-canvas', 'vectors-canvas', 'path-canvas', 'normals-canvas', 'layers-canvas', 'bars-canvas', 'follow-canvas', 'transform-canvas'];
+  const canvases = ['coordinates-canvas', 'interpolation-canvas', 'transparency-canvas', 'shapes-canvas', 'groups-canvas', 'labels-canvas', 'colour-canvas', 'plot-canvas', 'depth-canvas', 'instances-canvas', 'camera-canvas', 'simulation-canvas', 'field-canvas', 'streamlines-canvas', 'story-canvas', 'vectors-canvas', 'path-canvas', 'normals-canvas', 'layers-canvas', 'bars-canvas', 'follow-canvas', 'transform-canvas', 'measure-canvas'];
   const first = await WebGPUView.create($<HTMLCanvasElement>(canvases[0]), { samples: msaa, maxDpr, onError: report });
   views.push(first);
   if (disposed) { first.dispose(); return; }
@@ -1714,6 +1801,7 @@ async function initialize(): Promise<void> {
     barDemo(views[19]),
     followDemo(views[20]),
     transformDemo(views[21]),
+    measureDemo(views[22]),
   );
 
   // Eleven views on one page: drawing the ones below the fold would cost a full render each frame for

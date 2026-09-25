@@ -38,7 +38,7 @@ const panelOrder = [...tour.matchAll(/<section class="panel[^"]*" id="([a-z]+)"[
   .map(match => [match[1], Number(match[2])]);
 assert.equal(panelOrder.length, tocOrder.length, 'every table-of-contents entry should have a panel');
 assert.deepEqual(panelOrder.map(([id]) => id), tocOrder.map(([id]) => id),
-  'the table of contents should list the panels in the order the page presents them');
+  'the table of contents should list the panels in the order the page presents them — run node scripts/tidy-panels.mjs');
 assert.deepEqual(panelOrder.map(([, index]) => index), panelOrder.map((_, position) => position + 1),
   'panel numbering should run 1, 2, 3 … with no gaps or repeats');
 
