@@ -716,7 +716,9 @@ function update(): void {
   progressInput.value = String(progress);
   // The identity relocates nothing, so there is nothing to play.
   playButton.disabled = state.movers.size === 0;
-  playButton.textContent = playing ? 'Ⅱ' : progress >= 1 ? '↺' : '▶';
+  // One glyph per idea: play/pause on this button, rewind on the one beside it. When the animation
+  // has finished the label still says Replay, because pressing play starts it again from zero.
+  playButton.textContent = playing ? 'Ⅱ' : '▶';
   playButton.setAttribute('aria-label', playing ? 'Pause' : progress >= 1 ? 'Replay' : 'Play');
   $('progress-value').textContent = `${Math.round(progress * 100)}%`;
   labels?.update();
