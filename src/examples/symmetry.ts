@@ -308,11 +308,11 @@ function rebuild(): void {
     visual.scale = atomScales[index];
     return visual;
   });
-  // Faded markers at the starting sites make "before → after" legible while the operation runs.
-  const startVisuals = [...movers].map(index => {
-    const marker = new Visual(meshes.get(big.species[index])!, rgba(atomColor(index, big.species[index]), .3));
+  // Wire outlines left at the starting sites make "before → after" legible while the operation runs.
+  // An outline reads as a marker; a filled translucent ball just looks like another atom.
+  const startVisuals = moverList.map(index => {
+    const marker = new Visual(wireSphere(Math.max(.02, atomScales[index][0] * .95), 12, 7, Math.max(.004, bounds.extent * .0016)), rgba(atomColor(index, big.species[index]), .55));
     marker.position = ideal[index];
-    marker.scale = times(atomScales[index], .62);
     return marker;
   });
 
@@ -503,7 +503,8 @@ function update(): void {
     const pulse = lift * (1 + .012 * Math.sin(clock * 1.6 + index));
     visual.scale = times(state.atomScales[index], pulse);
   });
-  const startOpacity = showTrails ? (holdStart ? .5 : smooth(progress * 3) * (1 - smooth((progress - .82) / .18)) * .5) : 0;
+  // Same thinning as the trails: a supercell leaves an outline at every one of its 38 moving sites.
+  const startOpacity = showTrails ? (holdStart ? .5 : smooth(progress * 3) * (1 - smooth((progress - .82) / .18)) * .5) * orbitWeight : 0;
   state.startVisuals.forEach((marker, order) => {
     marker.opacity = hiddenElements.has(state.big.species[state.moverList[order]]) ? 0 : startOpacity;
   });
@@ -529,6 +530,9 @@ function setOperation(index: number): void {
     <div class="op-matrix">${matrixMarkup}${shiftMarkup}</div>`;
   // The stage caption is set by rebuild(), which knows exactly which drawn sites move.
   rebuild();
+  // Choosing an operation plays it straight away: the point of the picker is to watch the crystal
+  // transform, and a freshly chosen operation sitting at 0% looks like nothing happened.
+  playing = (built?.movers.size ?? 0) > 0;
   update();
 }
 

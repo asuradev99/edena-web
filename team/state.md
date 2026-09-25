@@ -105,10 +105,10 @@ Last updated: 2026-09-25 by **deepcode** (crystal viewer: centred-lattice animat
    scope** for the current baseline; the user asked for the simplest raw throughput baseline first.
 4. Phase 6 remainder: API naming decisions and measurement notes.
    See `VISUALIZATION_LIBRARY_PLAN.md` and `README.md`.
-5. Crystal viewer follow-ups: `scripts/check-depth.mjs` still asserts against the pre-rewrite page
-   (it looks for `c4`/`mirror` select values and the old "8/8 sites coincide" report); refresh or
-   delete it. `src/lib/lattice.ts` is now built out, and `structureBounds` is no longer used by the
-   viewer (it computes the bounds of the drawn box instead).
+5. Crystal viewer: `scripts/check-depth.mjs` is refreshed — it now drives all 48 operations and
+   checks each caption, and passes against the live page (it was asserting against the pre-rewrite
+   `c4`/`mirror` select values). `structureBounds` is no longer used by the viewer, which computes the
+   bounds of the drawn box instead.
 
 ## Landed recently
 
