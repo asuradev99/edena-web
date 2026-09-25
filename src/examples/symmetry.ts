@@ -80,7 +80,9 @@ type Built = {
   ghostSymbols: string[];
   ghostVisuals: Visual[];
   cellVisual?: Visual;
-  trailVisual?: Visual;
+  /** One merged arc set per colour, so a trail matches the atoms that draw it. */
+  trailVisuals: Visual[];
+  trailSymbols: string[];
   elementVisuals: Visual[];
   /** Faded copies of the starting sites, shown while the operation runs. */
   startVisuals: Visual[];
@@ -387,27 +389,37 @@ function rebuild(): void {
   // Orbit trails: one arc per moving site, with an arrowhead so the direction is explicit. In a
   // dense supercell the arrowheads are dropped and the arcs are thinned by their opacity, so the
   // picture reads as a few sweeping orbits instead of a hairball.
-  const trailVisual = showTrails && movers.size && big.positions.length <= 400 ? (() => {
-    const paths: Geometry[] = [];
-    for (const index of movers) {
+  const trailVisuals: Visual[] = [];
+  const trailSymbols: string[] = [];
+  if (showTrails && movers.size && big.positions.length <= 400) {
+    // Merge the arcs by the colour of the atom that draws them, so each element keeps its own hue
+    // instead of the whole set being one flat white.
+    const byColor = new Map<string, { symbol: string; paths: Geometry[] }>();
+    for (const index of moverList) {
       const series = Array.from({ length: 25 }, (_, step) => {
         const t = step / 24;
         return add(isometryPoint(motion, ideal[index], t), times(drift[index], t));
       });
-      paths.push(polyline(series, Math.max(.004, bounds.extent * .0012)));
-      if (moverList.length <= 12) paths.push(arrow(series[series.length - 3], series[series.length - 1], Math.max(.015, bounds.extent * .006)));
+      const color = atomColor(index, big.species[index]);
+      const entry = byColor.get(color) ?? { symbol: big.species[index], paths: [] };
+      entry.paths.push(polyline(series, Math.max(.004, bounds.extent * .0012)));
+      if (moverList.length <= 12) entry.paths.push(arrow(series[series.length - 3], series[series.length - 1], Math.max(.015, bounds.extent * .006)));
+      byColor.set(color, entry);
     }
-    return paths.length ? new Visual(merge(...paths), rgba('#ffffff', .34)) : undefined;
-  })() : undefined;
+    for (const [color, entry] of byColor) {
+      trailVisuals.push(new Visual(merge(...entry.paths), rgba(color, .5)));
+      trailSymbols.push(entry.symbol);
+    }
+  }
 
   const element = operationElement(motion, bounds.centre, bounds.extent);
 
   built = {
     big, baseCount, ideal, target, drift, atomVisuals, atomScales, bondVisuals, bondSymbols, ghostSymbols, ghostVisuals,
-    cellVisual, trailVisual, elementVisuals: element.visuals, startVisuals, atomLabels: [],
+    cellVisual, trailVisuals, trailSymbols, elementVisuals: element.visuals, startVisuals, atomLabels: [],
     elementLabel: element.label, elementAnchor: element.anchor, motion, centre: bounds.centre, extent: bounds.extent, movers, moverList, shortest,
   };
-  view.world.add(...atomVisuals, ...ghostVisuals, ...bondVisuals, ...(cellVisual ? [cellVisual] : []), ...(trailVisual ? [trailVisual] : []), ...element.visuals, ...startVisuals);
+  view.world.add(...atomVisuals, ...ghostVisuals, ...bondVisuals, ...(cellVisual ? [cellVisual] : []), ...trailVisuals, ...element.visuals, ...startVisuals);
 
   // Labels: lattice vectors, the symmetry element, and (optionally) element symbols.
   labels?.dispose();
@@ -543,7 +555,7 @@ function update(): void {
   // its periodic ghosts, its atoms, its "before" markers, and its floating symbols.
   state.bondVisuals.forEach(visual => { visual.opacity = showBonds && !hiddenElements.has(state.bondSymbols.get(visual) ?? '') ? bondOpacity : 0; });
   state.ghostVisuals.forEach((visual, index) => { visual.opacity = showBonds && !hiddenElements.has(state.ghostSymbols[index]) ? bondOpacity : 0; });
-  if (state.trailVisual) state.trailVisual.opacity = trailOpacity;
+  state.trailVisuals.forEach((visual, order) => { visual.opacity = hiddenElements.has(state.trailSymbols[order]) ? 0 : trailOpacity; });
   state.elementVisuals.forEach(visual => { visual.opacity = .3 + .7 * t; });
   state.atomVisuals.forEach((visual, index) => {
     const hidden = hiddenElements.has(state.big.species[index]);
