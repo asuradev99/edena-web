@@ -222,20 +222,25 @@ npm run build
 
 WebGPU rendering requires a compatible browser with hardware acceleration. Chrome Beta on Vulkan is the verification path used for the demos. Use `?dpr=1` or `?samples=1` on the showcase when testing a slower adapter.
 
-Two browser checks drive a live page over the DevTools protocol and assert on what it draws, rather
-than trusting the code that drew it:
+Four checks, three of which drive a live page over the DevTools protocol and assert on what it draws
+rather than trusting the code that drew it:
 
 ```sh
-node scripts/check-links.mjs           # every page resolves, and every page reaches the tour
-node scripts/check-depth.mjs [port]    # renderer depth + the crystal viewer, pixel by pixel
+node scripts/check-links.mjs           # every page's links, scripts and route to the tour — no browser
+node scripts/check-pages.mjs [port]    # every page loads, draws every canvas, and stays quiet
 node scripts/check-basics.mjs [port]   # the basics tour: nineteen demos, every control, every assertion
+node scripts/check-depth.mjs [port]    # renderer depth and the crystal viewer, pixel by pixel
 ```
 
 `check-basics` captures from the compositor and measures the regions back inside the page, because a
 WebGPU canvas cannot be read once it has been presented. It asserts that each demo draws something
 distinct, that each control moves its own stage and no other (compared against how much that stage
-drifts on its own, since some of them animate), that both spin toggles hold still and start again, that
-the helix and the timeline advance, that the transport seeks and resumes, and that nothing logs an
-error. Disconnecting any single control makes it fail.
+drifts on its own, since some of them animate), that each spin button holds the picture still and
+starts it again, that the helix, the timeline and the simulation advance, that the transport seeks and
+resumes, and that nothing logs an error. Disconnecting any single control makes it fail.
+
+`check-pages` is the broad, shallow one: after touching a shared module it is the fastest way to learn
+that every page still loads. It found the legacy prototype loading a bundle whose editor module was
+never committed, and the missing favicon that made every page log a 404.
 
 The project is early and intentionally focused. PDE solvers, spatial interaction structures, lighting/material systems, richer text layout, SVG import, and broader Manim feature coverage remain future work. See [VISUALIZATION_LIBRARY_PLAN.md](VISUALIZATION_LIBRARY_PLAN.md) for the roadmap.

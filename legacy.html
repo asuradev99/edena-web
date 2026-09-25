@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Edena — legacy physics prototype</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600&display=swap" rel="stylesheet">
@@ -443,6 +444,14 @@
   <div id="gui"></div>
   <style>#hint a{color:#7fd6e6;text-decoration:none}#hint a:hover{color:#b7f2f5}</style>
   <div id="hint">Left-drag: orbit &nbsp;·&nbsp; Right-drag: pan &nbsp;·&nbsp; Scroll: zoom &nbsp;·&nbsp; <a href="index.html">gallery</a> · <a href="basics.html">basics</a></div>
-  <script type="module" src="dist/main.js"></script>
+  <script type="module">
+    // This page archived an earlier prototype, and its bundle imported a module (`dist/editor.js`)
+    // that was never committed — so the script 404'd and the page sat on a black canvas with no
+    // explanation. Rather than load a script that cannot resolve, say so and point at the tour.
+    const hint = document.getElementById('hint');
+    hint.innerHTML = 'This prototype is an archive: its build never shipped, so there is nothing to run here.'
+      + ' &nbsp;·&nbsp; <a href="basics.html">start with the basics tour</a> · <a href="index.html">gallery</a>';
+    for (const id of ['gui', 'topbar']) document.getElementById(id)?.remove();
+  </script>
 </body>
 </html>

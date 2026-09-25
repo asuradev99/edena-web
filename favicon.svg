@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- The library's own picture in miniature: three axes out of a node. -->
+  <rect width="32" height="32" rx="7" fill="#0b0d10"/>
+  <g fill="none" stroke-linecap="round" stroke-width="2.6">
+    <path d="M9 24V8" stroke="#58c4dd"/>
+    <path d="M9 24h15" stroke="#83c167"/>
+    <path d="M9 24 20 17" stroke="#f7d681"/>
+  </g>
+  <circle cx="9" cy="24" r="2.6" fill="#dbe9f5"/>
+</svg>
