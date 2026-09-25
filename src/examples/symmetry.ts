@@ -278,13 +278,13 @@ function atomColor(index: number, species: string): string {
  * The box the camera was fitted to, so a resize can re-fit without losing the zoom the user set.
  * `fittedHeight` is the height that fits that box on the current viewport.
  */
-let fitted: { corners: Vec3[]; centre: Vec3; extent: number } | undefined;
+let fitted: { points: Vec3[]; centre: Vec3; extent: number } | undefined;
 let fittedHeight = 0;
 
 /** Height that fits the drawn box's projection, leaving the camera pointed where it is. */
 function fitHeight(): number {
   const camera = view!.camera;
-  const { corners, extent } = fitted!;
+  const { points, extent } = fitted!;
   // A rotated box projects taller than its axis-aligned extent, and the guard changes with the
   // viewport aspect (a narrow stage clips the sides too), so measure the projection and fit it.
   // CSS pixels, not the backing store: the backing store is resized asynchronously, so framing
@@ -293,7 +293,7 @@ function fitHeight(): number {
   const viewportWidth = canvas.clientWidth, viewportHeight = canvas.clientHeight;
   if (!(viewportWidth > 0 && viewportHeight > 0)) return camera.height;
   const aspect = viewportWidth / viewportHeight;
-  const projected = corners.map(point => camera.project(point, viewportWidth, viewportHeight));
+  const projected = points.map(point => camera.project(point, viewportWidth, viewportHeight));
   const toWorld = camera.height / viewportHeight;
   const tall = (Math.max(...projected.map(([, y]) => y)) - Math.min(...projected.map(([, y]) => y))) * toWorld;
   const wide = (Math.max(...projected.map(([x]) => x)) - Math.min(...projected.map(([x]) => x))) * toWorld / aspect;
@@ -301,8 +301,8 @@ function fitHeight(): number {
 }
 
 /** Point the camera at the box and fit it. */
-function frameFor(corners: Vec3[], centre: Vec3, extent: number): void {
-  fitted = { corners, centre, extent };
+function frameFor(points: Vec3[], centre: Vec3, extent: number): void {
+  fitted = { points, centre, extent };
   fittedHeight = fitHeight();
   view!.camera.target = centre;
   view!.camera.height = fittedHeight;
@@ -321,7 +321,7 @@ function resetView(): void {
   if (!view || !fitted) return;
   view.camera.yaw = .62;
   view.camera.pitch = .38;
-  frameFor(fitted.corners, fitted.centre, fitted.extent);
+  frameFor(fitted.points, fitted.centre, fitted.extent);
 }
 
 function boundsOf(points: Vec3[]): { min: Vec3; max: Vec3; centre: Vec3; extent: number } {
@@ -347,17 +347,20 @@ function drawnRepeats(): number {
 }
 
 /**
- * The drawn supercell, its pivot, the corners of the box and the box's bounds — everything that
- * depends on the crystal and the repeat count but not on the selected operation. The picker's counts
- * and the scene both need it, so it is built once and shared.
+ * The drawn supercell, its pivot, the points the camera has to fit (the box's corners and every
+ * site) and the box's bounds — everything that depends on the crystal and the repeat count but not on
+ * the selected operation. The picker's counts and the scene both need it, so it is built once.
  */
-let drawnCache: { base: CrystalStructure; n: number; big: Supercell; pivot: Vec3; corners: Vec3[]; bounds: { min: Vec3; max: Vec3; centre: Vec3; extent: number } } | undefined;
+let drawnCache: { base: CrystalStructure; n: number; big: Supercell; pivot: Vec3; points: Vec3[]; bounds: { min: Vec3; max: Vec3; centre: Vec3; extent: number } } | undefined;
 function drawnFor(n: number) {
   if (!drawnCache || drawnCache.base !== base || drawnCache.n !== n) {
     const big = makeSupercell(base, [n, n, n]);
     const pivot = fracToCart([n / 2, n / 2, n / 2]);
     const corners = [0, n].flatMap(i => [0, n].flatMap(j => [0, n].map(k => sub(fractionalToCartesian([i, j, k], base.lattice), pivot))));
-    drawnCache = { base, n, big, pivot, corners, bounds: boundsOf(corners) };
+    // The camera is fitted to the box *and* the sites drawn in it: a file whose coordinates reach past
+    // its cell (a supercell given in Cartesian, say) would otherwise be framed off screen.
+    const sites = big.positions.map(position => sub(fractionalToCartesian(position, base.lattice), pivot));
+    drawnCache = { base, n, big, pivot, points: [...corners, ...sites], bounds: boundsOf(corners) };
   }
   return drawnCache;
 }
@@ -387,11 +390,11 @@ function rebuild(): void {
   }
   if (repeats > largest) { repeats = largest; supercellSelect.value = String(largest); }
   const n = repeats;
-  const { big, pivot, corners, bounds } = drawnFor(n);
+  const { big, pivot, points, bounds } = drawnFor(n);
   // Frame the box once per structure. Re-framing on every operation change would throw away the
   // zoom and orbit the user just set up.
   if (!framed || framed.base !== base || framed.n !== n) {
-    frameFor(corners, bounds.centre, bounds.extent);
+    frameFor(points, bounds.centre, bounds.extent);
     framed = { base, n };
     markerCache.clear();
     // The picker's "N moved" counts the drawn cell, so it has to be restated when that changes.
