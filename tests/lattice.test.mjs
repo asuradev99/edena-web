@@ -454,3 +454,50 @@ test('self-image bonds, the neighbour cap, and nearestNeighbours', () => {
   close(across[0].length, 3.905 * .05, 1e-9);
   assert.equal(perovskite.species[across[1].index], 'Ti');
 });
+
+test('screw, glide and pure translations are carried along with the move', () => {
+  const point = fractionalToCartesian([.25, .25, .1], cubicCell);
+  const slideZ = fractionalToCartesian([0, 0, .5], cubicCell);
+  const slideY = fractionalToCartesian([0, .25, 0], cubicCell);
+
+  // A 2₁ screw along z: a 180° turn, then half a cell of slide, both spread over the animation.
+  const screw = { rotation: [[-1, 0, 0], [0, -1, 0], [0, 0, 1]], translation: [0, 0, .5], label: '' };
+  const turning = operationIsometry(cubicCell, screw);
+  assert.equal(turning.improper, false);
+  assert.equal(turning.trivial, false, 'a screw does not sit still');
+  close(Math.abs(turning.angle), Math.PI, 1e-9);
+  close(Math.abs(turning.axis[2]), 1, 1e-9);
+  for (let axis = 0; axis < 3; axis++) close(turning.translation[axis], slideZ[axis], 1e-9);
+  const middle = isometryPoint(turning, point, .5);
+  const halfTurned = rotateAboutAxis(point, turning.axis, turning.angle * .5);
+  for (let axis = 0; axis < 3; axis++) close(middle[axis], halfTurned[axis] + slideZ[axis] * .5, 1e-9);
+  const finished = isometryPoint(turning, point, 1);
+  const expected = fractionalToCartesian(applyOperation(screw, [.25, .25, .1]), cubicCell);
+  // `applyOperation` folds into the unit cell and the isometry does not, so compare modulo a lattice
+  // vector: the two have to be the same site of the crystal.
+  const difference = cartesianToFractional([0, 1, 2].map(axis => finished[axis] - expected[axis]), cubicCell);
+  for (const value of difference) close(value - Math.round(value), 0, 1e-9);
+
+  // A glide: reflection through the plane ⟂ [100] plus a quarter cell along y.
+  const glide = { rotation: [[-1, 0, 0], [0, 1, 0], [0, 0, 1]], translation: [0, .25, 0], label: '' };
+  const gliding = operationIsometry(cubicCell, glide);
+  assert.equal(gliding.improper, true);
+  assert.equal(gliding.inversion, false);
+  close(gliding.angle, 0, 1e-9);
+  const normal = gliding.axis;
+  const along = point[0] * normal[0] + point[1] * normal[1] + point[2] * normal[2];
+  const halfFolded = isometryPoint(gliding, point, .5);
+  for (let axis = 0; axis < 3; axis++) close(halfFolded[axis], point[axis] - along * normal[axis] + slideY[axis] * .5, 1e-9);
+
+  // A pure translation has no spin and no plane, but it is still a move.
+  const slide = { rotation: [[1, 0, 0], [0, 1, 0], [0, 0, 1]], translation: [0, 0, .25], label: '' };
+  const translating = operationIsometry(cubicCell, slide);
+  assert.equal(translating.trivial, false);
+  close(translating.angle, 0, 1e-9);
+  close(translating.translation[2], cubicCell[2][2] * .25, 1e-9);
+  const slid = isometryPoint(translating, point, .5);
+  for (let axis = 0; axis < 3; axis++) close(slid[axis], point[axis] + translating.translation[axis] * .5, 1e-9);
+  // With no gliding part the same rotation is marked trivial, which is what the viewer's caption says.
+  assert.equal(operationIsometry(cubicCell, { rotation: [[-1, 0, 0], [0, -1, 0], [0, 0, 1]], translation: [0, 0, 0], label: '' }).trivial, false);
+  assert.equal(operationIsometry(cubicCell, { rotation: [[1, 0, 0], [0, 1, 0], [0, 0, 1]], translation: [0, 0, 0], label: '' }).trivial, true);
+});
