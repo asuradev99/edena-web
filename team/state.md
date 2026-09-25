@@ -1,6 +1,6 @@
 # Shared state
 
-Last updated: 2026-09-25 by **deepcode** (crystal viewer: centred-lattice animation, element folding, camera-only stage; lattice isometry API + regression tests). Prior: lattice/streamline/MathML library layer, crystal viewer rewrite, electromagnetism upgrade, interactive field example, showcase typesetting; color lane, Phase 6 docs, simulation cleanup, all-pairs n-body + physics lab, crystal docs; **astra** (perspective camera, Phase 5 seam, landing gallery, crystal viewer uploads). Update the date and author when you change this.
+Last updated: 2026-09-25 by **deepcode** (crystal viewer: centred-lattice animation, element folding, camera-only stage with a reset, per-family moves, picker grouped by family, consistent counts and states; lattice isometry API, 100% line coverage, and a browser harness that audits all 48 operations). Prior: lattice/streamline/MathML library layer, crystal viewer rewrite, electromagnetism upgrade, interactive field example, showcase typesetting; color lane, Phase 6 docs, simulation cleanup, all-pairs n-body + physics lab, crystal docs; **astra** (perspective camera, Phase 5 seam, landing gallery, crystal viewer uploads). Update the date and author when you change this.
 
 ## Where things stand
 
@@ -8,14 +8,18 @@ Last updated: 2026-09-25 by **deepcode** (crystal viewer: centred-lattice animat
   `c300957` (centred, correct operation animation; halos and clicking removed), `8804a30`
   (lattice isometry API + tests), `a333247` (supercell trail legibility), `ed22831` (docs + harness), `fda9879` (auto-play, outlined markers), `1b41ff4` (per-family animation), `1cea681`
   (swatch/transport polish), `dddf686`, `cea41f5`, `00834b2`, `6276022` (performance), `cd10b3e` (coverage), `4ab8e75` (refit on
-  reshape). Earlier: `3054fd1`
+  reshape), `7925ff1`..`0001925` (counts, toggle caps, status states, a11y, reduced motion). Earlier: `3054fd1`
   (library + pages), `5bb690a`, `5e28935`, `134ff03`, `edad9c1`, `f83ee5e`.
-- `npm run typecheck` → clean. `npm test` → **61/61** pass (~1.2 s; the sample-budget boundary
+- `npm run typecheck` → clean. `npm test` → **63/63** pass (~1.2 s; the sample-budget boundary
   test alone costs ~0.9 s). `npm run build` → `build/`.
 - Pages all serve 200 from `npm run dev` (http://localhost:5173): `/`, `/field.html`,
   `/particles.html`, `/physics-lab.html`, `/symmetry.html`, `/electrostatics.html`, `/legacy.html`.
 - Rendering verified in Chrome Beta 155 on the Vulkan path (`--headless=new`, CDP 9444, real AMD
-  rdna-2 adapter): 61 fps on `symmetry.html` at 1x1x1 and 2x2x2, no console/WebGPU errors.
+  rdna-2 adapter): 61 fps on `symmetry.html` from 1x1x1 to a 1600-atom cell, no console/WebGPU
+  errors. A 400-atom POSCAR loads in ~0.5 s and a 1600-atom one in ~1.1 s; changing operation is
+  4 ms at 1x1x1, 30 ms at 3x3x3 and 4 ms at 1600 sites. `scripts/check-depth.mjs` drives all 48
+  operations and audits the captions, the picker counts, the transport locks, the camera reset and
+  the switch budget; 220 rapid interactions leave the DOM node count and the frame rate unchanged.
 
 ## Layout
 
