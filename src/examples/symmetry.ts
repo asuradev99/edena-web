@@ -43,6 +43,9 @@ const holdStartToggle = $<HTMLInputElement>('start-sites');
 const prevButton = $<HTMLButtonElement>('prev-op');
 const nextButton = $<HTMLButtonElement>('next-op');
 
+/** Honoured so that choosing an operation does not start motion for readers who asked for none. */
+const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+
 const SITE_COLORS = ['#62d6e8', '#f7d681', '#ef9273', '#b5a1ff', '#9ae6b4', '#ff9ec4', '#8ff0b0', '#9ad0ff'];
 const ELEMENT_COLOR = (() => { const map = new Map<string, string>(); return (symbol: string) => { if (!map.has(symbol)) map.set(symbol, appearanceFor(symbol).color); return map.get(symbol)!; }; })();
 
@@ -739,8 +742,9 @@ function setOperation(index: number): void {
   // The stage caption is set by rebuild(), which knows exactly which drawn sites move.
   rebuild();
   // Choosing an operation plays it straight away: the point of the picker is to watch the crystal
-  // transform, and a freshly chosen operation sitting at 0% looks like nothing happened.
-  playing = (built?.movers.size ?? 0) > 0;
+  // transform, and a freshly chosen operation sitting at 0% looks like nothing happened. A reader who
+  // asked for reduced motion gets the still frame and presses play if they want to see it.
+  playing = !reducedMotion.matches && (built?.movers.size ?? 0) > 0;
   update();
 }
 
