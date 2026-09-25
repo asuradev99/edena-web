@@ -268,6 +268,48 @@ function atomColor(index: number, species: string): string {
   return colourMode === 'site' ? SITE_COLORS[index % SITE_COLORS.length] : ELEMENT_COLOR(species);
 }
 
+/**
+ * The box the camera was fitted to, so a resize can re-fit without losing the zoom the user set.
+ * `fittedHeight` is the height that fits that box on the current viewport.
+ */
+let fitted: { corners: Vec3[]; centre: Vec3; extent: number } | undefined;
+let fittedHeight = 0;
+
+/** Height that fits the drawn box's projection, leaving the camera pointed where it is. */
+function fitHeight(): number {
+  const camera = view!.camera;
+  const { corners, extent } = fitted!;
+  // A rotated box projects taller than its axis-aligned extent, and the guard changes with the
+  // viewport aspect (a narrow stage clips the sides too), so measure the projection and fit it.
+  // CSS pixels, not the backing store: the backing store is resized asynchronously, so framing
+  // against it would not be reproducible.
+  camera.height = extent * 1.45;
+  const viewportWidth = canvas.clientWidth, viewportHeight = canvas.clientHeight;
+  if (!(viewportWidth > 0 && viewportHeight > 0)) return camera.height;
+  const aspect = viewportWidth / viewportHeight;
+  const projected = corners.map(point => camera.project(point, viewportWidth, viewportHeight));
+  const toWorld = camera.height / viewportHeight;
+  const tall = (Math.max(...projected.map(([, y]) => y)) - Math.min(...projected.map(([, y]) => y))) * toWorld;
+  const wide = (Math.max(...projected.map(([x]) => x)) - Math.min(...projected.map(([x]) => x))) * toWorld / aspect;
+  return Math.max(extent, tall, wide) * 1.18;
+}
+
+/** Point the camera at the box and fit it. */
+function frameFor(corners: Vec3[], centre: Vec3, extent: number): void {
+  fitted = { corners, centre, extent };
+  fittedHeight = fitHeight();
+  view!.camera.target = centre;
+  view!.camera.height = fittedHeight;
+}
+
+/** Re-fit after a reshape, keeping whatever zoom the user set relative to the fit. */
+function refit(): void {
+  if (!view || !fitted || !fittedHeight) return;
+  const zoom = view.camera.height / fittedHeight;
+  fittedHeight = fitHeight();
+  view.camera.height = fittedHeight * zoom;
+}
+
 function boundsOf(points: Vec3[]): { min: Vec3; max: Vec3; centre: Vec3; extent: number } {
   const min: Vec3 = [Infinity, Infinity, Infinity], max: Vec3 = [-Infinity, -Infinity, -Infinity];
   for (const point of points) for (let axis = 0; axis < 3; axis++) {
@@ -314,22 +356,7 @@ function rebuild(): void {
   // Frame the box once per structure. Re-framing on every operation change would throw away the
   // zoom and orbit the user just set up.
   if (!framed || framed.base !== base || framed.n !== n) {
-    const camera = view.camera;
-    camera.target = bounds.centre;
-    camera.height = bounds.extent * 1.45;
-    // A rotated box projects taller than its axis-aligned extent, and the guard changes with the
-    // viewport aspect (a narrow stage clips the sides too), so measure the projection and fit it.
-    // CSS pixels, not the backing store: the backing store is resized asynchronously, so framing
-    // against it is not reproducible.
-    const viewportWidth = canvas.clientWidth, viewportHeight = canvas.clientHeight;
-    if (viewportWidth > 0 && viewportHeight > 0) {
-      const aspect = viewportWidth / viewportHeight;
-      const projected = corners.map(point => camera.project(point, viewportWidth, viewportHeight));
-      const toWorld = camera.height / viewportHeight;
-      const tall = (Math.max(...projected.map(([, y]) => y)) - Math.min(...projected.map(([, y]) => y))) * toWorld;
-      const wide = (Math.max(...projected.map(([x]) => x)) - Math.min(...projected.map(([x]) => x))) * toWorld / aspect;
-      camera.height = Math.max(bounds.extent, tall, wide) * 1.18;
-    }
+    frameFor(corners, bounds.centre, bounds.extent);
     framed = { base, n };
     markerCache.clear();
   }
@@ -760,6 +787,11 @@ async function init(): Promise<void> {
   view = await WebGPUView.create(canvas, { onError: message => { status.textContent = message; } });
   if (disposed) { view.dispose(); return; }
   view.camera.yaw = .62; view.camera.pitch = .38;
+  // Re-fit when the stage changes shape, so a narrow window cannot clip the box and a resize cannot
+  // throw away the zoom.
+  const resizeObserver = new ResizeObserver(() => { if (!disposed) refit(); });
+  resizeObserver.observe(canvas);
+  window.addEventListener('pagehide', () => resizeObserver.disconnect(), { once: true });
   recomputeOperations();
 
   operationSelect.addEventListener('change', () => setOperation(Number(operationSelect.value)), events);
