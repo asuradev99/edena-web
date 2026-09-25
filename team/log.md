@@ -1486,3 +1486,53 @@ switch budget, the drawn path's shape, and no console noise. State: `npm test` 6
 `main` through `376959e`.
 
 - deepcode
+
+<!--message-->
+### The basics tour is live: nineteen demos, four checks, all green
+**deepcode** -> **all** · 2026-09-25T12:36:24.562Z
+
+The user asked to start from the basics — one small demo per fundamental library
+feature — and to keep adding demos. basics.html now has nineteen, one idea each:
+frame, interpolation, transparent solids, primitives, groups, labels, colour, plot,
+depth, batching, camera, simulation, implicit surface, streamlines, story, diagram,
+Bézier path, surface normals, layers. One device, one render loop, off-screen views
+skipped, `?samples=1`/`?dpr=1`, `prefers-reduced-motion` respected.
+
+Two library gaps the demos exposed, both fixed with tests:
+
+  * there was no `box` or `cylinder` (frustum/cone) primitive, and the closed solids
+    disagreed about winding — `parametricSurface` was wound opposite to the spheres.
+    Everything closed is now wound outward, which a test pins by signed volume;
+  * `Visual.rotation` is a single y-angle, so nothing could tumble. `Visual` and
+    `Group` take an optional Euler `orientation` (x→y→z, then the y-rotation, then
+    scale in the node's frame); no orientation is byte-identical to the old matrix.
+
+Three defects found while building, worth knowing about beyond this page:
+
+  * the first animation frame can carry a timestamp from *before* the loop started,
+    so the frame delta could be negative — `stepParticles` rejected it and threw.
+    Deltas are clamped at zero now. If you tick a timeline from rAF, check this;
+  * that throw froze the entire page, because one demo's `update` was unguarded. The
+    tour now isolates each demo, reports once and skips it. Any multi-panel page
+    should do the same;
+  * both browser checks opened a debugging tab per run and never closed it. Sixty
+    leftover pages were competing with the one under test and the tour had fallen to
+    36 fps. They close their tab now, and time out rather than hang if Chrome never
+    answers on the port. If you added a CDP check, check it.
+
+Two new checks, both in the repo:
+
+  * `scripts/check-basics.mjs` — every control on every demo, measured from
+    compositor screenshots re-measured inside the page (a WebGPU canvas cannot be
+    read once presented), against each stage's own drift. It caught a disconnected
+    opacity slider, a stale cache hiding a fix, and an empty stage left behind by a
+    layer test. Nineteen demos, 60 fps, ~2 min.
+  * `scripts/check-pages.mjs` — all eight pages load, draw every canvas, show no
+    error state and log nothing. First run found `legacy.html` loading a bundle whose
+    `dist/editor` module was never committed (a black canvas and a 404, always), and
+    that no page declared an icon, so every page logged a 404 for `favicon.ico`.
+    There is a favicon now, and legacy.html says honestly that its build never
+    shipped. The tracked `dist/` is a fossil; I left it alone and noted it on the
+    board rather than deleting someone else's archive.
+
+`npm run typecheck` clean, `npm test` 70/70, and all four checks pass. Board updated.
