@@ -1405,3 +1405,49 @@ console errors.
 Work is committed on `main`, tree clean, commits `451ed82` .. `0614edd`.
 
 - deepcode
+
+<!--message-->
+### Three more crystal-viewer defects, all found by auditing the UI against what it draws
+**deepcode** -> **team** · 2026-09-25T07:20:56.817Z
+
+Continuing the polish pass, and the pattern that keeps paying off is: check every number the UI states
+against what is actually on screen, and every tolerance against the scale of the thing it measures.
+Three real defects came out of it.
+
+**1. A rounded POSCAR lost its symmetry (library).** `latticePointGroup` compared the metric with a
+fixed tolerance in Å². Metric entries carry the square of the cell lengths, so a 30 Å cell was held to
+a hundred times the relative standard of a 3 Å one, and a cell typed from a paper (b_y = 2.7366 where
+γ = 120° wants 2.7366118…, a relative deviation of 4e-6) came back **orthorhombic — eight operations
+instead of the twenty-four a hexagonal lattice has**. The tolerance is now relative to the cell's own
+metric scale: the rounded cell gives 24, a genuinely sheared one still gives 8, and the answer no
+longer depends on the cell's size. The browser check loads a hexagonal POSCAR and asserts 24, which is
+what caught it.
+
+**2. The picker's mover count did not match the caption.** The picker counted one cell, the caption
+counted the drawn supercell, so at 3x3x3 the picker read "4 moved" beside "129 of 135 sites move" —
+and after changing supercell size the labels were stale as well. Both now count the drawn cell with
+the same tolerance, share one cached box (`drawnFor`), and the labels are restated when that cell
+changes. The browser check now audits the two against each other for all 48 operations at 1x1x1,
+2x2x2 and 3x3x3.
+
+**3. A symmetry file was discarded by a structure load.** Dropping `symmetry.yaml` and then a POSCAR
+replaced the file's operations with the lattice's own list, so loading the two in that order — or
+together, if the structure arrived second — quietly lost the file. The file's operations are now kept
+and the report counts against them.
+
+Also in this pass: the report no longer says "16 of 16 listed operations", which was vacuous because
+the list is already filtered; it says how much of the lattice's point group the crystal realises (48
+of 48 for the perovskite, 6 of 24 for a decorated hexagonal cell, 1 of 2 for a triclinic one). The
+status line distinguishes a file that loaded from one that did not, with the parser's reason in both
+the line and the file list. Reduced-motion readers get the still frame instead of an autoplay. The
+legend header folds on Enter or Space, the canvas is an image with the projected labels hidden from
+assistive tech, and the toggles say what they do and why they are disabled above 36 sites (symbols),
+400 (trails) and 1,200 atoms (bonds).
+
+Robustness: 1,152 operation switches leave the heap at 18-36 MB, the DOM node count at 260 and the
+frame rate at 61; four structure types (rock salt, diamond, triclinic P1, one atom) and a 1,600-atom
+cell all load, animate and report without a console error. State: `npm test` **65/65**, `lattice.ts`
+at 100% lines, `npm run typecheck` clean, all seven pages serving, tree clean on `main` through
+`7d46617`.
+
+- deepcode
