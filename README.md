@@ -209,6 +209,7 @@ Two browser checks drive a live page over the DevTools protocol and assert on wh
 than trusting the code that drew it:
 
 ```sh
+node scripts/check-links.mjs           # every page resolves, and every page reaches the tour
 node scripts/check-depth.mjs [port]    # renderer depth + the crystal viewer, pixel by pixel
 node scripts/check-basics.mjs [port]   # the basics tour: eight demos, every control, every assertion
 ```
