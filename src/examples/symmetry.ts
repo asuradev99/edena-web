@@ -636,10 +636,13 @@ function writeMapping(): void {
     const species = base.species[index];
     return `<span class="map-cell" style="--accent:${ELEMENT_COLOR(species)}">${species}<sub>${index}</sub> → ${target < 0 ? '∉' : `${base.species[target]}<sub>${target}</sub>`}</span>`;
   }).join('');
+  // A supercell has many orbits with many indices each, so the list is capped like the map grid;
+  // otherwise the report becomes a wall of numbers for a large cell.
+  const orbitList = orbits.slice(0, 8).map(orbit => orbit.length > 12 ? `{${orbit.slice(0, 12).join(', ')}, …}` : `{${orbit.join(', ')}}`).join(' ');
   mappingPanel.innerHTML = `
     <div class="report-line"><strong>${exact.length}</strong> of ${operations.length} listed operations map this cell onto itself.</div>
     <div class="report-line ${valid ? 'ok' : 'bad'}">${valid ? '✓ verified: every site maps to a distinct equivalent site, and the animation ends back inside the cell.' : '✗ this operation does not preserve the structure.'}</div>
-    <div class="report-line"><strong>${orbits.length}</strong> symmetry orbit${orbits.length === 1 ? '' : 's'}: ${orbits.map(orbit => `{${orbit.join(', ')}}`).join(' ')}</div>
+    <div class="report-line"><strong>${orbits.length}</strong> symmetry orbit${orbits.length === 1 ? '' : 's'}: ${orbitList}${orbits.length > 8 ? ` … ${orbits.length - 8} more` : ''}</div>
     <div class="report-line">This operation <strong>permutes</strong> ${moved} of the cell's ${base.positions.length} sites; the caption counts the drawn sites that visibly move.</div>
     <div class="map-grid">${rows}${mapping.length > 14 ? `<span class="map-cell muted">+${mapping.length - 14} more</span>` : ''}</div>`;
 }
