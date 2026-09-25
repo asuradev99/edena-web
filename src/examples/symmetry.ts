@@ -563,21 +563,28 @@ function syncLegendControls(): void {
 }
 
 /**
- * The structure summary — how many operations preserve the cell and what its orbits are — depends on
- * the crystal, not on which operation is selected. Testing all of them is 48 `mapsOntoSelf` scans, so
- * it is cached: switching operations should not re-scan the cell every time.
+ * How many operations preserve the cell, and which they are. Both depend on the crystal rather than
+ * on the selected operation, and testing all of them is 48 `mapsOntoSelf` scans, so the answer is
+ * cached: switching operations must not re-scan the cell.
  */
-let summary: { base: CrystalStructure; operations: CrystalOperation[]; fallback: CrystalOperation; exact: number; orbits: number[][] } | undefined;
-function structureSummary(): { exact: number; orbits: number[][] } {
-  const fallback = operations[operationIndex];
-  if (summary && summary.base === base && summary.operations === operations && summary.fallback === fallback) return summary;
-  const exact = operations.filter(operation => mapsOntoSelf(base, operation, 1e-3));
-  summary = { base, operations, fallback, exact: exact.length, orbits: symmetryOrbits(base, exact.length ? exact : [fallback], 1e-3) };
-  return summary;
+let exactSummary: { base: CrystalStructure; operations: CrystalOperation[]; list: CrystalOperation[] } | undefined;
+function exactOperations(): CrystalOperation[] {
+  if (exactSummary && exactSummary.base === base && exactSummary.operations === operations) return exactSummary.list;
+  exactSummary = { base, operations, list: operations.filter(operation => mapsOntoSelf(base, operation, 1e-3)) };
+  return exactSummary.list;
+}
+
+/** Orbits of the same operation set, cached by that set's identity. */
+let orbitSummary: { used: CrystalOperation[]; orbits: number[][] } | undefined;
+function orbitsFor(used: CrystalOperation[]): number[][] {
+  if (orbitSummary && orbitSummary.used === used) return orbitSummary.orbits;
+  orbitSummary = { used, orbits: symmetryOrbits(base, used, 1e-3) };
+  return orbitSummary.orbits;
 }
 
 function writeMapping(): void {
-  const { exact, orbits } = structureSummary();
+  const exact = exactOperations();
+  const orbits = orbitsFor(exact.length ? exact : [operations[operationIndex]]);
   const mapping = siteMapping(base, operations[operationIndex], 1e-3);
   const moved = mapping.filter((target, index) => target >= 0 && target !== index).length;
   // Validation: a symmetry operation must send every site to a distinct, same-species site.
@@ -590,7 +597,7 @@ function writeMapping(): void {
     return `<span class="map-cell" style="--accent:${ELEMENT_COLOR(species)}">${species}<sub>${index}</sub> → ${target < 0 ? '∉' : `${base.species[target]}<sub>${target}</sub>`}</span>`;
   }).join('');
   mappingPanel.innerHTML = `
-    <div class="report-line"><strong>${exact}</strong> of ${operations.length} listed operations map this cell onto itself.</div>
+    <div class="report-line"><strong>${exact.length}</strong> of ${operations.length} listed operations map this cell onto itself.</div>
     <div class="report-line ${valid ? 'ok' : 'bad'}">${valid ? '✓ verified: every site maps to a distinct equivalent site, and the animation ends back inside the cell.' : '✗ this operation does not preserve the structure.'}</div>
     <div class="report-line"><strong>${orbits.length}</strong> symmetry orbit${orbits.length === 1 ? '' : 's'}: ${orbits.map(orbit => `{${orbit.join(', ')}}`).join(' ')}</div>
     <div class="report-line">This operation <strong>permutes</strong> ${moved} of the cell's ${base.positions.length} sites; the caption counts the drawn sites that visibly move.</div>
