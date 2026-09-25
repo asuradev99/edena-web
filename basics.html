@@ -79,6 +79,7 @@
       <li><a href="#instances">10 · One mesh, many copies</a></li>
       <li><a href="#camera">11 · A camera move</a></li>
       <li><a href="#simulation">12 · A simulation, stepped by hand</a></li>
+      <li><a href="#field">13 · Shapes from a scalar field</a></li>
     </ul>
 
     <div class="grid">
@@ -153,6 +154,18 @@
           <label>Palette <select id="colour-palette"><option value="viridis" selected>Viridis</option><option value="plasma">Plasma</option></select></label>
           <label>Height <input id="colour-amplitude" type="range" min="0.2" max="1.4" step="0.05" value="0.8"> <output id="colour-amplitude-value">0.80</output></label>
           <p>Geometry can carry a linear RGB triple per vertex, which is the whole mechanism behind a colour-mapped surface: the palette is a function from a number in [0,1] to a colour, and the surface is a grid of triangles the demo builds by hand. The ribbon beside it samples the same function, so the encoding is readable.</p>
+        </div>
+      </section>
+
+      <section class="panel" id="field" aria-label="Shapes from a scalar field">
+        <div class="panel-head"><span class="index">13</span><div><h2>Shapes from a scalar field</h2><p>isosurface(f, bounds, level, resolution) · boundsBox</p></div><span class="tag">FIELD</span></div>
+        <div class="stage"><canvas id="field-canvas" aria-label="The level set of an implicit function, inside a wireframe domain box"></canvas><div class="labels" id="field-labels"></div></div>
+        <div class="controls">
+          <label>Field <select id="field-kind"><option value="balls" selected>Two overlapping balls</option><option value="torus">Torus</option><option value="gyroid">Gyroid</option></select></label>
+          <label>Level <input id="field-level" type="range" min="-1" max="1" step="0.02" value="0"> <output id="field-level-value">0.00</output></label>
+          <label>Detail <select id="field-resolution"><option value="20">Coarse</option><option value="28" selected>Medium</option><option value="36">Fine</option></select></label>
+          <label><button id="field-spin" aria-pressed="true">Turning</button></label>
+          <p>No triangles are authored here: the shape is the set of points where <code>f(x, y, z) = level</code>, extracted on the CPU by marching tetrahedra. Move the level and the surface swells, splits or pinches off — which is why implicit shapes are so easy to animate, and why the field explorer on the landing page can morph one into another.</p>
         </div>
       </section>
 

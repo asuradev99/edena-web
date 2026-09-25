@@ -7,7 +7,7 @@
  */
 import {
   WebGPUView, LabelLayer, Group, Visual, Timeline, tween,
-  axes3d, boundsBox, box, boxEdges, cylinder, polyline, arrow, circle, sphere, shadedSphere, wireSphere,
+  axes3d, boundsBox, box, boxEdges, cylinder, polyline, arrow, circle, sphere, shadedSphere, wireSphere, isosurface,
   parametricSurface, functionSurface, functionCurve, merge, rgba, lerp, smooth, transform, applyMatrix,
   createParticleState, stepParticles, type ParticleAcceleration,
   mathml, mi, mn, mo, mtext, msup, row, tickValues, formatTick, plotFrame, viridis, plasma,
@@ -39,7 +39,6 @@ const onScreen = new Set<WebGPUView>();
 let observer: IntersectionObserver | undefined;
 let disposed = false, frame = 0, last = 0, clock = 0, timer = 0;
 const samples: number[] = [];
-let triangles = 0;
 
 function report(message: string): void {
   console.error(message);
@@ -61,7 +60,18 @@ const tag = (text: string): string => mathml(mtext(text));
 /** `t = 1.24` — the one label the helix rewrites as its marker moves. */
 const timeLabel = (value: number): string => mathml(row(mi('t'), mo('='), mn(value.toFixed(2))));
 
-const count = (geometry: Geometry): Geometry => { triangles += geometry.vertices.length / 9; return geometry; };
+/** Kept as an explicit marker at each call: a running tally would count every rebuild again. */
+const count = (geometry: Geometry): Geometry => geometry;
+
+/** The triangles actually queued, recomputed from the worlds so rebuilds cannot inflate it. */
+function drawnTriangles(): number {
+  let total = 0;
+  for (const view of views) {
+    if (!onScreen.has(view)) continue;
+    for (const { node } of view.world.flatten()) total += node.geometry.vertices.length / 9;
+  }
+  return total;
+}
 
 /* --------------------------------------------------------------------------------------------
  * 01 · The 3D coordinate system: axes3d, boundsBox, tickValues, a grid, and projected labels.
@@ -544,6 +554,73 @@ function colourDemo(view: WebGPUView): Demo {
 }
 
 /* --------------------------------------------------------------------------------------------
+ * 13 · Shapes from a scalar field: an implicit surface, extracted at a level you choose.
+ * ------------------------------------------------------------------------------------------ */
+
+function fieldDemo(view: WebGPUView): Demo {
+  look(view, .7, .34, 6.2);
+  const labels = new LabelLayer($('field-labels'), view.camera);
+  const min: Vec3 = [-1.6, -1.6, -1.6], max: Vec3 = [1.6, 1.6, 1.6];
+  const spin = new Group();
+  view.world.add(spin, new Visual(count(boundsBox(min, max, .004)), rgba('#9fe7ff', .22)), new Visual(count(axes3d(1.2, .005)), rgba('#dbe9f5', .24)));
+
+  /** Three fields, each signed so that level 0 is the interesting surface. */
+  const fields: Record<string, (x: number, y: number, z: number) => number> = {
+    balls: (x, y, z) => Math.max(.78 - Math.hypot(x + .38, y - .22, z - .1), .72 - Math.hypot(x - .42, y + .18, z + .12)),
+    torus: (x, y, z) => (Math.hypot(x, z) - .95) ** 2 + y * y - .3 ** 2,
+    gyroid: (x, y, z) => Math.sin(2.6 * x) * Math.cos(2.6 * y) + Math.sin(2.6 * y) * Math.cos(2.6 * z) + Math.sin(2.6 * z) * Math.cos(2.6 * x),
+  };
+  const ranges: Record<string, [number, number]> = { balls: [-.6, .6], torus: [-.5, .5], gyroid: [-1.2, 1.2] };
+  let kind = 'balls', level = 0, resolution = 28, surface: Visual | undefined;
+  let spinning = !reducedMotion, phase = 0;
+  const spinButton = $<HTMLButtonElement>('field-spin');
+  const readout = labels.addHTML(mathml(mn('')), () => [0, -2.2, 0], '#9db0c2', 'math-label');
+
+  const build = (): void => {
+    const geometry = count(isosurface(fields[kind], { min, max }, level, resolution));
+    const next = new Visual(geometry, rgba(kind === 'gyroid' ? '#58c4dd' : '#83c167', .92));
+    if (surface) spin.remove(surface);
+    surface = next;
+    spin.add(next);
+    readout.innerHTML = mathml(mtext(`${kind} · f = ${level.toFixed(2)} · ${Math.round(geometry.vertices.length / 9).toLocaleString()} triangles`));
+  };
+
+  const kindSelect = $<HTMLSelectElement>('field-kind');
+  const levelInput = $<HTMLInputElement>('field-level');
+  const resolutionSelect = $<HTMLSelectElement>('field-resolution');
+  const levelOutput = $('field-level-value');
+  kindSelect.addEventListener('change', () => {
+    kind = kindSelect.value;
+    const [low, high] = ranges[kind];
+    levelInput.min = String(low); levelInput.max = String(high);
+    level = 0; levelInput.value = '0';
+    levelOutput.textContent = level.toFixed(2);
+    build();
+  });
+  levelInput.addEventListener('input', () => {
+    level = Number(levelInput.value);
+    levelOutput.textContent = level.toFixed(2);
+    build();
+  });
+  resolutionSelect.addEventListener('change', () => { resolution = Number(resolutionSelect.value); build(); });
+  const button = (): void => {
+    spinButton.textContent = spinning ? 'Turning' : 'Still';
+    spinButton.setAttribute('aria-pressed', String(spinning));
+  };
+  spinButton.addEventListener('click', () => { spinning = !spinning; button(); });
+  build();
+  button();
+
+  return {
+    labels,
+    update: delta => {
+      if (spinning) phase += delta * .18;
+      spin.rotation = phase;
+    },
+  };
+}
+
+/* --------------------------------------------------------------------------------------------
  * 12 · A simulation, stepped by hand: the CPU particle seam, one acceleration function.
  * ------------------------------------------------------------------------------------------ */
 
@@ -551,7 +628,9 @@ function simulationDemo(view: WebGPUView): Demo {
   look(view, .5, .3, 12);
   const labels = new LabelLayer($('simulation-labels'), view.camera);
   const cloud = new Group();
-  const mesh = shadedSphere(.075);
+  // A deliberately cheap mesh: hundreds of these are drawn every frame, and the default sphere is
+  // a couple of thousand triangles each. At this size the difference is invisible.
+  const mesh = parametricSurface((u, v) => [.075 * Math.sin(u) * Math.cos(v), .075 * Math.cos(u), .075 * Math.sin(u) * Math.sin(v)], [0, Math.PI], [0, Math.PI * 2], [6, 10]);
   view.world.add(cloud, new Visual(count(axes3d(1.1, .005)), rgba('#dbe9f5', .18)));
 
   let state = createParticleState([0, 0, 0], 3);
@@ -892,7 +971,7 @@ function plotDemo(view: WebGPUView): Demo {
  * ------------------------------------------------------------------------------------------ */
 
 async function initialize(): Promise<void> {
-  const canvases = ['coordinates-canvas', 'interpolation-canvas', 'transparency-canvas', 'shapes-canvas', 'groups-canvas', 'labels-canvas', 'colour-canvas', 'plot-canvas', 'depth-canvas', 'instances-canvas', 'camera-canvas', 'simulation-canvas'];
+  const canvases = ['coordinates-canvas', 'interpolation-canvas', 'transparency-canvas', 'shapes-canvas', 'groups-canvas', 'labels-canvas', 'colour-canvas', 'plot-canvas', 'depth-canvas', 'instances-canvas', 'camera-canvas', 'simulation-canvas', 'field-canvas'];
   const first = await WebGPUView.create($<HTMLCanvasElement>(canvases[0]), { samples: msaa, maxDpr, onError: report });
   views.push(first);
   if (disposed) { first.dispose(); return; }
@@ -912,6 +991,7 @@ async function initialize(): Promise<void> {
     instancesDemo(views[9]),
     cameraDemo(views[10]),
     simulationDemo(views[11]),
+    fieldDemo(views[12]),
   );
 
   // Eleven views on one page: drawing the ones below the fold would cost a full render each frame for
@@ -964,7 +1044,7 @@ function animate(now: number): void {
   if (timer >= .25) {
     timer = 0;
     const average = samples.reduce((sum, value) => sum + value, 0) / samples.length;
-    stats.textContent = `${average.toFixed(1)} ms/frame · ${(1000 / average).toFixed(0)} fps · ${onScreen.size} of ${views.length} views drawing · ${Math.round(triangles).toLocaleString()} triangles · ${stats.dataset.renderer ?? ''}`;
+    stats.textContent = `${average.toFixed(1)} ms/frame · ${(1000 / average).toFixed(0)} fps · ${onScreen.size} of ${views.length} views drawing · ${Math.round(drawnTriangles()).toLocaleString()} triangles · ${stats.dataset.renderer ?? ''}`;
   }
   frame = requestAnimationFrame(animate);
 }
