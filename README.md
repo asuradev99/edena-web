@@ -103,7 +103,7 @@ The public entry point exports:
 | Plotting | `plotFrame`, `axes3d`, `boundsBox`, `niceStep`, `tickValues`, `formatTick` |
 | Fields | `isosurface` for CPU marching-tetrahedra extraction |
 | Color | `ramp`, `viridis`, `plasma`, `colorMappedSurface` |
-| Scene graph | `Visual`, `Group`, `World`, visibility, opacity, transforms, reveal progress |
+| Scene graph | `Visual`, `Group`, `World`, visibility, opacity, transforms (`position`, `scale`, `rotation` about +y, and an optional Euler `orientation`), reveal progress, `orientationMatrix`/`applyMatrix` for the same maths outside the graph |
 | Camera/view | Orbit controls, orthographic or perspective projection, MSAA, alpha mode, DPR cap, projected `LabelLayer` text |
 | Animation | Absolute-time `Timeline` and `tween` helpers |
 | CPU simulation | `createParticleState`, `stepParticles`, `ParticleSimulation` |

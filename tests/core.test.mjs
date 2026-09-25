@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { Timeline, tween, Group, Visual, Geometry, functionCurve, functionSurface, arrow, box, cylinder, sphere, shadedSphere, parametricSurface, OrbitCamera } from '../build/index.js';
+import { Timeline, tween, Group, Visual, Geometry, functionCurve, functionSurface, arrow, box, cylinder, sphere, shadedSphere, parametricSurface, transform, applyMatrix, orientationMatrix, OrbitCamera } from '../build/index.js';
 import { normalizedField, enclosedFraction, chapters, DURATION, chapterAt } from '../build/demo/physics.js';
 
 test('field is finite at the center, continuous at R, and decays outside',()=>{
@@ -145,4 +145,36 @@ test('every closed solid is wound outward, so its signed volume is positive', ()
     assert.ok(volume > 0, `${name} is wound inward (${volume.toFixed(4)})`);
     assert.ok(Math.abs(volume - expected) < .01 * expected + 1e-6, `${name} encloses ${volume.toFixed(4)}, expected about ${expected.toFixed(4)}`);
   }
+});
+
+test('orientation tumbles a node in 3D, and composes with the y rotation', () => {
+  const near = (a, b) => assert.ok(Math.abs(a - b) < 1e-6, `${a} vs ${b}`);
+  const image = (matrix, point) => applyMatrix(matrix, point);
+  const half = Math.PI / 2;
+  const at = (orientation, rotation = 0) => transform([0, 0, 0], [1, 1, 1], rotation, orientation);
+
+  // A quarter turn about each axis, applied x then y then z, in the library's own handedness.
+  near(image(at([half, 0, 0]), [0, 1, 0])[2], 1);
+  near(image(at([0, half, 0]), [1, 0, 0])[2], -1);
+  near(image(at([0, 0, half]), [1, 0, 0])[1], 1);
+  // The two compose, with `rotation` last: +y goes to +z under x, then to +x under the y turn.
+  const composed = image(at([half, 0, 0], half), [0, 1, 0]);
+  near(composed[0], 1); near(composed[1], 0); near(composed[2], 0);
+  // Scale acts in the node's own frame, so it happens before the rotation: (1,0,0) stretches to
+  // (2,0,0), the quarter turn about z carries that to (0,2,0), and only then does the slide apply.
+  const scaled = applyMatrix(transform([2, -1, .5], [2, 3, 4], 0, [0, 0, half]), [1, 0, 0]);
+  near(scaled[0], 2); near(scaled[1], 1); near(scaled[2], .5);
+  // Passing no orientation is exactly the old behaviour, which the whole showcase relies on.
+  assert.deepEqual(Array.from(transform([1, 2, 3], [2, 2, 2], .7)), Array.from(transform([1, 2, 3], [2, 2, 2], .7, undefined)));
+  assert.deepEqual(Array.from(transform([1, 2, 3], [2, 2, 2], .7, [0, 0, 0])), Array.from(transform([1, 2, 3], [2, 2, 2], .7)));
+  assert.throws(() => orientationMatrix([0, NaN, 0]));
+
+  // A group passes its orientation down to its children, and a child's own orientation composes.
+  const parent = new Group(); parent.orientation = [half, 0, 0];
+  const child = new Visual(new Geometry([])); child.orientation = [0, 0, half];
+  parent.add(child);
+  const [{ matrix }] = [...parent.flatten()];
+  // The child's z turn sends +x to +y, and the parent's x turn then sends that to +z.
+  const mapped = image(matrix, [1, 0, 0]);
+  near(mapped[0], 0); near(mapped[1], 0); near(mapped[2], 1);
 });

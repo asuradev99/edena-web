@@ -8,7 +8,7 @@
 import {
   WebGPUView, LabelLayer, Group, Visual, Timeline, tween,
   axes3d, boundsBox, box, boxEdges, cylinder, polyline, arrow, circle, sphere, shadedSphere, wireSphere,
-  parametricSurface, functionSurface, functionCurve, merge, rgba, lerp,
+  parametricSurface, functionSurface, functionCurve, merge, rgba, lerp, transform, applyMatrix,
   mathml, mi, mn, mo, mtext, msup, row, tickValues, formatTick, plotFrame, viridis, plasma,
   Geometry, type Vec3, type Rgb,
 } from '../index.js';
@@ -79,7 +79,8 @@ function coordinateDemo(view: WebGPUView): Demo {
   const axes = new Visual(count(axes3d(extent, .012)), rgba('#dbe9f5', .9));
   const cage = new Visual(count(boundsBox([-1, -1, -1], [1, 1, 1], .005)), rgba('#9fe7ff', .45));
 
-  // Integer ticks, labelled every other one so the axes stay readable at any zoom.
+  // Integer ticks, as marks only: a number beside every one of them turned the picture into a
+  // scattering of digits, and the cage and the grid already carry the scale.
   const tickLines: Geometry[] = [];
   for (let axis = 0; axis < 3; axis++) {
     for (const value of tickValues(-2, 2, 4)) {
@@ -89,9 +90,6 @@ function coordinateDemo(view: WebGPUView): Demo {
       const wing: Vec3 = [0, 0, 0];
       wing[(axis + 1) % 3] = .05;
       tickLines.push(polyline([at.map((v, i) => v - wing[i]) as Vec3, at.map((v, i) => v + wing[i]) as Vec3], .005));
-      if (Math.abs(value) === 2) {
-        labels.addHTML(mathml(mn(formatTick(value, 1))), () => at.map((v, i) => v + (i === axis ? .14 : -.1)) as Vec3, '#7d90a6', 'math-label');
-      }
     }
   }
   const ticks = new Visual(count(merge(...tickLines)), rgba('#cfe4ea', .55));
@@ -105,15 +103,16 @@ function coordinateDemo(view: WebGPUView): Demo {
     drop.geometry = polyline([[1, y, .5], [1, -1, .5]], .006);
   };
   place(height);
-  labels.addHTML(mathml(row(mi('P'), mo('='), mo('('), mn('1.00'), mo(','), mn(height.toFixed(2)), mo(','), mn('0.50'), mo(')'))), () => [1.18, marker.position[1] + .26, .5], '#f7d681', 'math-label');
+  // One label, clear of the marker it describes.
+  labels.addHTML(mathml(row(mi('P'), mo('='), mo('('), mn('1.00'), mo(','), mn(height.toFixed(2)), mo(','), mn('0.50'), mo(')'))), () => [1.42, marker.position[1] + .42, .5], '#f7d681', 'math-label');
 
   // Axis names, in the colour the panel headings use, sitting just past each arrow.
   const names: [string, Vec3, string][] = [
-    ['x', [extent + .26, -.1, 0], '#ff9a9a'],
-    ['y', [-.1, extent + .26, 0], '#a8e6a3'],
-    ['z', [-.1, 0, extent + .26], '#9ec9ff'],
+    ['x', [extent + .42, -.12, 0], '#ff9a9a'],
+    ['y', [-.14, extent + .42, 0], '#a8e6a3'],
+    ['z', [-.14, 0, extent + .42], '#9ec9ff'],
   ];
-  for (const [name, position, colour] of names) labels.addHTML(mathml(mi(name)), () => position, colour, 'math-label');
+  for (const [name, position, colour] of names) labels.addHTML(mathml(mi(name)), () => position, colour, 'math-label axis-name');
 
   view.world.add(grid, axes, cage, ticks, marker, drop);
 
@@ -297,7 +296,7 @@ function shapesDemo(view: WebGPUView): Demo {
     const visual = new Visual(count(primitive.geometry), rgba(primitive.colour));
     visual.position = [x, .12, 0];
     shelf.add(visual);
-    labels.addHTML(tag(primitive.name), () => spinPoint([x, index % 2 ? -1.18 : -.92, 0], shelfAngle), '#9db0c2', 'math-label');
+    labels.addHTML(tag(primitive.name), () => applyMatrix(shelfMatrix(), [x, index % 2 ? -1.18 : -.92, 0]), '#9db0c2', 'math-label');
   });
 
   // The last slot is a parametric surface, which is also just a function — of two parameters.
@@ -311,20 +310,24 @@ function shapesDemo(view: WebGPUView): Demo {
   let surface = new Visual(count(surfaces.torus()), rgba('#58c4dd'));
   surface.position = [surfaceX, .12, 0];
   shelf.add(surface);
-  labels.addHTML(tag('parametricSurface'), () => spinPoint([surfaceX, -.92, 0], shelfAngle), '#9db0c2', 'math-label');
+  labels.addHTML(tag('parametricSurface'), () => applyMatrix(shelfMatrix(), [surfaceX, -.92, 0]), '#9db0c2', 'math-label');
 
   view.world.add(shelf);
 
-  // The labels live in world space, so they are turned by the same angle the shelf is.
-  let shelfAngle = Number($<HTMLInputElement>('shapes-spin').value) * Math.PI / 180;
+  // Labels live in world space, so they ride the shelf's own matrix: `rotation` is the y turn, and
+  // `orientation` the three-axis pose the library applies before it.
   const spinInput = $<HTMLInputElement>('shapes-spin');
+  const tiltInput = $<HTMLInputElement>('shapes-tilt');
+  const shelfMatrix = (): Float32Array => transform([0, 0, 0], [1, 1, 1], shelf.rotation, shelf.orientation);
   const applySpin = (): void => {
-    const degrees = Number(spinInput.value);
-    shelfAngle = degrees * Math.PI / 180;
+    const degrees = Number(spinInput.value), tilt = Number(tiltInput.value) * Math.PI / 180;
     $('shapes-spin-value').textContent = `${Math.round(degrees)}°`;
-    shelf.rotation = shelfAngle;
+    $('shapes-tilt-value').textContent = `${Math.round(Number(tiltInput.value))}°`;
+    shelf.rotation = degrees * Math.PI / 180;
+    shelf.orientation = [tilt, 0, 0];
   };
   spinInput.addEventListener('input', applySpin);
+  tiltInput.addEventListener('input', applySpin);
   applySpin();
 
   $<HTMLSelectElement>('shapes-kind').addEventListener('change', event => {
