@@ -610,6 +610,7 @@ function writeLegend(elements: string[], appearance: Map<string, { radius: numbe
     const name = document.createElement('span'); name.className = 'legend-name'; name.textContent = symbol;
     const countElement = document.createElement('span'); countElement.className = 'muted'; countElement.textContent = `×${count}`;
     const size = document.createElement('span'); size.className = 'legend-size'; size.textContent = `${radius.toFixed(2)} Å`;
+    size.title = 'Tabulated radius; every sphere is scaled by the same factor so atoms never fuse';
     rowElement.append(swatch, name, countElement, size);
     rowElement.addEventListener('click', () => toggleElement(symbol));
     return rowElement;
