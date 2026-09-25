@@ -95,11 +95,20 @@ try {
   // Crystal viewer: 48 cubic operations, each with a caption describing what moves.
   assert.equal(value.captions.length,48,'the perovskite point group is m-3m');
   assert.match(value.captions.find(caption=>caption.startsWith('E · identity')),/every site maps onto itself/);
-  const moved=value.captions.filter(caption=>!caption.startsWith('E · identity'))
-    .map(caption=>{const match=/ of ([0-9]+) sites move/.exec(caption);return match?Number(match[1]):null;});
-  assert.ok(moved.every(count=>count!==null),'every non-identity caption must report a count: '+JSON.stringify(value.captions.filter(caption=>!caption.startsWith('E · identity'))));
-  assert.ok(moved.filter(count=>count>0).length>=20,'most operations must visibly move sites');
-  assert.ok(Math.max(...moved)>=4,'the inversion moves 4 of the 5 perovskite sites');
+  const nonIdentity=value.captions.filter(caption=>!caption.startsWith('E · identity'));
+  // The caption reads "M of N sites move · P lie on the element". M is the count the animation
+  // honours; a regex that grabbed N instead would make the checks below vacuous, which is exactly
+  // what an earlier revision of this script did.
+  const counts=nonIdentity.map(caption=>{
+    const movedMatch=/([0-9]+) of ([0-9]+) sites move/.exec(caption);
+    if(!movedMatch)return null;
+    const pinnedMatch=/· ([0-9]+) l/.exec(caption);
+    return {movers:Number(movedMatch[1]),total:Number(movedMatch[2]),pinned:pinnedMatch?Number(pinnedMatch[1]):0};
+  });
+  assert.ok(counts.every(count=>count!==null),'every non-identity caption must report a count: '+JSON.stringify(nonIdentity));
+  assert.ok(counts.every(count=>count.movers+count.pinned===count.total),'movers plus pinned sites must cover the cell: '+JSON.stringify(nonIdentity.filter((caption,index)=>counts[index]&&counts[index].movers+counts[index].pinned!==counts[index].total)));
+  assert.ok(counts.filter(count=>count.movers>0).length>=20,'most operations must visibly move sites');
+  assert.ok(Math.max(...counts.map(count=>count.movers))>=4,'the inversion moves 4 of the 5 perovskite sites');
   assert.match(value.report,/verified: every site maps to a distinct equivalent site/);
   assert.match(value.status,/^Ready/);
   assert.equal(value.distinctLabels,48,'every operation must read distinctly (S4 and S4^3 differ only by the power)');
@@ -111,5 +120,5 @@ try {
   assert.ok(Math.abs(value.zoomedAfterSwitch-value.zoomed)<=3,`choosing an operation must keep the zoom (${value.zoomed} -> ${value.zoomedAfterSwitch})`);
   assert.ok(value.slowestSwitch<80,`choosing an operation must stay inside a frame budget (slowest ${value.slowestSwitch.toFixed(1)} ms)`);
   console.log('PASS: opaque depth, draw-order independence, translucent depth, every operation captioned, and the viewer interaction locks',
-    {operations:value.captions.length,moving:moved.filter(count=>count>0).length,slowestSwitchMs:Number(value.slowestSwitch.toFixed(1)),status:value.status});
+    {operations:value.captions.length,moving:counts.filter(count=>count.movers>0).length,movedPerOperation:counts.map(count=>count.movers),slowestSwitchMs:Number(value.slowestSwitch.toFixed(1)),status:value.status});
 } finally {socket.close();await fetch(`http://localhost:${port}/json/close/${target.id}`);}
