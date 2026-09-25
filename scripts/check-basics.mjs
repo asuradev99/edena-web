@@ -5,7 +5,8 @@
 //   2. every control changes its own stage — projection, grid, marker height, opacity, spin, the mesh
 //      selector, the group's spread and opacity, and the helix's turn count — and leaves the others be;
 //   3. the two moving demos advance on their own, and the transport seeks;
-//   4. the page reports a frame rate and never throws or logs an error.
+//   4. the page reports a frame rate and never throws or logs an error;
+//   5. the tour still works at 390 px: the panels stack, nothing overflows sideways, the demo draws.
 //
 // Pixels come from the compositor (`Page.captureScreenshot`) and are measured back inside the page, so
 // no image library is needed: a WebGPU canvas cannot be read once it has been presented, but a
@@ -54,7 +55,7 @@ try {
   await wait(4000);
 
   // The measurement lives in the page: it decodes a screenshot, draws it, and averages a region.
-  await evaluate(`(() => {
+  const install = () => evaluate(`(() => {
     const frame = document.createElement('canvas');
     const context = frame.getContext('2d', { willReadFrequently: true });
     window.__measureRegion = async (base64, rect) => {
@@ -91,6 +92,7 @@ try {
     };
     return true;
   })()`);
+  await install();
 
   /** Scroll a demo's stage into view, capture, and measure that region. */
   const region = async stageId => {
@@ -316,8 +318,41 @@ try {
   const problems = events.filter(event => event.method === 'Runtime.exceptionThrown' || (event.method === 'Runtime.consoleAPICalled' && event.params.type === 'error') || (event.method === 'Log.entryAdded' && event.params.entry.level === 'error'));
   assert.equal(problems.length, 0, `the page reported ${problems.length} problem(s): ${JSON.stringify(problems[0]?.params ?? {}).slice(0, 300)}`);
 
+  // 5. The tour has to work on a phone: at 390 px the panels stack, nothing overflows, and the first
+  //    demo still draws. This is the layout half of the check — it is what catches a canvas with a
+  //    fixed width, or a control row that will not wrap.
+  await call('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 1, mobile: false });
+  await call('Page.navigate', { url });
+  await wait(4000);
+  // A reload clears the page's helpers, so put them back before measuring the narrow stage.
+  await install();
+  const narrow = await evaluate(`(() => {
+    const panel = document.getElementById('coordinates');
+    const stage = panel.querySelector('.stage').getBoundingClientRect();
+    const controls = panel.querySelector('.controls').getBoundingClientRect();
+    let overflow = 0;
+    for (const canvas of document.querySelectorAll('.stage canvas')) {
+      if (canvas.getBoundingClientRect().width > panel.getBoundingClientRect().width + 1) overflow++;
+    }
+    return {
+      stacked: controls.top >= stage.bottom - 1,
+      overflow,
+      sideScroll: document.documentElement.scrollWidth - innerWidth,
+      quiet: document.getElementById('status').hidden,
+    };
+  })()`);
+  // A page that fits reports a scroll width *smaller* than the viewport once the scrollbar is
+  // accounted for, so the assertion is one-sided.
+  assert.ok(narrow.sideScroll <= 0, `a phone viewport must not scroll sideways (${narrow.sideScroll} px)`);
+  assert.equal(narrow.overflow, 0, `${narrow.overflow} canvases are wider than their panel at 390 px`);
+  assert.ok(narrow.stacked, 'at 390 px the controls should sit below the stage');
+  assert.ok(narrow.quiet, 'the narrow layout should show no error banner');
+  const narrowStage = await region('coordinates');
+  assert.ok(narrowStage.bright > 60, `the first demo should still draw on a phone (${narrowStage.bright.toFixed(0)} bright pixels)`);
+  await call('Emulation.clearDeviceMetricsOverride');
+
   console.log('PASS: twenty-three demos drawing distinct scenes, every control moving its own stage alone,');
-  console.log('      the helix and the timeline running, the transport seeking and resuming,', stats);
+  console.log('      the helix and the timeline running, the transport seeking and resuming, the phone layout stacking,', stats);
   console.log('     ', JSON.stringify(Object.fromEntries(stageIds.map(stageId => [stageId, Number(signatures[stageId].mean.toFixed(3))]))));
 } finally {
   // Close the tab this check opened: leaving them behind eventually starves the browser.
