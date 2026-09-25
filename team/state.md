@@ -26,8 +26,10 @@ Last updated: 2026-09-25 by **deepcode** (crystal viewer: centred-lattice animat
   shape of the drawn animation: a rotation to a projected circle (0.25 px worst), a mirror and an
   inversion to straight chords (0.62 and 0.94 px, the inversion's through the box centre), and a
   roto-reflection to that circle then a straight fold (0.55 and 2.79 px). It fails if the page
-  throws or logs an error anywhere in its 30 s run. 1,152 rapid operation switches leave the heap at
-  18-36 MB, the DOM node count at 260 and the frame rate at 61.
+  throws or logs an error anywhere in its 30 s run. Performance holds under abuse: 576 operation
+  switches across every supercell size leave a forced-GC heap at 6 MB (from 4), the DOM node count
+  at 260 and the frame rate at 61; a 46 s soak with 30 operation changes, supercell changes and
+  camera drags renders 2,726 frames with no error.
 
 ## Layout
 
