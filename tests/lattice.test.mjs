@@ -333,6 +333,41 @@ test('isometryTarget only corrects a cell that needs it', () => {
   for (const value of fractional) assert.ok(Math.abs(value) <= .5 + 1e-9, 'corrected target leaves the box');
 });
 
+test('the isometry decomposition holds for non-cubic point groups too', () => {
+  // Everything above uses a cubic cell. The decomposition runs on the Cartesian matrix, so these
+  // smaller groups exercise a different set of axes, angles and plane normals.
+  const lattices = [
+    ['orthorhombic', cellFromParameters(3, 4, 5), 8],
+    ['tetragonal', cellFromParameters(3, 3, 5), 16],
+    ['hexagonal', cellFromParameters(3, 3, 5, 90, 90, 120), 24],
+  ];
+  for (const [label, lattice, expected] of lattices) {
+    const group = latticePointGroup(lattice).map(rotation => ({ rotation, translation: [0, 0, 0], label: '' }));
+    assert.equal(group.length, expected, `${label} point group`);
+    for (const operation of group) {
+      const isometry = operationIsometry(lattice, operation);
+      close(Math.hypot(...isometry.axis), 1, 1e-9);
+      if (isometry.improper && !isometry.inversion) {
+        // The axis is the -1 eigenvector of the Cartesian matrix, not a vector lying in the plane.
+        const m = cartesianOperation(lattice, operation.rotation);
+        const image = m.map(row => dot(row, isometry.axis));
+        for (let axis = 0; axis < 3; axis++) close(image[axis], -isometry.axis[axis], 1e-9);
+      }
+      for (const fractional of [[0, 0, 0], [.25, .5, .75], [.1, .2, .3]]) {
+        const start = fractionalToCartesian(fractional, lattice);
+        const reached = isometryPoint(isometry, start, 1);
+        const expected = fractionalToCartesian(applyOperation(operation, fractional), lattice);
+        const difference = cartesianToFractional([0, 1, 2].map(axis => reached[axis] - expected[axis]), lattice);
+        for (const value of difference) close(value - Math.round(value), 0, 1e-7);
+        // Whatever the cell, the drawn target stays inside the box the viewer draws.
+        for (const value of cartesianToFractional(isometryTarget(isometry, start, lattice), lattice)) {
+          assert.ok(Math.abs(value) <= .5 + 1e-9, `${label}: target leaves the box`);
+        }
+      }
+    }
+  }
+});
+
 test('isometryPoint interpolates from the identity to the map', () => {
   for (const operation of CUBIC_POINT_GROUP) {
     const isometry = operationIsometry(cubicCell, operation);
