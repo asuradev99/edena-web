@@ -8,8 +8,9 @@
 //      change, a double-click restores the camera, choosing an operation stays well under a frame
 //      budget, the picker's counts match the captions at every supercell size, a phonopy file keeps
 //      its operations when a structure loads, and rutile lists the 8 point operations it really has.
-//   4. the drawn path itself: a rotation samples to a projected circle, and a roto-reflection's first
-//      half is that circle while its second half is a straight fold.
+//   4. the drawn path itself, family by family: a rotation samples to a projected circle, a mirror
+//      and an inversion to straight chords (the inversion's through the box centre), and a
+//      roto-reflection's first half to that circle while its second half folds straight.
 // It also fails if the page throws, logs an error, or reports a severe entry while all of that runs.
 import assert from 'node:assert/strict';
 const port=process.argv[2]??'9333';
@@ -228,8 +229,8 @@ try {
       const progress=document.getElementById('progress');
       progress.value=String(step/16);progress.dispatchEvent(new Event('input'));
       await wait(80);
-      const point=await measure();
-      samples.push({t:step/16,x:point?point[0]:null,y:point?point[1]:null,pixels:point?point[2]:0});
+      const sprite=await measure();
+      samples.push({t:step/16,x:sprite?sprite[0]:null,y:sprite?sprite[1]:null,pixels:sprite?sprite[2]:0});
     }
     return {label:select.options[Number(select.value)].textContent,samples};
   })()`});
@@ -275,10 +276,6 @@ try {
     const colour=document.getElementById('colour');colour.value='site';colour.dispatchEvent(new Event('change'));
     await wait(400);
     const select=document.getElementById('operation');
-    const index=[...select.options].findIndex(option=>option.textContent.includes('S₄ ·')&&option.textContent.includes('[001]'));
-    select.value=String(index);select.dispatchEvent(new Event('change'));
-    await wait(250);
-    const play=document.getElementById('play');if(play.textContent==='Ⅱ')play.click();
     for(const id of ['trails','start-sites','cell','bonds']){const node=document.getElementById(id);if(node.checked)node.click();}
     await wait(300);
     const scene=document.getElementById('scene');
@@ -295,27 +292,57 @@ try {
       }
       return n?[sx/n,sy/n,n]:null;
     };
-    const samples=[];
-    for(let step=0;step<=16;step++){
-      const progress=document.getElementById('progress');
-      progress.value=String(step/16);progress.dispatchEvent(new Event('input'));
-      await wait(80);
-      const point=await measure();
-      samples.push({t:step/16,x:point?point[0]:null,y:point?point[1]:null,pixels:point?point[2]:0});
-    }
-    return {label:select.options[Number(select.value)].textContent,samples};
+    const sweep=async(match,steps)=>{
+      const index=[...select.options].findIndex(option=>option.textContent.includes(match));
+      if(index<0)return {label:'not found: '+match,samples:[]};
+      select.value=String(index);select.dispatchEvent(new Event('change'));
+      await wait(250);
+      const play=document.getElementById('play');if(play.textContent==='Ⅱ')play.click();
+      const samples=[];
+      for(let step=0;step<=steps;step++){
+        const progress=document.getElementById('progress');
+        progress.value=String(step/steps);progress.dispatchEvent(new Event('input'));
+        await wait(80);
+        const point=await measure();
+        samples.push({t:step/steps,x:point?point[0]:null,y:point?point[1]:null,pixels:point?point[2]:0});
+      }
+      return {label:select.options[Number(select.value)].textContent,samples};
+    };
+    const spin=await sweep('S₄ · rotoreflection ‖ [001]',16);
+    // A mirror folds straight through its plane and an inversion slides straight through the centre;
+    // both are chords, unlike the arc above.
+    const mirror=await sweep('σ · mirror ⟂ [001]',12);
+    const inversion=await sweep('i · inversion',12);
+    return {spin,mirror,inversion};
   })()`});
-  const splitPoints=(split.result?.value?.samples??[]).filter(sample=>sample.x!==null&&sample.pixels>120);
+  const pixel=split.result?.value??{};
+  const collect=(list)=>list.filter(sample=>sample.x!==null&&sample.pixels>120);
+  // Straightness is the bow away from the chord through the first and last sample: a fold and an
+  // inversion are that chord, while the arc above bows away from it by tens of pixels.
+  const bow=(list)=>{
+    const from=list[0],to=list[list.length-1];
+    const span=Math.hypot(to.x-from.x,to.y-from.y);
+    const deviations=list.map(point=>Math.abs((point.x-from.x)*(to.y-from.y)-(point.y-from.y)*(to.x-from.x))/span);
+    return {span,worst:Math.max(...deviations)};
+  };
+  const splitPoints=collect(pixel.spin?.samples??[]);
   assert.ok(splitPoints.length>=15,`the roto-reflection check must see the atom in every frame (${splitPoints.length})`);
   const spun=fitEllipse(splitPoints.filter(point=>point.t<=0.5+1e-9));
   assert.ok(spun.discriminant<0,'the first half of a roto-reflection must turn about the axis');
   assert.ok(spun.worst<=4,`the first half must be a rotation arc (worst ${spun.worst.toFixed(2)} px off)`);
-  const folded=splitPoints.filter(point=>point.t>=0.5-1e-9);
-  const from=folded[0],to=folded[folded.length-1];
-  const span=Math.hypot(to.x-from.x,to.y-from.y);
-  const bow=Math.max(...folded.map(point=>Math.abs((point.x-from.x)*(to.y-from.y)-(point.y-from.y)*(to.x-from.x))/span));
-  assert.ok(span>10,`the second half must actually move (${span.toFixed(1)} px)`);
-  assert.ok(bow<=5,`the second half must be a straight fold, not an arc (bows ${bow.toFixed(2)} px)`);
+  const folded=bow(splitPoints.filter(point=>point.t>=0.5-1e-9));
+  assert.ok(folded.span>10,`the second half must actually move (${folded.span.toFixed(1)} px)`);
+  assert.ok(folded.worst<=5,`the second half must be a straight fold, not an arc (bows ${folded.worst.toFixed(2)} px)`);
+  const mirrorPoints=collect(pixel.mirror?.samples??[]);
+  const inversionPoints=collect(pixel.inversion?.samples??[]);
+  assert.ok(mirrorPoints.length>=11&&inversionPoints.length>=11,'the mirror and inversion sweeps must see the atom');
+  const mirror=bow(mirrorPoints),inversion=bow(inversionPoints);
+  assert.ok(mirror.span>10&&mirror.worst<=5,`a mirror must fold straight through its plane (bows ${mirror.worst.toFixed(2)} px)`);
+  assert.ok(inversion.span>10&&inversion.worst<=5,`an inversion must slide straight through the centre (bows ${inversion.worst.toFixed(2)} px)`);
+  // The inversion's chord passes through the box centre, which is where the camera is aimed.
+  const from=inversionPoints[0],to=inversionPoints[inversionPoints.length-1];
+  const toCentre=Math.abs((220-from.x)*(to.y-from.y)-(180-from.y)*(to.x-from.x))/inversion.span;
+  assert.ok(toCentre<=12,`an inversion must pass through the centre (line misses it by ${toCentre.toFixed(2)} px)`);
   const worst=rotation.worst;
 
   // Nothing may have complained along the way: no exception, no console.error, no severe log entry.
@@ -325,5 +352,5 @@ try {
     .map(event=>event.params.exceptionDetails?.text ?? event.params.entry?.text ?? event.params.args?.map(arg=>arg.value).join(' ') ?? event.method);
   assert.deepEqual(complaints,[],'the page must run without errors');
   console.log('PASS: opaque depth, draw-order independence, translucent depth, every operation captioned, the drawn path is a projected circle, and the viewer interaction locks',
-    {operations:value.captions.length,moving:counts.filter(count=>count.movers>0).length,movedPerOperation:counts.map(count=>count.movers),slowestSwitchMs:Number(value.slowestSwitch.toFixed(1)),loaded:value.loaded.options,rutile:value.rutileResult.options,rutileFamilies:value.rutileResult.families,pathDeviationPx:Number(worst.toFixed(2)),spinDeviationPx:Number(spun.worst.toFixed(2)),foldBowPx:Number(bow.toFixed(2)),status:value.statusBeforeFiles});
+    {operations:value.captions.length,moving:counts.filter(count=>count.movers>0).length,movedPerOperation:counts.map(count=>count.movers),slowestSwitchMs:Number(value.slowestSwitch.toFixed(1)),loaded:value.loaded.options,rutile:value.rutileResult.options,rutileFamilies:value.rutileResult.families,pathDeviationPx:Number(worst.toFixed(2)),spinDeviationPx:Number(spun.worst.toFixed(2)),foldBowPx:Number(folded.worst.toFixed(2)),mirrorBowPx:Number(mirror.worst.toFixed(2)),inversionBowPx:Number(inversion.worst.toFixed(2)),status:value.statusBeforeFiles});
 } finally {socket.close();await fetch(`http://localhost:${port}/json/close/${target.id}`);}
