@@ -538,6 +538,63 @@ function colourDemo(view: WebGPUView): Demo {
 }
 
 /* --------------------------------------------------------------------------------------------
+ * 09 · Depth and draw order: translucent slabs crossed by opaque solids.
+ * ------------------------------------------------------------------------------------------ */
+
+function depthDemo(view: WebGPUView): Demo {
+  look(view, .62, .32, 7.4);
+  const labels = new LabelLayer($('depth-labels'), view.camera);
+  const spin = new Group();
+  view.world.add(spin);
+
+  // A floor slab and a wall slab, both translucent, plus three opaque balls that pass right through
+  // them: the balls must stay solid, and the slabs must blend in the right order wherever they cross.
+  const floor = new Visual(count(box([-2.3, -.04, -2.3], [2.3, .04, 2.3])), rgba('#58c4dd', .3));
+  const wall = new Visual(count(box([-.04, -2.3, -2.3], [.04, 2.3, 2.3])), rgba('#f7d681', .32));
+  const floorEdge = new Visual(count(boxEdges([-2.3, -.04, -2.3], [2.3, .04, 2.3], .004)), rgba('#9fe7ff', .5));
+  const wallEdge = new Visual(count(boxEdges([-.04, -2.3, -2.3], [.04, 2.3, 2.3], .004)), rgba('#f7d681', .55));
+  spin.add(floor, floorEdge, wall, wallEdge);
+
+  const balls = [-1.5, 0, 1.5].map(x => {
+    const ball = new Visual(count(shadedSphere(.22)), rgba('#83c167'));
+    ball.position = [x, Math.sin(x) * .7, Math.cos(x) * .9];
+    spin.add(ball);
+    return ball;
+  });
+
+  const crossInput = $<HTMLInputElement>('depth-cross');
+  const tiltInput = $<HTMLInputElement>('depth-tilt');
+  const spinButton = $<HTMLButtonElement>('depth-spin');
+  let spinning = !reducedMotion, phase = 0;
+  const place = (): void => {
+    const cross = Number(crossInput.value), lean = Number(tiltInput.value) * Math.PI / 180;
+    $('depth-cross-value').textContent = cross.toFixed(2);
+    $('depth-tilt-value').textContent = `${Math.round(Number(tiltInput.value))}°`;
+    // The wall leans about x and slides along z, so it sweeps through the floor and the balls.
+    wall.position = [0, 0, cross];
+    wallEdge.position = [0, 0, cross];
+    wall.orientation = [lean, 0, 0];
+    wallEdge.orientation = [lean, 0, 0];
+  };
+  const button = (): void => {
+    spinButton.textContent = spinning ? 'Turning' : 'Still';
+    spinButton.setAttribute('aria-pressed', String(spinning));
+  };
+  crossInput.addEventListener('input', place);
+  tiltInput.addEventListener('input', place);
+  spinButton.addEventListener('click', () => { spinning = !spinning; button(); });
+  place();
+  button();
+
+  return {
+    labels,
+    update: delta => {
+      if (spinning) { phase += delta * .25; spin.rotation = phase; }
+    },
+  };
+}
+
+/* --------------------------------------------------------------------------------------------
  * 08 · A chart in 3D: plotFrame, ticks and a function curve.
  * ------------------------------------------------------------------------------------------ */
 
@@ -589,7 +646,7 @@ async function initialize(): Promise<void> {
   const first = await WebGPUView.create($<HTMLCanvasElement>('coordinates-canvas'), { samples: msaa, maxDpr, onError: report });
   views.push(first);
   if (disposed) { first.dispose(); return; }
-  for (const id of ['interpolation-canvas', 'transparency-canvas', 'shapes-canvas', 'groups-canvas', 'labels-canvas', 'colour-canvas', 'plot-canvas']) {
+  for (const id of ['interpolation-canvas', 'transparency-canvas', 'shapes-canvas', 'groups-canvas', 'labels-canvas', 'colour-canvas', 'plot-canvas', 'depth-canvas']) {
     views.push(await WebGPUView.create($<HTMLCanvasElement>(id), { device: first.device, onError: report }));
   }
   demos.push(
@@ -601,6 +658,7 @@ async function initialize(): Promise<void> {
     labelDemo(views[5]),
     colourDemo(views[6]),
     plotDemo(views[7]),
+    depthDemo(views[8]),
   );
 
   const info = first.adapterInfo;
