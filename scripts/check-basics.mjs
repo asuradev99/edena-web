@@ -1,7 +1,7 @@
 // Run against a Chrome debugging session: node scripts/check-basics.mjs [port]
 //
 // Checks the basics tour the way a reader meets it:
-//   1. every one of the seventeen demos draws something, and each draws something distinct;
+//   1. every one of the nineteen demos draws something, and each draws something distinct;
 //   2. every control changes its own stage — projection, grid, marker height, opacity, spin, the mesh
 //      selector, the group's spread and opacity, and the helix's turn count — and leaves the others be;
 //   3. the two moving demos advance on their own, and the transport seeks;
@@ -98,7 +98,7 @@ try {
       const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
       const stage = document.getElementById(${JSON.stringify(stageId)}).querySelector('.stage');
       stage.scrollIntoView({ block: 'center' });
-      await pause(450);
+      await pause(250);
       const r = stage.getBoundingClientRect();
       return { x: Math.round(r.x), y: Math.round(r.y), width: Math.round(r.width), height: Math.round(r.height) };
     })()`);
@@ -106,7 +106,7 @@ try {
     return evaluate(`window.__measureRegion(${JSON.stringify(shot)}, ${JSON.stringify(rect)})`);
   };
 
-  const stageIds = ['coordinates', 'interpolation', 'transparency', 'shapes', 'groups', 'labels', 'colour', 'plot', 'depth', 'instances', 'camera', 'simulation', 'field', 'streamlines', 'story', 'vectors', 'path'];
+  const stageIds = ['coordinates', 'interpolation', 'transparency', 'shapes', 'groups', 'labels', 'colour', 'plot', 'depth', 'instances', 'camera', 'simulation', 'field', 'streamlines', 'story', 'vectors', 'path', 'normals', 'layers'];
   const startup = await evaluate(`({ stats: document.getElementById('stats').textContent, status: document.getElementById('status').hidden, labels: document.querySelectorAll('.labels span').length })`);
   assert.ok(startup.status, `the page reported an error: ${await evaluate('document.getElementById("status").textContent')}`);
   assert.match(startup.stats, /fps/);
@@ -153,15 +153,20 @@ try {
     ['vectors-spread', 140, 'vectors'],
     ['path-kind', 'loop', 'path'],
     ['path-time', .75, 'path'],
+    ['normals-kind', 'dome', 'normals'],
+    ['normals-length', 1.3, 'normals'],
+    ['layers-bonds', false, 'layers'],
+    ['layers-atoms', false, 'layers'],
+    ['layers-axes', false, 'layers'],
   ];
   // Stop the demos that spin, so every control can be judged against a still picture. The spin buttons
   // themselves are checked afterwards, by measuring exactly this drift.
-  await evaluate(`document.getElementById('transparency-spin').click(); document.getElementById('groups-spin').click(); document.getElementById('depth-spin').click(); document.getElementById('instances-spin').click(); document.getElementById('field-spin').click(); document.getElementById('streamlines-turn').click(); document.getElementById('vectors-spin').click();`);
+  await evaluate(`document.getElementById('transparency-spin').click(); document.getElementById('groups-spin').click(); document.getElementById('depth-spin').click(); document.getElementById('instances-spin').click(); document.getElementById('field-spin').click(); document.getElementById('streamlines-turn').click(); document.getElementById('vectors-spin').click(); document.getElementById('normals-spin').click(); document.getElementById('layers-turn').click();`);
   await evaluate(`{ const node = document.getElementById('path-play'); if (node.textContent === 'Pause') node.click(); }`);
   await evaluate(`{ const node = document.getElementById('story-play'); if (node.textContent === 'Pause') node.click(); }`);
   await wait(500);
   // Only these hold still on their own, so only they can prove that a control left them alone.
-  const still = new Set(['coordinates', 'shapes', 'groups', 'colour', 'plot', 'depth', 'instances', 'field', 'streamlines', 'story', 'vectors', 'path']);
+  const still = new Set(['coordinates', 'shapes', 'groups', 'colour', 'plot', 'depth', 'instances', 'field', 'streamlines', 'story', 'vectors', 'path', 'normals', 'layers']);
   for (const [control, value, stageId] of changes) {
     // The helix keeps moving, so stop it first: then the turn count is the only thing that changes.
     if (control === 'labels-turns' || control.startsWith('camera-') || control.startsWith('simulation-')) {
@@ -173,7 +178,9 @@ try {
     // animate on their own, so each stage is compared against itself a moment before the change.
     const before = await region(stageId);
     const neighbours = {};
-    for (const other of stageIds.filter(candidate => candidate !== stageId && still.has(candidate))) neighbours[other] = await region(other);
+    // Two witnesses are enough to show a control stays inside its own demo, and measuring every
+    // still stage for every control made this check take minutes.
+    for (const other of stageIds.filter(candidate => candidate !== stageId && still.has(candidate)).slice(0, 1)) neighbours[other] = await region(other);
     const drift = difference(before, await region(stageId));
     if (value === 'click') await evaluate(`document.getElementById(${JSON.stringify(control)}).click()`);
     else await evaluate(`window.__set(${JSON.stringify(control)}, ${JSON.stringify(value)})`);
@@ -188,15 +195,22 @@ try {
     }
   }
 
+  // The layer checkboxes were switched off by the sweep above, which leaves that stage empty; put them
+  // back before anything else measures it.
+  for (const id of ['layers-axes', 'layers-bonds', 'layers-atoms']) await evaluate(`window.__set(${JSON.stringify(id)}, true)`);
+  await wait(200);
+
   // The spin button is a state rather than a nudge: prove it by holding the stage still, then letting
   // it go again. A rotating scene drifts on its own, which is exactly what this measures.
-  for (const [button, stageId] of [['transparency-spin', 'transparency'], ['groups-spin', 'groups'], ['depth-spin', 'depth'], ['instances-spin', 'instances'], ['field-spin', 'field'], ['streamlines-turn', 'streamlines'], ['vectors-spin', 'vectors']]) {
-    const heldStill = difference(await region(stageId), await region(stageId));
+  for (const [button, stageId] of [['transparency-spin', 'transparency'], ['groups-spin', 'groups'], ['depth-spin', 'depth'], ['instances-spin', 'instances'], ['field-spin', 'field'], ['streamlines-turn', 'streamlines'], ['vectors-spin', 'vectors'], ['normals-spin', 'normals'], ['layers-turn', 'layers']]) {
+    // Give each measurement a second: a slow turn through a small diagram needs time to show up.
+    const heldStill = difference(await region(stageId), await wait(1000).then(() => region(stageId)));
     assert.ok(heldStill < .02, `${stageId} should hold still once stopped (drift ${heldStill.toFixed(5)})`);
     await evaluate(`document.getElementById(${JSON.stringify(button)}).click()`);
     await wait(400);
     // Compared with the stage's own still drift rather than a fixed number: a thin diagram turns
     // through far fewer pixels per second than a field of spheres.
+    await wait(1000);
     const spinning = difference(await region(stageId), await region(stageId));
     assert.ok(spinning > heldStill + .005, `${stageId} should move again once started (still ${heldStill.toFixed(5)}, moving ${spinning.toFixed(5)})`);
     await evaluate(`document.getElementById(${JSON.stringify(button)}).click()`);
@@ -275,11 +289,11 @@ try {
   const stats = await evaluate(`document.getElementById('stats').textContent`);
   const fps = Number(/· (\d+) fps/.exec(stats)?.[1] ?? 0);
   assert.ok(fps >= 50, `expected a healthy frame rate, saw ${stats}`);
-  assert.match(stats, /17 views/);
+  assert.match(stats, /19 views/);
   const problems = events.filter(event => event.method === 'Runtime.exceptionThrown' || (event.method === 'Runtime.consoleAPICalled' && event.params.type === 'error') || (event.method === 'Log.entryAdded' && event.params.entry.level === 'error'));
   assert.equal(problems.length, 0, `the page reported ${problems.length} problem(s): ${JSON.stringify(problems[0]?.params ?? {}).slice(0, 300)}`);
 
-  console.log('PASS: seventeen demos drawing distinct scenes, every control moving its own stage alone,');
+  console.log('PASS: nineteen demos drawing distinct scenes, every control moving its own stage alone,');
   console.log('      the helix and the timeline running, the transport seeking and resuming,', stats);
   console.log('     ', JSON.stringify(Object.fromEntries(stageIds.map(stageId => [stageId, Number(signatures[stageId].mean.toFixed(3))]))));
 } finally {

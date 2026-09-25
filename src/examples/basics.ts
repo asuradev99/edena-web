@@ -554,6 +554,144 @@ function colourDemo(view: WebGPUView): Demo {
 }
 
 /* --------------------------------------------------------------------------------------------
+ * 19 · Switching layers on and off: three groups and one boolean each.
+ * ------------------------------------------------------------------------------------------ */
+
+function layerDemo(view: WebGPUView): Demo {
+  look(view, .62, .3, 7.6);
+  const labels = new LabelLayer($('layers-labels'), view.camera);
+  const spin = new Group();
+  const axes = new Group(), bonds = new Group(), atoms = new Group();
+  spin.add(axes, bonds, atoms);
+  view.world.add(spin);
+
+  const corners: Vec3[] = [];
+  for (const x of [-1, 1]) for (const y of [-1, 1]) for (const z of [-1, 1]) corners.push([x, y, z]);
+  const edges: Geometry[] = [];
+  for (let i = 0; i < corners.length; i++) for (let j = i + 1; j < corners.length; j++) {
+    const distance = Math.hypot(corners[i][0] - corners[j][0], corners[i][1] - corners[j][1], corners[i][2] - corners[j][2]);
+    if (distance < 2.1) edges.push(polyline([corners[i], corners[j]], .03, 6));
+  }
+  axes.add(new Visual(count(axes3d(1.5, .006)), rgba('#dbe9f5', .55)));
+  bonds.add(new Visual(count(merge(...edges)), rgba('#9ad0ff', .9)));
+  const atomMesh = shadedSphere(.17);
+  for (const [index, corner] of corners.entries()) {
+    const visual = new Visual(atomMesh, rgba(index % 2 ? '#f7d681' : '#83c167'));
+    visual.position = corner;
+    atoms.add(visual);
+  }
+
+  const layers: [string, Group, HTMLInputElement][] = [
+    ['axes', axes, $<HTMLInputElement>('layers-axes')],
+    ['bonds', bonds, $<HTMLInputElement>('layers-bonds')],
+    ['atoms', atoms, $<HTMLInputElement>('layers-atoms')],
+  ];
+  const readout = $('layers-readout');
+  const summary = labels.addHTML(mathml(mn('')), () => [0, -1.9, 0], '#9db0c2', 'math-label');
+  const sync = (): void => {
+    // One boolean per group: the whole subtree drops out of the frame walk, no geometry rebuilt.
+    for (const [, group, input] of layers) group.visible = input.checked;
+    const on = layers.filter(([, , input]) => input.checked).map(([name]) => name);
+    const text = `${on.length} layer${on.length === 1 ? '' : 's'} on${on.length ? ` · ${on.join(', ')}` : ''}`;
+    readout.textContent = text;
+    summary.innerHTML = mathml(mtext(text));
+  };
+  for (const [, , input] of layers) input.addEventListener('change', sync);
+
+  const turnButton = $<HTMLButtonElement>('layers-turn');
+  let spinning = !reducedMotion, phase = 0;
+  const button = (): void => {
+    turnButton.textContent = spinning ? 'Turning' : 'Still';
+    turnButton.setAttribute('aria-pressed', String(spinning));
+  };
+  turnButton.addEventListener('click', () => { spinning = !spinning; button(); });
+  sync();
+  button();
+
+  return {
+    labels,
+    update: delta => {
+      if (spinning) phase += delta * .4;
+      spin.rotation = phase;
+    },
+  };
+}
+
+/* --------------------------------------------------------------------------------------------
+ * 18 · A surface and its normals: sample a height field, and draw the way it faces.
+ * ------------------------------------------------------------------------------------------ */
+
+function normalDemo(view: WebGPUView): Demo {
+  look(view, .58, .4, 7.6);
+  const labels = new LabelLayer($('normals-labels'), view.camera);
+  const spin = new Group();
+  view.world.add(spin, new Visual(count(axes3d(1.3, .006)), rgba('#dbe9f5', .25)));
+
+  const fields: Record<string, { f: (x: number, y: number) => number; bounds: [number, number]; colour: string }> = {
+    saddle: { f: (x, y) => .42 * (x * x - y * y) * .5, bounds: [-1.5, 1.5], colour: '#83c167' },
+    wave: { f: (x, y) => .38 * Math.sin(1.7 * x) * Math.cos(1.7 * y), bounds: [-1.7, 1.7], colour: '#58c4dd' },
+    dome: { f: (x, y) => .9 * Math.exp(-(x * x + y * y) / 2.2), bounds: [-1.6, 1.6], colour: '#b5a1ff' },
+  };
+  let kind = 'saddle', arrowLength = .7, phase = 0, spinning = !reducedMotion;
+  const readout = labels.addHTML(mathml(mn('')), () => [0, -1.9, 0], '#9db0c2', 'math-label');
+
+  const build = (): void => {
+    const { f, bounds, colour } = fields[kind];
+    // A comb of normals, not a shell: sampling every third node of a 22-step grid keeps the surface
+    // visible through the arrows.
+    const [low, high] = bounds, step = (high - low) / 22 * 3;
+    const normals: Geometry[] = [];
+    const derivative = (x: number, y: number) => {
+      const h = 1e-3;
+      return [(f(x + h, y) - f(x - h, y)) / (2 * h), (f(x, y + h) - f(x, y - h)) / (2 * h)];
+    };
+    for (let x = low + step; x <= high - step * .5; x += step) {
+      for (let y = low + step; y <= high - step * .5; y += step) {
+        const [fx, fy] = derivative(x, y);
+        // (x, f, y) is the surface; the normal is (-f_x, 1, -f_y) normalised, which is the cross
+        // product of the two tangents for a height field.
+        const raw: Vec3 = [-fx, 1, -fy];
+        const length = Math.hypot(...raw);
+        const normal: Vec3 = [raw[0] / length, raw[1] / length, raw[2] / length];
+        const point: Vec3 = [x, f(x, y), y];
+        normals.push(arrow(point, [point[0] + normal[0] * arrowLength, point[1] + normal[1] * arrowLength, point[2] + normal[2] * arrowLength], .008));
+      }
+    }
+    spin.clear();
+    spin.add(
+      new Visual(count(functionSurface(f, [low, high], [low, high], [64, 64])), rgba(colour, .78)),
+      new Visual(count(merge(...normals)), rgba('#f7d681', .9)),
+    );
+    readout.innerHTML = mathml(mtext(`${kind} · ${normals.length} normals · length ${arrowLength.toFixed(2)}`));
+  };
+
+  const kindSelect = $<HTMLSelectElement>('normals-kind');
+  const lengthInput = $<HTMLInputElement>('normals-length');
+  const spinButton = $<HTMLButtonElement>('normals-spin');
+  const button = (): void => {
+    spinButton.textContent = spinning ? 'Turning' : 'Still';
+    spinButton.setAttribute('aria-pressed', String(spinning));
+  };
+  kindSelect.addEventListener('change', () => { kind = kindSelect.value; build(); });
+  lengthInput.addEventListener('input', () => {
+    arrowLength = Number(lengthInput.value);
+    $('normals-length-value').textContent = arrowLength.toFixed(2);
+    build();
+  });
+  spinButton.addEventListener('click', () => { spinning = !spinning; button(); });
+  build();
+  button();
+
+  return {
+    labels,
+    update: delta => {
+      if (spinning) phase += delta * .3;
+      spin.rotation = phase;
+    },
+  };
+}
+
+/* --------------------------------------------------------------------------------------------
  * 17 · A path to travel along: a cubic Bezier, its control polygon, and an eased marker.
  * ------------------------------------------------------------------------------------------ */
 
@@ -1238,11 +1376,11 @@ function depthDemo(view: WebGPUView): Demo {
     const cross = Number(crossInput.value), lean = Number(tiltInput.value) * Math.PI / 180;
     $('depth-cross-value').textContent = cross.toFixed(2);
     $('depth-tilt-value').textContent = `${Math.round(Number(tiltInput.value))}°`;
-    // The wall leans about x and slides along z, so it sweeps through the floor and the balls.
+    // The wall slides along z, so it sweeps through the floor and the balls; the lean tilts the whole
+    // stack, which is a bigger and clearer change than leaning one thin slab.
     wall.position = [0, 0, cross];
     wallEdge.position = [0, 0, cross];
-    wall.orientation = [lean, 0, 0];
-    wallEdge.orientation = [lean, 0, 0];
+    spin.orientation = [lean, 0, 0];
   };
   const button = (): void => {
     spinButton.textContent = spinning ? 'Turning' : 'Still';
@@ -1311,7 +1449,7 @@ function plotDemo(view: WebGPUView): Demo {
  * ------------------------------------------------------------------------------------------ */
 
 async function initialize(): Promise<void> {
-  const canvases = ['coordinates-canvas', 'interpolation-canvas', 'transparency-canvas', 'shapes-canvas', 'groups-canvas', 'labels-canvas', 'colour-canvas', 'plot-canvas', 'depth-canvas', 'instances-canvas', 'camera-canvas', 'simulation-canvas', 'field-canvas', 'streamlines-canvas', 'story-canvas', 'vectors-canvas', 'path-canvas'];
+  const canvases = ['coordinates-canvas', 'interpolation-canvas', 'transparency-canvas', 'shapes-canvas', 'groups-canvas', 'labels-canvas', 'colour-canvas', 'plot-canvas', 'depth-canvas', 'instances-canvas', 'camera-canvas', 'simulation-canvas', 'field-canvas', 'streamlines-canvas', 'story-canvas', 'vectors-canvas', 'path-canvas', 'normals-canvas', 'layers-canvas'];
   const first = await WebGPUView.create($<HTMLCanvasElement>(canvases[0]), { samples: msaa, maxDpr, onError: report });
   views.push(first);
   if (disposed) { first.dispose(); return; }
@@ -1336,6 +1474,8 @@ async function initialize(): Promise<void> {
     storyDemo(views[14]),
     vectorDemo(views[15]),
     pathDemo(views[16]),
+    normalDemo(views[17]),
+    layerDemo(views[18]),
   );
 
   // Eleven views on one page: drawing the ones below the fold would cost a full render each frame for
