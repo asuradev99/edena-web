@@ -68,11 +68,10 @@ export function fractionalDistanceSquared(a: Vec3, b: Vec3): number {
   return sum;
 }
 
-/** Cartesian separation in ångström, taking the shortest periodic image. */
+/** Cartesian separation in ångström between two **fractional** sites, using the shortest image. */
 export function periodicDistance(a: Vec3, b: Vec3, lattice: Lattice): number {
-  const delta = sub(a, b);
-  const latticeDelta = cartesianToFractional(delta, lattice).map(value => value - Math.round(value)) as Vec3;
-  return Math.hypot(...fractionalToCartesian(latticeDelta, lattice));
+  const delta: Vec3 = [0, 1, 2].map(axis => { const raw = a[axis] - b[axis]; return raw - Math.round(raw); }) as Vec3;
+  return Math.hypot(...fractionalToCartesian(delta, lattice));
 }
 
 export type Supercell = CrystalStructure & { /** Cell offset of every copied site, in units of the original cell. */ offsets: Vec3[]; /** The original, unreplicated cell. */ base: CrystalStructure };
@@ -162,18 +161,23 @@ export function bonds(positions: Vec3[], lattice: Lattice, cutoff: number, optio
   const found: Bond[] = [];
   for (let i = 0; i < positions.length; i++) for (let j = i; j < positions.length; j++) {
     if (i === j && !options.self) continue;
-    let best: Bond | undefined;
     for (const image of offsets) {
-      if (i === j && image[0] === 0 && image[1] === 0 && image[2] === 0) continue;
+      if (i === j) {
+        // A site bonds to its own periodic image; the ±v pair is the same neighbour, so
+        // keep only the canonical half-space copy.
+        if (image[0] === 0 && image[1] === 0 && image[2] === 0) continue;
+        if (image[0] < 0 || (image[0] === 0 && (image[1] < 0 || (image[1] === 0 && image[2] < 0)))) continue;
+      }
       const delta = fractionalToCartesian([
         positions[j][0] + image[0] - positions[i][0],
         positions[j][1] + image[1] - positions[i][1],
         positions[j][2] + image[2] - positions[i][2],
       ], lattice);
       const length = Math.hypot(...delta);
-      if (length > 1e-6 && length <= cutoff && (!best || length < best.length)) best = { i, j, image, length };
+      // Keep *every* image within the cutoff, not just the closest. A large cation can have
+      // one partner on this side of the cell and its image on the other; both are real bonds.
+      if (length > 1e-6 && length <= cutoff) found.push({ i, j, image, length });
     }
-    if (best) found.push(best);
   }
   const limit = options.maxNeighbours;
   if (!limit) return found;
@@ -327,3 +331,66 @@ export function shortestDistance(positions: Vec3[], lattice: Lattice): number {
 function dot(a: Vec3, b: Vec3): number { return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]; }
 function determinant(a: Vec3, b: Vec3, c: Vec3): number { return dot(a, cross(b, c)); }
 function normalize(v: Vec3): Vec3 { const n = Math.hypot(...v) || 1; return [v[0] / n, v[1] / n, v[2] / n]; }
+
+/** The lattice as a 3×3 matrix whose columns are the cell vectors (fractional → Cartesian). */
+export function latticeMatrix(lattice: Lattice): number[][] {
+  return [
+    [lattice[0][0], lattice[1][0], lattice[2][0]],
+    [lattice[0][1], lattice[1][1], lattice[2][1]],
+    [lattice[0][2], lattice[1][2], lattice[2][2]],
+  ];
+}
+function multiply3(a: number[][], b: number[][]): number[][] {
+  return a.map(row => [0, 1, 2].map(column => row[0] * b[0][column] + row[1] * b[1][column] + row[2] * b[2][column]));
+}
+function inverse3(m: number[][]): number[][] {
+  const d = m[0][0] * (m[1][1] * m[2][2] - m[1][2] * m[2][1]) - m[0][1] * (m[1][0] * m[2][2] - m[1][2] * m[2][0]) + m[0][2] * (m[1][0] * m[2][1] - m[1][1] * m[2][0]);
+  if (Math.abs(d) < 1e-12) throw new Error('Matrix is singular');
+  return [
+    [(m[1][1] * m[2][2] - m[1][2] * m[2][1]) / d, (m[0][2] * m[2][1] - m[0][1] * m[2][2]) / d, (m[0][1] * m[1][2] - m[0][2] * m[1][1]) / d],
+    [(m[1][2] * m[2][0] - m[1][0] * m[2][2]) / d, (m[0][0] * m[2][2] - m[0][2] * m[2][0]) / d, (m[0][2] * m[1][0] - m[0][0] * m[1][2]) / d],
+    [(m[1][0] * m[2][1] - m[1][1] * m[2][0]) / d, (m[0][1] * m[2][0] - m[0][0] * m[2][1]) / d, (m[0][0] * m[1][1] - m[0][1] * m[1][0]) / d],
+  ];
+}
+/**
+ * The operation's linear part in Cartesian coordinates: `A·R·A⁻¹`. For an operation that
+ * preserves the lattice this is an ordinary orthogonal matrix, which is what lets the viewer
+ * animate a rotation as a circular arc rather than a chord.
+ */
+export function cartesianOperation(lattice: Lattice, rotation: number[][]): number[][] {
+  const a = latticeMatrix(lattice);
+  return multiply3(multiply3(a, rotation), inverse3(a));
+}
+/** Axis and angle of a proper rotation matrix (det +1). Undefined for the identity. */
+export function axisAngle(m: number[][]): { axis: Vec3; angle: number } | undefined {
+  const trace = m[0][0] + m[1][1] + m[2][2];
+  const angle = Math.acos(Math.max(-1, Math.min(1, (trace - 1) / 2)));
+  if (!Number.isFinite(angle) || angle < 1e-7) return undefined;
+  const skew: Vec3 = [m[2][1] - m[1][2], m[0][2] - m[2][0], m[1][0] - m[0][1]];
+  const sine = Math.sin(angle);
+  if (Math.abs(sine) > 1e-6) return { axis: normalize(skew), angle };
+  // angle ≈ π: the skew part vanishes, so read the axis from (R + I).
+  const candidates: Vec3[] = [[m[0][0] + 1, m[1][0], m[2][0]], [m[0][1], m[1][1] + 1, m[2][1]], [m[0][2], m[1][2], m[2][2] + 1]];
+  const longest = candidates.reduce((best, row) => Math.hypot(...row) > Math.hypot(...best) ? row : best);
+  return { axis: normalize(longest), angle };
+}
+/** Rodrigues' rotation of a point about an axis through the origin. */
+export function rotateAboutAxis(point: Vec3, axis: Vec3, angle: number): Vec3 {
+  const [x, y, z] = normalize(axis), c = Math.cos(angle), s = Math.sin(angle);
+  const dotp = point[0] * x + point[1] * y + point[2] * z;
+  const crossp: Vec3 = [y * point[2] - z * point[1], z * point[0] - x * point[2], x * point[1] - y * point[0]];
+  return [
+    point[0] * c + crossp[0] * s + x * dotp * (1 - c),
+    point[1] * c + crossp[1] * s + y * dotp * (1 - c),
+    point[2] * c + crossp[2] * s + z * dotp * (1 - c),
+  ];
+}
+/** True when the cell is cubic to within a relative tolerance (angles in degrees). */
+export function isCubic(lattice: Lattice, tolerance = 1e-2): boolean {
+  const lengths = lattice.map(vector => Math.hypot(...vector));
+  const equalLengths = Math.max(...lengths) - Math.min(...lengths) <= tolerance * Math.max(...lengths);
+  const orthogonal = [cross(lattice[0], lattice[1]), cross(lattice[1], lattice[2]), cross(lattice[2], lattice[0])]
+    .every((vector, axis) => Math.abs(dot(normalize(vector), normalize(lattice[axis]))) <= tolerance);
+  return equalLengths && orthogonal;
+}
+

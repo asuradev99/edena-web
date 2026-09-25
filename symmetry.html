@@ -1,17 +1,110 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Edena · Crystal symmetry</title>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Edena · Crystal symmetry</title>
 <style>
-:root{color-scheme:dark;font-family:system-ui,sans-serif}*{box-sizing:border-box}body{margin:0;background:#0b1019;color:#e9eff7}main{max-width:1200px;margin:auto;padding:32px}a{color:#83d4df}header{display:flex;justify-content:space-between;align-items:center}h1{font:44px Georgia,serif;margin:24px 0 12px}p{color:#a9b8c8;line-height:1.7}.layout{display:grid;grid-template-columns:1fr 340px;gap:24px}.stage{position:relative;height:560px;border:1px solid #293648;border-radius:20px;overflow:hidden;background:#060a10}.stage canvas{width:100%;height:100%;display:block;touch-action:none}#labels{position:absolute;inset:0;pointer-events:none}aside{background:#111b29;border:1px solid #293648;border-radius:20px;padding:24px}label{display:block;margin:18px 0 8px;font-size:13px}select,button,input{font:inherit;padding:12px;background:#19283a;color:#eef8ff;border:1px solid #40526a;border-radius:9px;width:100%}button{margin-top:14px;cursor:pointer;background:#175d70}input{accent-color:#70d7df}output{display:block;font:14px monospace;color:#f7d681;margin-top:20px}#status{color:#ffaca4}.file{border:1px dashed #4b677a;border-radius:12px;padding:14px;margin:12px 0;color:#a9c4ce}.file.active{background:#183441;border-color:#83d4df}.file input{padding:6px;background:transparent;border:0}.file-list{display:grid;gap:6px;margin:12px 0}.file-item{padding:9px 10px;border-radius:8px;background:#162536;color:#cde5e9;font:12px ui-monospace,monospace}.file-item.error{color:#ffaaa1;background:#30202a}button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid #f7d681;outline-offset:4px}@media(max-width:760px){main{padding:18px}.layout{grid-template-columns:1fr}.stage{height:420px}h1{font-size:34px}}
-</style></head><body><main>
-<header><a href="/">← Edena playground</a><span>CRYSTAL SYMMETRY / 01</span></header>
-<h1>Different positions. The same crystal.</h1>
-<p>Load a VASP POSCAR/CONTCAR and a phonopy symmetry file to inspect operations acting on your actual structure. Files stay in your browser; the built-in cubic cell is a starting point.</p>
-<div class="layout"><div class="stage"><canvas id="scene" aria-label="Crystal symmetry operation"></canvas><div id="labels"></div></div><aside>
-<div id="drop-zone" class="file">Drop a POSCAR and/or symmetry.yaml here</div>
-<label for="files-input">Load files together</label><input id="files-input" type="file" multiple>
-<div id="file-list" class="file-list" aria-live="polite"><div class="file-item">No files loaded yet</div></div>
-<label for="poscar-file">Structure · POSCAR / CONTCAR</label><input id="poscar-file" type="file">
-<label for="symmetry-file">Operations · phonopy symmetry</label><input id="symmetry-file" type="file">
-<p id="structure-info"></p><div id="legend" class="file-list"></div><label for="operation">Symmetry operation</label><select id="operation"></select><p id="description"></p>
-<label for="progress">Transformation progress</label><input id="progress" type="range" min="0" max="1" step="0.001" value="0"><button id="play">Animate operation</button><button id="reset">Reset</button><output id="mapping"></output><p>Cyan atoms move through fractional coordinates under the selected operation. Drag to orbit and scroll to zoom.</p><p id="status" role="alert"></p>
-</aside></div><script type="module" src="build/examples/symmetry.js"></script></main></body></html>
+:root{color-scheme:dark;font-family:system-ui,sans-serif;--bg:#0b1019;--panel:#111b29;--line:#293648;--ink:#e9eff7;--muted:#8fa2b8;--accent:#83d4df;--gold:#f7d681}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink)}
+main{max-width:1360px;margin:auto;padding:32px}a{color:var(--accent)}
+header{display:flex;justify-content:space-between;align-items:center;gap:16px}
+h1{font:42px Georgia,serif;margin:22px 0 6px;letter-spacing:-1px}
+.lede{color:var(--muted);line-height:1.7;max-width:60ch}
+.layout{display:grid;grid-template-columns:minmax(0,1fr) 380px;gap:22px;margin-top:22px}
+.stage{position:relative;height:640px;border:1px solid var(--line);border-radius:18px;overflow:hidden;background:radial-gradient(circle at 50% 42%,#0d1521,#05080d 72%)}
+.stage canvas{width:100%;height:100%;display:block;touch-action:none}
+#labels{position:absolute;inset:0;pointer-events:none}
+.math-label{font-family:"STIX Two Math","STIXGeneral","Cambria Math","DejaVu Serif",serif;font-size:14px;font-style:normal;text-shadow:0 1px 6px #000,0 0 3px #000}
+.hint{position:absolute;left:14px;bottom:12px;font-size:11px;color:#7d90a6;letter-spacing:.02em}
+aside{display:flex;flex-direction:column;gap:14px;min-width:0}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:16px 18px}
+.card h2{margin:0 0 10px;font-size:11px;letter-spacing:.16em;color:var(--muted);font-weight:700;text-transform:uppercase}
+.file{border:1px dashed #4b677a;border-radius:12px;padding:12px;margin:0 0 12px;color:#a9c4ce;font-size:13px;text-align:center}
+.file.active{background:#183441;border-color:var(--accent)}
+label{display:block;margin:12px 0 6px;font-size:12px;color:#c3d2e2}
+select,button,input[type=file]{font:inherit;padding:9px 10px;background:#19283a;color:#eef8ff;border:1px solid #40526a;border-radius:9px;width:100%}
+input[type=range]{width:100%;accent-color:#70d7df}
+button{cursor:pointer;background:#175d70;border-color:#2b7f95}
+button:hover{background:#1d718a}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.transport{display:grid;grid-template-columns:auto auto 1fr auto;gap:10px;align-items:center}
+.transport button{width:auto;min-width:44px;padding:9px 14px;margin:0}
+.transport .value{font:13px monospace;color:var(--gold);text-align:right}
+.toggles{display:flex;flex-wrap:wrap;gap:14px;margin-top:12px;font-size:12px;color:#c3d2e2}
+.toggles label{display:flex;align-items:center;gap:6px;margin:0;cursor:pointer}
+.toggles input{width:auto}
+.info-title{font-family:Georgia,serif;font-size:17px;margin-bottom:6px}
+.info-math{overflow-x:auto}
+.info-math math{font-family:"STIX Two Math","STIXGeneral","Cambria Math","DejaVu Serif",serif}
+.info-line{color:var(--muted);font-size:12px;margin-top:6px}
+.file-list{display:grid;gap:6px;margin-top:10px}
+.file-item{padding:7px 9px;border-radius:8px;background:#162536;color:#cde5e9;font:11px ui-monospace,monospace;word-break:break-all}
+.file-item.error{color:#ffaaa1;background:#30202a}
+.legend-head{display:flex;justify-content:space-between;align-items:center;cursor:pointer}
+.legend-row{display:grid;grid-template-columns:14px 1fr auto auto;gap:9px;align-items:center;padding:5px 0;font-size:13px}
+.legend-row .swatch{width:13px;height:13px;border-radius:4px;box-shadow:0 0 8px currentColor}
+.legend-size{color:var(--muted);font-size:11px;font-variant-numeric:tabular-nums}
+#legend.collapsed .legend-row{display:none}
+.muted{color:var(--muted)}
+.report-line{font-size:12.5px;color:#c3d2e2;margin:4px 0;line-height:1.5}
+.map-grid{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px}
+.map-cell{font:11px ui-monospace,monospace;padding:3px 6px;border-radius:6px;background:#162536;border-left:3px solid var(--accent)}
+.selection-title{font-family:Georgia,serif;font-size:18px;margin-bottom:8px}
+.selection-title sub{font-size:11px}
+.readout-row{display:flex;justify-content:space-between;gap:10px;font-size:12px;padding:3px 0;border-bottom:1px dashed #22303f}
+.readout-row span{color:var(--muted)}
+.readout-row code{color:var(--gold);font-variant-numeric:tabular-nums}
+.op-name{font-family:Georgia,serif;font-size:16px;color:var(--gold)}
+.op-matrix{font:11px ui-monospace,monospace;color:var(--muted);margin-top:5px;word-break:break-all}
+#status{color:#ffaca4;font-size:12px;min-height:1em}
+@media(max-width:900px){main{padding:18px}.layout{grid-template-columns:1fr}.stage{height:440px}h1{font-size:32px}}
+</style></head>
+<body><main>
+<header><a href="/">← Edena playground</a><span style="font-size:10px;letter-spacing:.18em;color:#8fa2b8">CRYSTAL SYMMETRY / 02</span></header>
+<h1>Same crystal. Different positions.</h1>
+<p class="lede">Load a VASP POSCAR/CONTCAR and an optional phonopy <code>symmetry.yaml</code>. The viewer finds bonds, builds a supercell, and animates each symmetry operation — rotating atoms along true arcs — while reporting which sites map onto which.</p>
+<div class="layout">
+  <div class="stage"><canvas id="scene" aria-label="Crystal structure with symmetry operation animation"></canvas><div id="labels"></div><div class="hint">drag to orbit · scroll to zoom · click an atom for its spherical coordinates</div><div id="loading" hidden></div></div>
+  <aside>
+    <section class="card">
+      <h2>Files</h2>
+      <div id="drop-zone" class="file">Drop a POSCAR and/or symmetry.yaml here</div>
+      <label for="files-input">Load files together</label><input id="files-input" type="file" multiple>
+      <div class="row"><div><label for="poscar-file">POSCAR / CONTCAR</label><input id="poscar-file" type="file"></div><div><label for="symmetry-file">phonopy symmetry</label><input id="symmetry-file" type="file"></div></div>
+      <div id="file-list" class="file-list" aria-live="polite"></div>
+      <p id="status" role="alert"></p>
+    </section>
+    <section class="card">
+      <h2>Structure</h2>
+      <div id="structure-info"></div>
+      <div class="legend-head" id="legend-anchor"><h2 style="margin:12px 0 6px">Elements</h2><span class="muted" style="font-size:11px">click to fold</span></div>
+      <div id="legend"></div>
+      <label for="supercell">Supercell</label>
+      <select id="supercell"><option value="1" selected>1 × 1 × 1</option><option value="2">2 × 2 × 2</option><option value="3">3 × 3 × 3</option></select>
+      <label for="colour">Atom colour</label>
+      <select id="colour"><option value="species" selected>by element</option><option value="site">by site index</option></select>
+      <div class="toggles"><label><input type="checkbox" id="bonds" checked> bonds</label><label><input type="checkbox" id="cell" checked> cell</label><label><input type="checkbox" id="trails" checked> orbit trails</label></div>
+    </section>
+    <section class="card">
+      <h2>Symmetry operation</h2>
+      <select id="operation" size="1"></select>
+      <div id="description" style="margin-top:10px"></div>
+      <div class="transport" style="margin-top:14px">
+        <button id="play" aria-label="Play">▶</button>
+        <button id="reset" aria-label="Reset">↺</button>
+        <input id="progress" type="range" min="0" max="1" step="0.002" value="0" aria-label="Operation progress">
+        <span class="value" id="progress-value">0%</span>
+      </div>
+      <label for="speed">Playback speed</label>
+      <select id="speed"><option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="2">2×</option></select>
+    </section>
+    <section class="card">
+      <h2>Symmetry report</h2>
+      <div id="mapping"></div>
+    </section>
+    <section class="card">
+      <h2>Selected site</h2>
+      <div id="selection"></div>
+    </section>
+  </aside>
+</div>
+</main>
+<script type="module" src="build/examples/symmetry.js"></script></body></html>

@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   cellFromParameters, cellVolume, fractionalToCartesian, cartesianToFractional, CUBIC_OPERATIONS,
-  mapsOntoSelf, bonds, latticeSites, supercell, millerPlane,
+  mapsOntoSelf, bonds, latticeSites, supercell, millerPlane, periodicDistance,
   sphericalWedge, sphericalWedgeOutline, boxEdges, mathml, frac, mi,
 } from '../build/index.js';
 
@@ -57,6 +57,18 @@ test('bonds finds four neighbours per atom in diamond silicon', () => {
   close(Math.min(...found.map(bond => bond.length)), 5.43 * Math.sqrt(3) / 4, .02);
 });
 
+test('bonds counts every periodic neighbour, not just the closest image', () => {
+  // SrTiO3: the body-centre Ti is octahedrally coordinated by six oxygens. Three sit in
+  // the cell and three are periodic images, so a "closest image only" rule would find just three.
+  const perovskite = latticeSites('perovskite', { side: 3.905, species: ['Sr', 'Ti', 'O'] });
+  const found = bonds(perovskite.positions, perovskite.lattice, 1.95 * 1.28, { periodic: true });
+  const titanium = found.filter(bond => perovskite.species[bond.i] === 'Ti' || perovskite.species[bond.j] === 'Ti');
+  assert.equal(titanium.length, 6);
+  const oxygens = new Map();
+  for (const bond of found) for (const end of [bond.i, bond.j]) if (perovskite.species[end] === 'O') oxygens.set(end, (oxygens.get(end) ?? 0) + 1);
+  assert.deepEqual([...oxygens.values()], [2, 2, 2]);
+});
+
 test('supercell replicates sites and scales the cell', () => {
   const salt = latticeSites('rock-salt', { side: 2 });
   const big = supercell(salt, [2, 2, 2]);
@@ -82,6 +94,12 @@ test('spherical wedge stays inside its radii and traces twelve edges', () => {
   }
   assert.ok(sphericalWedgeOutline(.4, .6, .5, 1.1, .2, .9).vertices.length > 0);
   assert.ok(boxEdges([0, 0, 0], [1, 1, 1]).vertices.length > 0);
+});
+
+test('periodicDistance measures fractional sites through the shortest image', () => {
+  const lattice = [[2, 0, 0], [0, 2, 0], [0, 0, 2]];
+  close(periodicDistance([.05, 0, 0], [.95, 0, 0], lattice), .2, 1e-9);
+  close(periodicDistance([0, 0, 0], [.5, .5, .5], lattice), Math.sqrt(3), 1e-9);
 });
 
 test('mathtext assembles namespaced MathML', () => {

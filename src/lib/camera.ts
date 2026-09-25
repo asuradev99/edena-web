@@ -34,7 +34,7 @@ export class OrbitCamera {
   }
   attach(canvas:HTMLCanvasElement):()=>void {
     const abort=new AbortController(), opts={signal:abort.signal}; let active=false, x=0,y=0;
-    canvas.addEventListener('pointerdown',e=>{if(e.button!==0)return; active=true;x=e.clientX;y=e.clientY;canvas.setPointerCapture(e.pointerId);},opts);
+    canvas.addEventListener('pointerdown',e=>{if(e.button!==0)return; active=true;x=e.clientX;y=e.clientY;try{canvas.setPointerCapture(e.pointerId);}catch{/* synthetic pointers have no capture target */}},opts);
     canvas.addEventListener('pointermove',e=>{if(!active)return;this.yaw-=(e.clientX-x)*.006;this.pitch=clamp(this.pitch+(e.clientY-y)*.006,-1.4,1.4);x=e.clientX;y=e.clientY;},opts);
     const end=()=>{active=false;};
     canvas.addEventListener('pointerup',end,opts);canvas.addEventListener('pointercancel',end,opts);canvas.addEventListener('lostpointercapture',end,opts);
