@@ -25,7 +25,19 @@ npm run typecheck   # tsc -p tsconfig.library.json --noEmit
 npm test            # build, then node --test tests/*.test.mjs
 npm run build       # compile the library, showcase, and demo into build/
 npm run dev         # build, then serve the repo on http://localhost:5173
+
+node scripts/check-links.mjs           # static: links, scripts, and the tour's panel order — no browser
+node scripts/check-pages.mjs [port]    # every page loads, draws every canvas, and logs nothing
+node scripts/check-basics.mjs [port]   # the basics tour: every control, measured from the compositor
+node scripts/check-depth.mjs [port]    # the renderer's depth, and the crystal viewer, pixel by pixel
+node scripts/tidy-panels.mjs           # put the tour's panels back in the table of contents' order
 ```
+
+The three browser checks need a Chrome started with a debugging port and a server (`npm run dev`;
+they default to port 9444 and `http://127.0.0.1:5173`). They take the pixels from a compositor
+screenshot and measure them back inside the page, because a WebGPU canvas cannot be read once it has
+been presented. They disable the HTTP cache, and close the tab they opened — a leftover tab per run
+once starved the browser enough to halve the frame rate under test.
 
 Plain `npx tsc` (`tsconfig.json`) compiles all of `src/` — including the legacy prototype — into `dist/`; the library workflow uses `tsconfig.library.json`, whose output is `build/` with declarations.
 
