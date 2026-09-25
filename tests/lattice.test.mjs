@@ -5,6 +5,7 @@ import {
   mapsOntoSelf, bonds, latticeSites, supercell, millerPlane, periodicDistance,
   sphericalWedge, sphericalWedgeOutline, boxEdges, mathml, frac, mi,
   applyOperation, siteMapping, cartesianOperation, axisAngle, rotateAboutAxis, shadedSphere, sphere, latticePointGroup,
+  operationIsometry, isometryPoint, isometryTarget, improperNormal,
 } from '../build/index.js';
 
 const close = (a, b, tolerance = 1e-5) => assert.ok(Math.abs(a - b) < tolerance, `${a} ≈ ${b}`);
@@ -175,3 +176,120 @@ test('mathtext assembles namespaced MathML', () => {
   assert.match(html, /^<math xmlns="http:\/\/www\.w3\.org\/1998\/Math\/MathML"/);
   assert.match(html, /<mfrac><mi>d<\/mi><mi>q<\/mi><\/mfrac>/);
 });
+
+// --- The rigid motion behind the crystal viewer's operation animation ----------------------------
+
+const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+const determinant = m => dot(m[0], cross(m[1], m[2]));
+
+const cubicCell = cellFromParameters(3.905, 3.905, 3.905);
+const perovskite = latticeSites('perovskite', { side: 3.905, species: ['Sr', 'Ti', 'O'] });
+const CUBIC_POINT_GROUP = latticePointGroup(cubicCell).map(rotation => ({ rotation, translation: [0, 0, 0], label: '' }));
+/** The viewer draws the cell centred on a lattice point, so the symmetry origin is the cell centre. */
+const drawnSites = perovskite.positions.map(p => fractionalToCartesian([p[0] - .5, p[1] - .5, p[2] - .5], cubicCell));
+
+test('improperNormal returns the plane normal, not a vector lying in the plane', () => {
+  let mirrors = 0;
+  for (const operation of CUBIC_POINT_GROUP) {
+    const m = cartesianOperation(cubicCell, operation.rotation);
+    if (determinant(m) > 0) continue;
+    mirrors++;
+    const normal = improperNormal(m);
+    close(Math.hypot(...normal), 1, 1e-9);
+    // M n = -n is exactly what makes n the mirror normal.
+    const image = m.map(row => dot(row, normal));
+    for (let axis = 0; axis < 3; axis++) close(image[axis], -normal[axis], 1e-9);
+  }
+  assert.ok(mirrors >= 9, 'm-3m has nine mirror planes');
+  // The regression this guards: a diagonal mirror reported (and drawn) as the [001] mirror, because
+  // reading the *longest* column of M + I lands inside the plane instead of normal to it.
+  const diagonal = improperNormal([[0, 1, 0], [1, 0, 0], [0, 0, 1]]);
+  close(Math.abs(diagonal[0]), Math.SQRT1_2, 1e-9);
+  close(Math.abs(diagonal[1]), Math.SQRT1_2, 1e-9);
+  close(diagonal[2], 0, 1e-9);
+});
+
+test('operationIsometry reaches the operation itself at t = 1', () => {
+  for (const operation of CUBIC_POINT_GROUP) {
+    const isometry = operationIsometry(cubicCell, operation);
+    for (const fractional of [[0, 0, 0], [.25, .5, .75], [.5, .5, 0], [.1, .2, .3]]) {
+      const start = fractionalToCartesian(fractional, cubicCell);
+      const reached = isometryPoint(isometry, start, 1);
+      const expected = fractionalToCartesian(applyOperation(operation, fractional), cubicCell);
+      // Agreement is up to a lattice vector, so the fractional difference must be an integer.
+      const difference = cartesianToFractional([0, 1, 2].map(axis => reached[axis] - expected[axis]), cubicCell);
+      for (const value of difference) close(value - Math.round(value), 0, 1e-7);
+    }
+  }
+});
+
+test('a cubic cell needs no correction: every site simply travels its arc', () => {
+  for (const operation of CUBIC_POINT_GROUP) {
+    const isometry = operationIsometry(cubicCell, operation);
+    for (const point of drawnSites) {
+      const target = isometryTarget(isometry, point, cubicCell);
+      const image = isometryPoint(isometry, point, 1);
+      // Any lattice nudge here would show up as a straight chord dragging an atom home.
+      for (let axis = 0; axis < 3; axis++) close(target[axis], image[axis], 1e-12);
+      // ...and the target stays inside the drawn box.
+      const fractional = cartesianToFractional(target, cubicCell);
+      for (const value of fractional) assert.ok(Math.abs(value) <= .5 + 1e-9, 'target leaves the box');
+    }
+  }
+});
+
+test('every point-group operation maps the drawn cell onto equivalent sites', () => {
+  // Compare around the circle, so 0.9999999 and 0 are the same fractional coordinate.
+  const same = (a, b) => Math.abs((((a - b + .5) % 1) + 1) % 1 - .5) < 1e-6;
+  for (const operation of CUBIC_POINT_GROUP) {
+    const isometry = operationIsometry(cubicCell, operation);
+    for (const [index, point] of drawnSites.entries()) {
+      // The drawn frame is shifted half a cell from the cell frame, so shift back before comparing.
+      const reached = cartesianToFractional(isometryTarget(isometry, point, cubicCell), cubicCell).map(value => value + .5);
+      const equivalent = perovskite.positions.some((position, other) =>
+        perovskite.species[other] === perovskite.species[index] &&
+        position.every((value, axis) => same(value, reached[axis])));
+      assert.ok(equivalent, 'target must be an equivalent site of the same element');
+    }
+  }
+});
+
+test('a rotating site follows a circular arc about the axis', () => {
+  const c4 = { rotation: [[0, -1, 0], [1, 0, 0], [0, 0, 1]], translation: [0, 0, 0], label: '' };
+  const isometry = operationIsometry(cubicCell, c4);
+  assert.equal(isometry.improper, false);
+  close(isometry.angle, Math.PI / 2, 1e-9);
+  // The Sr corner of the perovskite cell sits off the axis and must genuinely orbit it.
+  const start = fractionalToCartesian([-.5, -.5, -.5], cubicCell);
+  const radius = Math.hypot(...cross(start, isometry.axis));
+  assert.ok(radius > 1, 'the corner site is off the axis');
+  const heights = [0, .125, .25, .375, .5, .625, .75, .875, 1].map(t => isometryPoint(isometry, start, t));
+  for (const [step, point] of heights.entries()) {
+    close(Math.hypot(...cross(point, isometry.axis)), radius, 1e-9);          // constant radius
+    close(dot(point, isometry.axis), dot(start, isometry.axis), 1e-9);        // planar, level with the start
+    if (step) close(Math.hypot(...[0, 1, 2].map(axis => point[axis] - heights[step - 1][axis])), 2 * radius * Math.sin(Math.PI / 32), 1e-6);  // equal chords ⇒ uniform angular speed
+  }
+});
+
+test('isometryTarget only corrects a cell that needs it', () => {
+  const hexagonal = cellFromParameters(3, 3, 5, 90, 90, 120);
+  const oblique = { rotation: [[0, -1, 0], [1, 0, 0], [0, 0, 1]], translation: [0, 0, 0], label: '' };
+  const isometry = operationIsometry(hexagonal, oblique);
+  // A point near a hexagonal cell's face is pushed outside by the 90° turn, so it is nudged back in.
+  const point = fractionalToCartesian([.45, .45, 0], hexagonal);
+  const target = isometryTarget(isometry, point, hexagonal);
+  const fractional = cartesianToFractional(target, hexagonal);
+  for (const value of fractional) assert.ok(Math.abs(value) <= .5 + 1e-9, 'corrected target leaves the box');
+});
+
+test('isometryPoint interpolates from the identity to the map', () => {
+  for (const operation of CUBIC_POINT_GROUP) {
+    const isometry = operationIsometry(cubicCell, operation);
+    for (const point of drawnSites) {
+      const atZero = isometryPoint(isometry, point, 0);
+      for (let axis = 0; axis < 3; axis++) close(atZero[axis], point[axis], 1e-12);
+    }
+  }
+});
+

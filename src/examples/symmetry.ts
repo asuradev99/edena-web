@@ -2,11 +2,11 @@ import {
   WebGPUView, Visual, Geometry, LabelLayer, rgba, smooth, clamp, polyline, merge, shadedSphere, arrow, wireSphere,
   parsePOSCAR, parsePhonopySymmetry,
   latticeSites, supercell as makeSupercell, bonds as findBonds, cellVolume,
-  fractionalToCartesian, cartesianToFractional, shortestDistance, appearanceFor,
+  fractionalToCartesian, shortestDistance, appearanceFor,
   latticePointGroup, mapsOntoSelf, siteMapping, symmetryOrbits,
-  cartesianOperation, axisAngle, rotateAboutAxis,
+  operationIsometry, isometryPoint, isometryTarget, rotateAboutAxis,
   mathml, mi, mn, mo, msub, row, matrix, vec,
-  type Vec3, type CrystalStructure, type CrystalOperation, type Supercell, type Lattice,
+  type Vec3, type CrystalStructure, type CrystalOperation, type Supercell, type Isometry,
 } from '../index.js';
 
 const $ = <T extends HTMLElement>(id: string): T => {
@@ -54,7 +54,6 @@ const dot3 = (a: Vec3, b: Vec3): number => a[0] * b[0] + a[1] * b[1] + a[2] * b[
 const cross3 = (a: Vec3, b: Vec3): Vec3 => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
 const unit3 = (a: Vec3): Vec3 => { const length = Math.hypot(...a) || 1; return [a[0] / length, a[1] / length, a[2] / length]; };
 const between = (a: Vec3, b: Vec3): number => Math.hypot(...sub(a, b));
-const det3 = (m: number[][]): number => m[0][0] * (m[1][1] * m[2][2] - m[1][2] * m[2][1]) - m[0][1] * (m[1][0] * m[2][2] - m[1][2] * m[2][0]) + m[0][2] * (m[1][0] * m[2][1] - m[1][1] * m[2][0]);
 
 /** Gentle start and stop, so the motion reads as a crystal settling rather than a linear wipe. */
 const ease = (value: number): number => { const t = clamp(value, 0, 1); return t * t * t * (t * (t * 6 - 15) + 10); };
@@ -62,24 +61,8 @@ const ease = (value: number): number => { const t = clamp(value, 0, 1); return t
 const SUBSCRIPTS = '₀₁₂₃₄₅₆₇₈₉';
 const subscript = (value: number): string => String(value).split('').map(digit => SUBSCRIPTS[Number(digit)] ?? digit).join('');
 
-/**
- * A symmetry operation, decomposed so the animation and the drawn element always agree.
- *
- * A proper operation is a rotation by `angle` about `axis`. An improper orthogonal operation is
- * always a rotoreflection S(θ, n) = R(θ, n) · σ_n — a rotation about `n` composed with a
- * reflection in the plane normal to it — so `axis` is the plane normal and `angle` the spin.
- */
-type Motion = {
-  operation: CrystalOperation;
-  axis: Vec3;
-  angle: number;
-  improper: boolean;
-  inversion: boolean;
-  /** Screw/glide part, in Cartesian coordinates of the base lattice. */
-  translation: Vec3;
-  /** The operation leaves every drawn site exactly where it is. */
-  trivial: boolean;
-};
+/** A symmetry operation together with the rigid motion it performs, so animation and element agree. */
+type Motion = Isometry & { operation: CrystalOperation };
 
 type Built = {
   big: Supercell;
@@ -151,61 +134,15 @@ function axisLabel(axis: Vec3): string {
 function gcd(a: number, b: number): number { return b ? gcd(b, a % b) : a; }
 
 /**
- * The -1 eigenvector of an improper orthogonal matrix M: the normal of its mirror plane.
- * (M + I) has rank two, so the cross product of its two most independent columns is that normal.
- * Reading the *longest* column of (M + I) instead — which this used to do — lands inside the
- * plane, which mislabelled and mis-drew every diagonal mirror.
+ * The operation's rigid motion, memoised: the picker, the ordering and the report all ask for it
+ * repeatedly, and the decomposition costs a couple of 3×3 products. Operations are recreated
+ * whenever the structure changes, so a WeakMap keyed by operation cannot go stale.
  */
-function improperNormal(m: number[][]): Vec3 {
-  const columns: Vec3[] = [
-    [m[0][0] + 1, m[1][0], m[2][0]],
-    [m[0][1], m[1][1] + 1, m[2][1]],
-    [m[0][2], m[1][2], m[2][2] + 1],
-  ];
-  const candidates = [cross3(columns[0], columns[1]), cross3(columns[1], columns[2]), cross3(columns[2], columns[0])];
-  return unit3(candidates.reduce((best, candidate) => Math.hypot(...candidate) > Math.hypot(...best) ? candidate : best));
-}
-
+const MOTIONS = new WeakMap<CrystalOperation, Motion>();
 function motionFor(operation: CrystalOperation): Motion {
-  const m = cartesianOperation(base.lattice, operation.rotation);
-  const determinant = det3(m), trace = m[0][0] + m[1][1] + m[2][2];
-  const translation = fracToCart(operation.translation);
-  if (determinant > 0) {
-    const rotation = axisAngle(m);
-    if (!rotation) return { operation, axis: [0, 0, 1], angle: 0, improper: false, inversion: false, translation, trivial: !translation.some(Boolean) };
-    return { operation, axis: unit3(rotation.axis), angle: rotation.angle, improper: false, inversion: false, translation, trivial: false };
-  }
-  // Inversion is a rotoreflection by 180° whose axis is free to be any direction; its element is a
-  // point, not a line, so draw it as one and animate a straight collapse to the origin.
-  const inversion = trace <= -3 + 1e-6;
-  const axis = inversion ? ([0, 1, 0] as Vec3) : improperNormal(m);
-  const angle = Math.acos(clamp((trace + 1) / 2, -1, 1));
-  return { operation, axis, angle, improper: true, inversion, translation, trivial: false };
-}
-
-/** The operation applied progressively: the identity at t = 0, the full isometry at t = 1. */
-function motionPoint(motion: Motion, point: Vec3, t: number): Vec3 {
-  if (motion.trivial) return point;
-  // A mirror folds through its plane; a rotoreflection folds and spins about the plane normal.
-  const folded = motion.improper ? sub(point, times(motion.axis, 2 * t * dot3(point, motion.axis))) : point;
-  return add(rotateAboutAxis(folded, motion.axis, motion.angle * t), times(motion.translation, t));
-}
-
-/**
- * Where the animation leaves an atom: the operation's own image. Every point-group operation maps a
- * cube onto itself, so for a cubic cell the image is already inside the drawn box and nothing is
- * added — each atom simply sweeps its true arc. Only a skewed cell can push an image outside, and
- * then it is nudged by a lattice vector, blended in over the animation rather than snapped at the
- * end. (Snapping every atom to the image nearest its *start* instead is what used to leave a site
- * sitting on a lattice point to be dragged home along a long straight chord.)
- */
-function settledTarget(motion: Motion, point: Vec3, lattice: Lattice): Vec3 {
-  const image = motionPoint(motion, point, 1);
-  // The drawn frame is centred on the symmetry origin, so "inside the box" is exactly "every
-  // fractional component lies in [-1/2, 1/2]".
-  const fractional = cartesianToFractional(image, lattice);
-  const delta: Vec3 = fractional.map(value => Math.abs(value) <= .5 + 1e-9 ? 0 : -Math.round(value)) as Vec3;
-  return delta.some(Boolean) ? add(image, fractionalToCartesian(delta, lattice)) : image;
+  let motion = MOTIONS.get(operation);
+  if (!motion) { motion = { ...operationIsometry(base.lattice, operation), operation }; MOTIONS.set(operation, motion); }
+  return motion;
 }
 
 function describeOperation(operation: CrystalOperation): string {
@@ -214,11 +151,11 @@ function describeOperation(operation: CrystalOperation): string {
   if (motion.trivial) return `E · identity${shift}`;
   if (motion.inversion) return `i · inversion${shift}`;
   if (!motion.improper) {
-    const degrees = Math.round(motion.angle * 180 / Math.PI);
+    const degrees = Math.round(Math.abs(motion.angle) * 180 / Math.PI);
     return `${rotationSymbol(degrees)} · ${degrees}° ‖ ${axisLabel(motion.axis)}${shift}`;
   }
-  if (motion.angle < 1e-6) return `σ · mirror ⟂ ${axisLabel(motion.axis)}${shift}`;
-  const degrees = Math.round(motion.angle * 180 / Math.PI);
+  if (Math.abs(motion.angle) < 1e-6) return `σ · mirror ⟂ ${axisLabel(motion.axis)}${shift}`;
+  const degrees = Math.round(Math.abs(motion.angle) * 180 / Math.PI);
   return `S${subscript(Math.round(360 / degrees))} · rotoreflection ‖ ${axisLabel(motion.axis)}${shift}`;
 }
 
@@ -230,7 +167,7 @@ function rotationSymbol(degrees: number): string {
   return `C${subscript(Math.round(360 / degrees))}`;
 }
 
-function cellWire(lattice: Lattice, pivot: Vec3, width: number): Geometry {
+function cellWire(lattice: Supercell['lattice'], pivot: Vec3, width: number): Geometry {
   const corner = (i: number, j: number, k: number) => sub(fractionalToCartesian([i, j, k], lattice), pivot);
   const edges: Geometry[] = [];
   for (const i of [0, 1]) for (const j of [0, 1]) {
@@ -267,7 +204,7 @@ function operationElement(motion: Motion, centre: Vec3, extent: number): { visua
   }
   const axisLine = [sub(centre, times(motion.axis, reach)), add(centre, times(motion.axis, reach))];
   visuals.push(new Visual(polyline(axisLine, .012), gold));
-  const degrees = Math.round(motion.angle * 180 / Math.PI);
+  const degrees = Math.round(Math.abs(motion.angle) * 180 / Math.PI);
   if (!motion.improper) {
     // The arc spans exactly the rotation angle and carries an arrowhead, so the angle is visible.
     const ring = rotationRing(centre, motion.axis, extent * .26, motion.angle / (Math.PI * 2));
@@ -289,12 +226,12 @@ function operationElement(motion: Motion, centre: Vec3, extent: number): { visua
   visuals.push(new Visual(polyline(outline, .009), green));
   const anchor = add(centre, times(motion.axis, extent * .55));
   visuals.push(new Visual(arrow(centre, anchor, .016), green));
-  if (motion.angle > 1e-6) {
+  if (Math.abs(motion.angle) > 1e-6) {
     const ring = rotationRing(centre, motion.axis, extent * .26, motion.angle / (Math.PI * 2));
     visuals.push(new Visual(polyline(ring, .01), blue));
     visuals.push(new Visual(arrow(ring[ring.length - 3], ring[ring.length - 1], .022), blue));
   }
-  return { visuals, anchor, label: motion.angle < 1e-6 ? `mirror plane ⟂ ${axisLabel(motion.axis)}` : `${degrees}° rotoreflection about ${axisLabel(motion.axis)}` };
+  return { visuals, anchor, label: Math.abs(motion.angle) < 1e-6 ? `mirror plane ⟂ ${axisLabel(motion.axis)}` : `${degrees}° rotoreflection about ${axisLabel(motion.axis)}` };
 }
 
 function atomColor(index: number, species: string): string {
@@ -349,8 +286,8 @@ function rebuild(): void {
   // lattice and subtracting the pivot is the same as (f + offset) in base cell units.
   const ideal = big.positions.map(position => sub(fractionalToCartesian(position, big.lattice), pivot));
   const motion = motionFor(operations[operationIndex]);
-  const target = ideal.map(point => settledTarget(motion, point, big.lattice));
-  const drift = ideal.map((point, index) => sub(target[index], motionPoint(motion, point, 1)));
+  const target = ideal.map(point => isometryTarget(motion, point, big.lattice));
+  const drift = ideal.map((point, index) => sub(target[index], isometryPoint(motion, point, 1)));
   const tolerance = Math.max(1e-3, bounds.extent * 2e-4);
   const moverList = ideal.map((_, index) => index).filter(index => between(ideal[index], target[index]) > tolerance);
   const movers = new Set(moverList);
@@ -428,7 +365,7 @@ function rebuild(): void {
     for (const index of movers) {
       const series = Array.from({ length: 25 }, (_, step) => {
         const t = step / 24;
-        return add(motionPoint(motion, ideal[index], t), times(drift[index], t));
+        return add(isometryPoint(motion, ideal[index], t), times(drift[index], t));
       });
       paths.push(polyline(series, Math.max(.004, bounds.extent * .0012)));
       paths.push(arrow(series[series.length - 3], series[series.length - 1], Math.max(.015, bounds.extent * .006)));
@@ -553,7 +490,7 @@ function update(): void {
   state.elementVisuals.forEach(visual => { visual.opacity = .3 + .7 * t; });
   state.atomVisuals.forEach((visual, index) => {
     const hidden = hiddenElements.has(state.big.species[index]);
-    visual.position = add(motionPoint(state.motion, state.ideal[index], t), times(state.drift[index], t));
+    visual.position = add(isometryPoint(state.motion, state.ideal[index], t), times(state.drift[index], t));
     visual.opacity = hidden ? 0 : 1;
     // Gentle breathing keeps the scene alive; moving sites swell a little while they travel, which
     // draws the eye to exactly the atoms the operation relocates.
@@ -600,7 +537,7 @@ function visibleMovedCount(operation: CrystalOperation): number {
   const pivot = fracToCart([.5, .5, .5]);
   return base.positions.reduce((count, position) => {
     const point = sub(fractionalToCartesian(position, base.lattice), pivot);
-    return count + (between(point, settledTarget(motion, point, base.lattice)) > 1e-3 ? 1 : 0);
+    return count + (between(point, isometryTarget(motion, point, base.lattice)) > 1e-3 ? 1 : 0);
   }, 0);
 }
 

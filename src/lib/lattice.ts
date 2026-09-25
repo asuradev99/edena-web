@@ -415,6 +415,100 @@ export function rotateAboutAxis(point: Vec3, axis: Vec3, angle: number): Vec3 {
     point[2] * c + crossp[2] * s + z * dotp * (1 - c),
   ];
 }
+
+/**
+ * The -1 eigenvector of an improper orthogonal matrix `m`: the normal of its mirror plane.
+ * `m + I` has rank two for a reflection, so the cross product of its two most independent columns
+ * is that normal. (Taking the *longest* column of `m + I` instead — an easy mistake — returns a
+ * vector lying in the plane, which mislabels and mis-draws every diagonal mirror.)
+ */
+export function improperNormal(m: number[][]): Vec3 {
+  const columns: Vec3[] = [
+    [m[0][0] + 1, m[1][0], m[2][0]],
+    [m[0][1], m[1][1] + 1, m[2][1]],
+    [m[0][2], m[1][2], m[2][2] + 1],
+  ];
+  const candidates = [cross(columns[0], columns[1]), cross(columns[1], columns[2]), cross(columns[2], columns[0])];
+  return normalize(candidates.reduce((best, candidate) => Math.hypot(...candidate) > Math.hypot(...best) ? candidate : best));
+}
+
+/**
+ * A crystal operation re-expressed as the rigid motion it performs, so it can be animated.
+ *
+ * A proper operation is a rotation by `angle` about `axis`. An improper orthogonal operation is
+ * always a rotoreflection S(θ, n) = R(θ, n)·σ_n — a rotation about `n` composed with a reflection
+ * in the plane normal to it — so `axis` is the plane normal and `angle` the spin that goes with it.
+ */
+export type Isometry = {
+  /** Unit axis: the rotation axis, or the mirror-plane normal for an improper operation. */
+  axis: Vec3;
+  /** Rotation angle for a proper operation, or the rotoreflection angle. */
+  angle: number;
+  /** True when the map also reflects through the plane normal to `axis`. */
+  improper: boolean;
+  /** True for the inversion, a rotoreflection by 180° whose axis may be any direction. */
+  inversion: boolean;
+  /** Screw/glide part, in Cartesian coordinates of the lattice. */
+  translation: Vec3;
+  /** The identity: no axis, no angle, no translation. */
+  trivial: boolean;
+};
+
+/** Decompose an operation into a rotation or rotoreflection about the origin. */
+export function operationIsometry(lattice: Lattice, operation: CrystalOperation): Isometry {
+  const m = cartesianOperation(lattice, operation.rotation);
+  const trace = m[0][0] + m[1][1] + m[2][2];
+  const translation = fractionalToCartesian(operation.translation, lattice);
+  const glides = translation.some(value => Math.abs(value) > 1e-12);
+  if (determinant(m[0] as Vec3, m[1] as Vec3, m[2] as Vec3) > 0) {
+    const rotation = axisAngle(m);
+    if (!rotation) return { axis: [0, 0, 1], angle: 0, improper: false, inversion: false, translation, trivial: !glides };
+    return { axis: rotation.axis, angle: rotation.angle, improper: false, inversion: false, translation, trivial: false };
+  }
+  // Inversion has no distinguished axis, so name one; its element is a point, not a line.
+  if (trace <= -3 + 1e-6) return { axis: [0, 1, 0], angle: Math.PI, improper: true, inversion: true, translation, trivial: false };
+  const axis = improperNormal(m);
+  // The trace fixes |θ| only, and a reflection does not distinguish ±n, so the sign of the spin has
+  // to come from the antisymmetric part: M - Mᵀ = 2 sin θ · n for S(θ, n) = R(θ, n)·σ_n.
+  const skew: Vec3 = [m[2][1] - m[1][2], m[0][2] - m[2][0], m[1][0] - m[0][1]];
+  return {
+    axis,
+    angle: Math.atan2(dot(skew, axis) / 2, (trace + 1) / 2),
+    improper: true,
+    inversion: false,
+    translation,
+    trivial: false,
+  };
+}
+
+/**
+ * The motion of `operationIsometry`, evaluated part-way: the identity at t = 0 and the full map at
+ * t = 1. An improper map folds through its plane while it spins about the plane normal.
+ */
+export function isometryPoint(isometry: Isometry, point: Vec3, t: number): Vec3 {
+  if (isometry.trivial) return point;
+  const { axis, angle, improper, translation } = isometry;
+  const along = improper ? 2 * t * dot(point, axis) : 0;
+  const source: Vec3 = improper ? [point[0] - along * axis[0], point[1] - along * axis[1], point[2] - along * axis[2]] : point;
+  const rotated = rotateAboutAxis(source, axis, angle * t);
+  return [rotated[0] + translation[0] * t, rotated[1] + translation[1] * t, rotated[2] + translation[2] * t];
+}
+
+/**
+ * Where an animation should leave `point`: the operation's own image, slid back into the cell
+ * centred on the origin only when it falls outside. A cubic cell maps onto itself under its whole
+ * point group, so there the correction is identically zero and every atom travels its true arc.
+ */
+export function isometryTarget(isometry: Isometry, point: Vec3, lattice: Lattice): Vec3 {
+  const image = isometryPoint(isometry, point, 1);
+  const fractional = cartesianToFractional(image, lattice);
+  // The tolerance matters: a cubic image lands exactly on a box face (fractional ±1/2) all the
+  // time, and treating 0.5 + 4e-8 as "outside" would shove that atom a whole cell sideways.
+  const delta: Vec3 = [0, 1, 2].map(axis => Math.abs(fractional[axis]) <= .5 + 1e-6 ? 0 : -Math.round(fractional[axis])) as Vec3;
+  if (!delta.some(value => value !== 0)) return image;
+  const shift = fractionalToCartesian(delta, lattice);
+  return [image[0] + shift[0], image[1] + shift[1], image[2] + shift[2]];
+}
 /** True when the cell is cubic to within a relative tolerance (angles in degrees). */
 export function isCubic(lattice: Lattice, tolerance = 1e-2): boolean {
   const lengths = lattice.map(vector => Math.hypot(...vector));
