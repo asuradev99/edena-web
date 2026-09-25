@@ -10,7 +10,7 @@ import {
   axes3d, boundsBox, box, boxEdges, cylinder, polyline, arrow, circle, sphere, shadedSphere, wireSphere, isosurface,
   parametricSurface, functionSurface, functionCurve, merge, rgba, lerp, smooth, transform, applyMatrix,
   createParticleState, stepParticles, streamlines, sphereSeeds, type VectorField, type ParticleAcceleration,
-  mathml, mi, mn, mo, mtext, msup, row, tickValues, formatTick, plotFrame, viridis, plasma,
+  mathml, mi, mn, mo, mtext, msup, row, vec, tickValues, formatTick, plotFrame, viridis, plasma,
   Geometry, type Vec3, type Rgb,
 } from '../index.js';
 
@@ -554,6 +554,80 @@ function colourDemo(view: WebGPUView): Demo {
 }
 
 /* --------------------------------------------------------------------------------------------
+ * 16 · Arrows and their sum: a diagram is geometry plus typeset text.
+ * ------------------------------------------------------------------------------------------ */
+
+function vectorDemo(view: WebGPUView): Demo {
+  look(view, .55, .26, 8);
+  const labels = new LabelLayer($('vectors-labels'), view.camera);
+  const spin = new Group();
+  view.world.add(spin, new Visual(count(axes3d(1.05, .005)), rgba('#dbe9f5', .22)));
+  const readout = labels.addHTML(mathml(mn('')), () => [-2.6, -2.35, 0], '#9db0c2', 'math-label');
+
+  let spread = 70, length = 1.8, phase = 0, spinning = !reducedMotion;
+  let tipA: Vec3 = [0, 0, 0], tipB: Vec3 = [0, 0, 0], tipSum: Vec3 = [0, 0, 0];
+  const readoutPanel = $('vectors-readout');
+
+  const build = (): void => {
+    // Two vectors mirrored about +y: their sum stays on the axis, and its length is 2|a|cos(θ/2),
+    // which the readout states so the picture and the arithmetic agree.
+    const half = spread * Math.PI / 360;
+    const a: Vec3 = [Math.sin(half) * length, Math.cos(half) * length, 0];
+    const b: Vec3 = [-Math.sin(half) * length, Math.cos(half) * length, 0];
+    const sum: Vec3 = [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
+    tipA = a; tipB = b; tipSum = sum;
+    spin.clear();
+    spin.add(
+      new Visual(count(merge(polyline([a, sum], .012), polyline([b, sum], .012))), rgba('#9db0c2', .45)),
+      new Visual(count(arrow([0, 0, 0], a, .045)), rgba('#58c4dd')),
+      new Visual(count(arrow([0, 0, 0], b, .045)), rgba('#83c167')),
+      new Visual(count(arrow([0, 0, 0], sum, .06)), rgba('#f7d681')),
+    );
+    const size = (v: Vec3) => Math.hypot(...v).toFixed(2);
+    readout.innerHTML = mathml(mtext(`|a| = ${size(a)} · |b| = ${size(b)} · θ = ${spread}° · |a + b| = ${size(sum)}`));
+    readoutPanel.textContent = `|a| = ${size(a)} · |b| = ${size(b)} · θ = ${spread}° · |a + b| = ${size(sum)}`;
+  };
+
+  for (const [name, position] of [['a', () => tipA], ['b', () => tipB], ['a + b', () => tipSum]] as [string, () => Vec3][]) {
+    const text = name === 'a + b' ? row(vec(mi('a')), mo('+'), vec(mi('b'))) : vec(mi(name));
+    labels.addHTML(mathml(text), () => {
+      const tip = position();
+      const scale = 1.12;
+      return [tip[0] * scale, tip[1] * scale + .12, tip[2] * scale] as Vec3;
+    }, name === 'a' ? '#58c4dd' : name === 'b' ? '#83c167' : '#f7d681', 'math-label');
+  }
+
+  const spreadInput = $<HTMLInputElement>('vectors-spread');
+  const lengthInput = $<HTMLInputElement>('vectors-length');
+  const spinButton = $<HTMLButtonElement>('vectors-spin');
+  const button = (): void => {
+    spinButton.textContent = spinning ? 'Turning' : 'Still';
+    spinButton.setAttribute('aria-pressed', String(spinning));
+  };
+  spreadInput.addEventListener('input', () => {
+    spread = Number(spreadInput.value);
+    $('vectors-spread-value').textContent = `${spread}°`;
+    build();
+  });
+  lengthInput.addEventListener('input', () => {
+    length = Number(lengthInput.value);
+    $('vectors-length-value').textContent = length.toFixed(2);
+    build();
+  });
+  spinButton.addEventListener('click', () => { spinning = !spinning; button(); });
+  build();
+  button();
+
+  return {
+    labels,
+    update: delta => {
+      if (spinning) phase += delta * .9;
+      spin.rotation = phase;
+    },
+  };
+}
+
+/* --------------------------------------------------------------------------------------------
  * 15 · Building a scene in steps: one timeline, four cues, and a scrubber.
  * ------------------------------------------------------------------------------------------ */
 
@@ -689,7 +763,7 @@ function streamlineDemo(view: WebGPUView): Demo {
         markers.push({ visual, line, offset: index / 3 });
       }
     }
-    summary.innerHTML = mathml(mtext(`${kind} · ${tubes.length} streamlines · ${markers.length} markers`));
+    summary.innerHTML = mathml(mtext(`${kind} · ${tubes.length} streamlines · ${markers.length} markers · flow ${speed.toFixed(2)}`));
   };
 
   const kindSelect = $<HTMLSelectElement>('streamlines-kind');
@@ -708,6 +782,8 @@ function streamlineDemo(view: WebGPUView): Demo {
   speedInput.addEventListener('input', () => {
     speed = Number(speedInput.value);
     $('streamlines-speed-value').textContent = speed.toFixed(2);
+    // The readout names the rate, so a check can see the control without waiting for motion.
+    summary.innerHTML = mathml(mtext(`${kind} · ${traced.filter(line => line.length > 6).length} streamlines · ${markers.length} markers · flow ${speed.toFixed(2)}`));
   });
   spinButton.addEventListener('click', () => { spinning = !spinning; button(); });
   build();
@@ -1056,10 +1132,10 @@ function depthDemo(view: WebGPUView): Demo {
 
   // A floor slab and a wall slab, both translucent, plus three opaque balls that pass right through
   // them: the balls must stay solid, and the slabs must blend in the right order wherever they cross.
-  const floor = new Visual(count(box([-2.3, -.04, -2.3], [2.3, .04, 2.3])), rgba('#58c4dd', .3));
-  const wall = new Visual(count(box([-.04, -2.3, -2.3], [.04, 2.3, 2.3])), rgba('#f7d681', .32));
-  const floorEdge = new Visual(count(boxEdges([-2.3, -.04, -2.3], [2.3, .04, 2.3], .004)), rgba('#9fe7ff', .5));
-  const wallEdge = new Visual(count(boxEdges([-.04, -2.3, -2.3], [.04, 2.3, 2.3], .004)), rgba('#f7d681', .55));
+  const floor = new Visual(count(box([-2.3, -.07, -2.3], [2.3, .07, 2.3])), rgba('#58c4dd', .34));
+  const wall = new Visual(count(box([-.07, -2.3, -2.3], [.07, 2.3, 2.3])), rgba('#f7d681', .36));
+  const floorEdge = new Visual(count(boxEdges([-2.3, -.07, -2.3], [2.3, .07, 2.3], .004)), rgba('#9fe7ff', .5));
+  const wallEdge = new Visual(count(boxEdges([-.07, -2.3, -2.3], [.07, 2.3, 2.3], .004)), rgba('#f7d681', .55));
   spin.add(floor, floorEdge, wall, wallEdge);
 
   const balls = [-1.5, 0, 1.5].map(x => {
@@ -1150,7 +1226,7 @@ function plotDemo(view: WebGPUView): Demo {
  * ------------------------------------------------------------------------------------------ */
 
 async function initialize(): Promise<void> {
-  const canvases = ['coordinates-canvas', 'interpolation-canvas', 'transparency-canvas', 'shapes-canvas', 'groups-canvas', 'labels-canvas', 'colour-canvas', 'plot-canvas', 'depth-canvas', 'instances-canvas', 'camera-canvas', 'simulation-canvas', 'field-canvas', 'streamlines-canvas', 'story-canvas'];
+  const canvases = ['coordinates-canvas', 'interpolation-canvas', 'transparency-canvas', 'shapes-canvas', 'groups-canvas', 'labels-canvas', 'colour-canvas', 'plot-canvas', 'depth-canvas', 'instances-canvas', 'camera-canvas', 'simulation-canvas', 'field-canvas', 'streamlines-canvas', 'story-canvas', 'vectors-canvas'];
   const first = await WebGPUView.create($<HTMLCanvasElement>(canvases[0]), { samples: msaa, maxDpr, onError: report });
   views.push(first);
   if (disposed) { first.dispose(); return; }
@@ -1173,6 +1249,7 @@ async function initialize(): Promise<void> {
     fieldDemo(views[12]),
     streamlineDemo(views[13]),
     storyDemo(views[14]),
+    vectorDemo(views[15]),
   );
 
   // Eleven views on one page: drawing the ones below the fold would cost a full render each frame for

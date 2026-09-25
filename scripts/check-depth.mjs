@@ -16,7 +16,7 @@ import assert from 'node:assert/strict';
 const port=process.argv[2]??'9333';
 const target=await(await fetch(`http://localhost:${port}/json/new?http://127.0.0.1:5173/symmetry.html`,{method:'PUT'})).json();
 const socket=new WebSocket(target.webSocketDebuggerUrl);
-await new Promise(resolve=>socket.onopen=resolve);
+await new Promise((resolve,reject)=>{socket.onopen=resolve;socket.onerror=()=>reject(new Error('Chrome refused the debugging connection'));setTimeout(()=>reject(new Error('Chrome did not answer on the debugging port')),10000);});
 let id=0;const pending=new Map();const events=[];
 socket.onmessage=event=>{const message=JSON.parse(event.data);if(message.id)pending.get(message.id)?.(message);else events.push(message);};
 const call=(method,params)=>new Promise((resolve,reject)=>{const key=++id;const timer=setTimeout(()=>reject(new Error('Browser check timed out')),20000);pending.set(key,message=>{clearTimeout(timer);pending.delete(key);message.error?reject(message.error):resolve(message.result);});socket.send(JSON.stringify({id:key,method,params}));});
