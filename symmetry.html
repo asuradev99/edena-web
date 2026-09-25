@@ -44,7 +44,7 @@ input[type=range]{width:100%;accent-color:#70d7df;margin:2px 0}
 .toggles input{width:auto}
 .info-title{font-family:Georgia,serif;font-size:15px;margin-bottom:4px}
 .info-math{overflow:visible;line-height:1.5}
-.info-math math,.readout-row math,.op-matrix math{font-family:"STIX Two Math","STIXGeneral","Cambria Math","DejaVu Serif",serif}
+.info-math math,.op-matrix math{font-family:"STIX Two Math","STIXGeneral","Cambria Math","DejaVu Serif",serif}
 .info-line{color:var(--muted);font-size:11.5px;margin-top:4px}
 .file-list{display:grid;gap:4px;margin-top:8px}
 .file-item{padding:5px 8px;border-radius:6px;background:#162536;color:#cde5e9;font:10.5px ui-monospace,monospace;word-break:break-all}
@@ -69,18 +69,13 @@ input[type=range]{width:100%;accent-color:#70d7df;margin:2px 0}
 .report-line.bad{color:var(--bad)}
 .map-grid{display:flex;flex-wrap:wrap;gap:4px;margin-top:7px}
 .map-cell{font:10.5px ui-monospace,monospace;padding:2px 5px;border-radius:5px;background:#162536;border-left:3px solid var(--accent)}
-.selection-title{font-family:Georgia,serif;font-size:16px;margin-bottom:5px}
-.selection-title sub{font-size:10px}
-.readout-row{display:flex;justify-content:space-between;gap:10px;font-size:11.5px;padding:2px 0;border-bottom:1px dashed #22303f}
-.readout-row span{color:var(--muted)}
-.readout-row code{color:var(--gold);font-variant-numeric:tabular-nums}
 #status{color:#ffaca4;font-size:11px;min-height:1em}
 @media(max-width:900px){body{overflow:auto}main{grid-template-columns:1fr;height:auto}.stage{height:52vh}.app-bar .hint{display:none}aside{overflow:visible}}
 </style></head>
 <body>
 <div class="app-bar">
   <div class="title">Crystal symmetry <span>EDENA / STRUCTURE</span></div>
-  <div class="hint">drag to orbit · scroll to zoom · click an atom</div>
+  <div class="hint">drag to orbit · scroll to zoom · space to play the operation</div>
   <a href="/">← playground</a>
 </div>
 <main>
@@ -88,7 +83,7 @@ input[type=range]{width:100%;accent-color:#70d7df;margin:2px 0}
     <canvas id="scene" aria-label="Crystal structure with animated symmetry operations"></canvas>
     <div id="labels"></div>
     <div class="stage-op" id="stage-op"></div>
-    <div class="stage-hint">shaded balls = atoms · translucent = periodic neighbours · arrows = the path home · space play · ← → step · [ ] operation · r reset</div>
+    <div class="stage-hint">shaded balls = atoms · translucent = periodic neighbours · arrows = the path home · cell centred on the symmetry origin</div>
   </div>
   <aside>
     <details class="card" open><summary>Files</summary>
@@ -125,10 +120,6 @@ input[type=range]{width:100%;accent-color:#70d7df;margin:2px 0}
 
     <details class="card" open><summary>Symmetry report</summary>
       <div id="mapping"></div>
-    </details>
-
-    <details class="card" open><summary>Selected site</summary>
-      <div id="selection"></div>
     </details>
   </aside>
 </main>
