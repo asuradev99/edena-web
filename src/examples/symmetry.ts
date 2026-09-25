@@ -760,6 +760,8 @@ let movedCounts: { base: CrystalStructure; n: number; counts: Map<CrystalOperati
 let latticeGroupSize = 0;
 /** True once a phonopy file supplies the operations, so the report counts against that list instead. */
 let operationsFromFile = false;
+/** The operations a phonopy file supplied, kept when the structure changes under them. */
+let fileOperations: CrystalOperation[] | undefined;
 function visibleMovedCount(operation: CrystalOperation): number {
   const n = drawnRepeats();
   if (!movedCounts || movedCounts.base !== base || movedCounts.n !== n) movedCounts = { base, n, counts: new Map() };
@@ -842,9 +844,12 @@ function refreshOperationLabels(): void {
 function recomputeOperations(): void {
   // How many operations the lattice's own point group has, so the report can say how much of it the
   // crystal actually realises ("6 of 24" for a decorated hexagonal cell).
-  operationsFromFile = false;
   latticeGroupSize = latticePointGroup(base.lattice, 1e-4).length;
-  operations = orderOperations(defaultOperations());
+  // A phonopy file is the user's own list of operations, so it survives a change of structure — a
+  // POSCAR dropped after its symmetry file must not silently discard it. The report then says
+  // whether those operations preserve the cell they are shown against.
+  operationsFromFile = Boolean(fileOperations);
+  operations = orderOperations(fileOperations ?? defaultOperations());
   populateOperationOptions();
 }
 
@@ -878,7 +883,7 @@ async function loadText(file: File, kind: 'poscar' | 'symmetry'): Promise<void> 
   try {
     const text = await file.text();
     if (kind === 'poscar') { base = parsePOSCAR(text); showFile(file, 'POSCAR'); setStatus(`${file.name} loaded`, 'ok'); }
-    else { const parsed = parsePhonopySymmetry(text); if (parsed.length) { operations = orderOperations(parsed); operationsFromFile = true; } showFile(file, 'PHONOPY'); setStatus(`${file.name} · ${parsed.length} operations`, 'ok'); }
+    else { const parsed = parsePhonopySymmetry(text); if (parsed.length) { fileOperations = parsed; operations = orderOperations(parsed); operationsFromFile = true; } showFile(file, 'PHONOPY'); setStatus(`${file.name} · ${parsed.length} operations`, 'ok'); }
     if (kind === 'poscar') recomputeOperations(); else populateOperationOptions();
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
