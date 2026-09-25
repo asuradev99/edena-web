@@ -272,6 +272,13 @@ function rebuild(): void {
   let effectiveRepeats = repeats;
   while (baseCount * effectiveRepeats ** 3 > 1600 && effectiveRepeats > 1) effectiveRepeats--;
   const n = effectiveRepeats;
+  // Say how many atoms each choice really draws, including the 1600-atom cap.
+  for (const option of [...supercellSelect.options]) {
+    const asked = Number(option.value);
+    let drawn = asked;
+    while (baseCount * drawn ** 3 > 1600 && drawn > 1) drawn--;
+    option.textContent = `${asked} × ${asked} × ${asked} · ${baseCount * drawn ** 3} atoms`;
+  }
   const big = makeSupercell(base, [n, n, n]);
   const pivot = fracToCart([n / 2, n / 2, n / 2]);
   const corners = [0, n].flatMap(i => [0, n].flatMap(j => [0, n].map(k => sub(fractionalToCartesian([i, j, k], base.lattice), pivot))));
@@ -316,9 +323,13 @@ function rebuild(): void {
     return visual;
   });
   // Wire outlines left at the starting sites make "before → after" legible while the operation runs.
-  // An outline reads as a marker; a filled translucent ball just looks like another atom.
+  // An outline reads as a marker; a filled translucent ball just looks like another atom. One
+  // outline geometry is shared per element — a cell with 400 movers would otherwise build 400 of
+  // them, which alone cost seconds on load.
+  const markerWidth = Math.max(.004, bounds.extent * .0016);
+  const markers = new Map(elements.map(symbol => [symbol, wireSphere(Math.max(.02, appearance.get(symbol)!.radius * unit * .95), 12, 7, markerWidth)]));
   const startVisuals = moverList.map(index => {
-    const marker = new Visual(wireSphere(Math.max(.02, atomScales[index][0] * .95), 12, 7, Math.max(.004, bounds.extent * .0016)), rgba(atomColor(index, big.species[index]), .55));
+    const marker = new Visual(markers.get(big.species[index])!, rgba(atomColor(index, big.species[index]), .55));
     marker.position = ideal[index];
     return marker;
   });

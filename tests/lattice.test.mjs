@@ -5,7 +5,7 @@ import {
   mapsOntoSelf, bonds, latticeSites, supercell, millerPlane, periodicDistance,
   sphericalWedge, sphericalWedgeOutline, boxEdges, mathml, frac, mi,
   applyOperation, siteMapping, cartesianOperation, axisAngle, rotateAboutAxis, shadedSphere, sphere, latticePointGroup,
-  operationIsometry, isometryPoint, isometryTarget, improperNormal,
+  operationIsometry, isometryPoint, isometryTarget, improperNormal, symmetryOrbits,
 } from '../build/index.js';
 
 const close = (a, b, tolerance = 1e-5) => assert.ok(Math.abs(a - b) < tolerance, `${a} ≈ ${b}`);
@@ -300,6 +300,26 @@ test('each family performs its own geometric move, and roto-reflections do two o
   const centre = operationIsometry(cubicCell, pick(iso => iso.inversion));
   const quarter = isometryPoint(centre, point, .25);
   for (let axis = 0; axis < 3; axis++) close(quarter[axis], point[axis] * .5, 1e-9);
+});
+
+test('symmetryOrbits partitions the cell and does not recompute a mapping per site', () => {
+  const group = latticePointGroup(cubicCell).map(rotation => ({ rotation, translation: [0, 0, 0], label: '' }));
+  const orbits = symmetryOrbits(perovskite, group, 1e-3);
+  // Pm-3m: Sr on 1a, Ti on 1b, and the three face-centre oxygens in one orbit.
+  assert.deepEqual(orbits.map(orbit => orbit.join(',')).sort(), ['0', '1', '2,3,4']);
+  // With only the identity every site is its own orbit.
+  assert.equal(symmetryOrbits(perovskite, [group[0]], 1e-3).length, 5);
+
+  // The regression this guards: siteMapping was recomputed inside the walk, once per (site,
+  // operation), which made a 400-atom cell take about six seconds. It should be tens of ms.
+  const big = supercell(perovskite, [4, 4, 5]);
+  const started = Date.now();
+  const large = symmetryOrbits(big, latticePointGroup(big.lattice).map(rotation => ({ rotation, translation: [0, 0, 0], label: '' })), 1e-3);
+  const elapsed = Date.now() - started;
+  const covered = large.flat().sort((a, b) => a - b);
+  assert.deepEqual(covered, [...Array(big.positions.length).keys()], 'every site belongs to exactly one orbit');
+  for (const orbit of large) assert.equal(new Set(orbit.map(index => big.species[index])).size, 1, 'an orbit holds one element');
+  assert.ok(elapsed < 2000, `400-atom orbits took ${elapsed} ms`);
 });
 
 test('isometryTarget only corrects a cell that needs it', () => {

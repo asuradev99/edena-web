@@ -314,6 +314,9 @@ export function siteMapping(structure: CrystalStructure, operation: CrystalOpera
 
 /** Group sites into symmetry orbits under a list of operations. */
 export function symmetryOrbits(structure: CrystalStructure, operations: CrystalOperation[], tolerance = 1e-4): number[][] {
+  // One mapping per operation, computed once. Mapping inside the walk below would recompute an
+  // O(n²) table for every (site, operation) pair, which turns a 400-atom cell into a 6-second wait.
+  const mappings = operations.map(operation => siteMapping(structure, operation, tolerance));
   const used = new Set<number>();
   const orbits: number[][] = [];
   for (let seed = 0; seed < structure.positions.length; seed++) {
@@ -324,8 +327,8 @@ export function symmetryOrbits(structure: CrystalStructure, operations: CrystalO
       const index = queue.pop()!;
       if (orbit.has(index)) continue;
       orbit.add(index);
-      for (const operation of operations) {
-        const target = siteMapping(structure, operation, tolerance)[index];
+      for (const mapping of mappings) {
+        const target = mapping[index];
         if (target >= 0 && !orbit.has(target)) queue.push(target);
       }
     }
