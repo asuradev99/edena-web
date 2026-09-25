@@ -97,12 +97,12 @@
       </section>
 
       <section class="panel" id="transparency" aria-label="Transparent solids">
-        <div class="panel-head"><span class="index">03</span><div><h2>Solids with transparent sides</h2><p>box(min, max) · rgba(hex, alpha) · Group</p></div><span class="tag">VOLUME</span></div>
-        <div class="stage"><canvas id="transparency-canvas" aria-label="Three nested translucent boxes with wire cages, one inside the next"></canvas><div class="labels" id="transparency-labels"></div></div>
+        <div class="panel-head"><span class="index">03</span><div><h2>Solids with transparent sides</h2><p>box · sphere · cylinder · rgba(hex, alpha) · Group</p></div><span class="tag">VOLUME</span></div>
+        <div class="stage"><canvas id="transparency-canvas" aria-label="A translucent glass case holding a translucent ball and rod, each with a wire outline"></canvas><div class="labels" id="transparency-labels"></div></div>
         <div class="controls">
           <label>Opacity <input id="transparency-opacity" type="range" min="0.05" max="1" step="0.01" value="0.3"> <output id="transparency-opacity-value">0.30</output></label>
           <label><button id="transparency-spin" aria-pressed="true">Spinning</button></label>
-          <p>Each box is a solid: six quads, faces wound outward. The renderer draws opaque geometry first and sorts translucent faces back to front, so nesting works no matter which box was added first — and the cage on each one keeps its edges readable through the faces.</p>
+          <p>A box, a ball and a rod, all translucent, one inside another. Each is a closed surface — six quads, a parametric ball, a cylinder with caps — and the renderer draws opaque geometry first and sorts translucent faces back to front, so the nesting reads correctly no matter which was added first. A wire outline on each keeps its shape legible through the faces.</p>
         </div>
       </section>
 

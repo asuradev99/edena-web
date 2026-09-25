@@ -45,7 +45,7 @@ The six ideas, in the order the page presents them: the frame (`axes3d`, `bounds
 through `LabelLayer`, perspective or orthographic camera); motion (`Timeline`, `tween`, `smooth`,
 `lerp`, absolute-time seeking); volume (`box` faces, per-face alpha, draw-order-independent sorting,
 `boxEdges` cages); shape (`polyline`, `arrow`, `circle`, `sphere`, `shadedSphere`, `wireSphere`,
-`parametricSurface`, `merge`); hierarchy (`Group.add`, inherited `position`/`scale`/`rotation`, and
+`parametricSurface`, `cylinder`, `merge`); hierarchy (`Group.add`, inherited `position`/`scale`/`rotation`, and
 `opacity` that multiplies down the tree); and text (`LabelLayer.addHTML` with `mathml` nodes, so
 labels stay sharp, selectable and styleable at any zoom).
 
@@ -96,7 +96,7 @@ The public entry point exports:
 
 | Area | Main tools |
 | --- | --- |
-| Geometry | `polyline`, `arrow`, `circle`, `sphere`, `shadedSphere`, `wireSphere`, `box`/`boxEdges`, `parametricSurface`, `functionCurve`, `functionSurface`, `merge` |
+| Geometry | `polyline`, `arrow`, `circle`, `sphere`, `shadedSphere`, `wireSphere`, `box`/`boxEdges`, `cylinder` (frustum, cone), `parametricSurface`, `functionCurve`, `functionSurface`, `merge` — closed solids wound outward, so a signed volume is positive |
 | Plotting | `plotFrame`, `axes3d`, `boundsBox`, `niceStep`, `tickValues`, `formatTick` |
 | Fields | `isosurface` for CPU marching-tetrahedra extraction |
 | Color | `ramp`, `viridis`, `plasma`, `colorMappedSurface` |

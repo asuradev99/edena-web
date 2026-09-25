@@ -1,6 +1,12 @@
 import { cross, normalize, sub, type Vec3 } from './math.js';
 
-/** Unindexed triangles. Immutable geometry is shareable across visual nodes. */
+/**
+ * Unindexed triangles. Immutable geometry is shareable across visual nodes.
+ *
+ * Closed solids are wound outward, so a model's signed volume is positive; `box`, `cylinder` and the
+ * parametric surfaces all follow that rule. The renderer does not cull or light, so this is a
+ * property of the data rather than of the picture, and tests can check it cheaply.
+ */
 export class Geometry {
   readonly vertices: Float32Array;
   /** Optional per-vertex linear RGB (three floats per vertex, same length as `vertices`). */
@@ -75,7 +81,10 @@ export function parametricSurface(fn:(u:number,v:number)=>Vec3, uRange:[number,n
   const out:number[]=[];
   for(let i=0;i<nu;i++) for(let j=0;j<nv;j++) {
     const a=grid[i][j],b=grid[i+1][j],c=grid[i][j+1],d=grid[i+1][j+1];
-    if ([...a,...b,...c,...d].every(Number.isFinite)) { triangle(out,a,b,c); triangle(out,b,d,c); }
+    // Wound so that the surface normal is +du x +dv: outward for a closed shape, which keeps every
+    // solid in this module consistent. Nothing culls, so this is about the value of the geometry
+    // rather than the look — the signed volume of a closed solid comes out positive.
+    if ([...a,...b,...c,...d].every(Number.isFinite)) { triangle(out,a,c,b); triangle(out,b,c,d); }
   }
   return new Geometry(out);
 }
@@ -180,6 +189,23 @@ export function box(min:Vec3,max:Vec3): Geometry {
   quad([x1,y0,z1],[x1,y0,z0],[x1,y1,z0],[x1,y1,z1]);  // +x
   quad([x0,y1,z1],[x1,y1,z1],[x1,y1,z0],[x0,y1,z0]);  // +y
   quad([x0,y0,z0],[x1,y0,z0],[x1,y0,z1],[x0,y0,z1]);  // -y
+  return new Geometry(out);
+}
+/**
+ * A cylinder about the y axis, centred on the origin: the third solid the transparency demos want
+ * beside `box` and `sphere`. Give `topRadius` a different value for a frustum, or zero for a cone.
+ * Caps are on by default so the surface encloses a volume, which is what makes translucency read.
+ */
+export function cylinder(radius:number,height:number,sides=48,topRadius=radius,capTop=true,capBottom=true): Geometry {
+  if (!(radius>0)||!(topRadius>=0)||!(height>0)||!Number.isInteger(sides)||sides<3||sides>512) throw new Error('Invalid cylinder parameters');
+  const out:number[]=[],half=height/2,ring=(r:number,y:number,i:number):Vec3=>[r*Math.cos(i*2*Math.PI/sides),y,r*Math.sin(i*2*Math.PI/sides)];
+  for(let i=0;i<sides;i++){
+    const a=ring(radius,-half,i),b=ring(radius,-half,i+1),c=ring(topRadius,half,i),d=ring(topRadius,half,i+1);
+    if (topRadius>0) { triangle(out,a,c,b); triangle(out,b,c,d); }
+    else triangle(out,a,c,b);   // a cone: the top ring collapses to one point, so one triangle each
+    if(capBottom) triangle(out,a,b,[0,-half,0]);
+    if(capTop&&topRadius>0) triangle(out,d,c,[0,half,0]);
+  }
   return new Geometry(out);
 }
 export function arrow(start:Vec3,end:Vec3,width=.018): Geometry {

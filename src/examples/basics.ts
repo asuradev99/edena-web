@@ -7,7 +7,7 @@
  */
 import {
   WebGPUView, LabelLayer, Group, Visual, Timeline, tween,
-  axes3d, boundsBox, box, boxEdges, polyline, arrow, circle, sphere, shadedSphere, wireSphere,
+  axes3d, boundsBox, box, boxEdges, cylinder, polyline, arrow, circle, sphere, shadedSphere, wireSphere,
   parametricSurface, functionSurface, merge, rgba, lerp,
   mathml, mi, mn, mo, mtext, row, tickValues, formatTick,
   type Vec3, type Geometry,
@@ -204,21 +204,27 @@ function transparencyDemo(view: WebGPUView): Demo {
   look(view, .74, .34, 4.9);
   const labels = new LabelLayer($('transparency-labels'), view.camera);
   const spin = new Group();
-  const layers = [
-    { size: 1.2, colour: '#58c4dd', alpha: .16 },
-    { size: .78, colour: '#83c167', alpha: .2 },
-    { size: .38, colour: '#f7d681', alpha: .28 },
+
+  // A glass case with a glass ball and a glass rod inside it: three solids, three opacities, and a
+  // wire outline on each so the shapes stay readable through the faces.
+  const caseSize = 1.2;
+  const contents = [
+    { name: 'box', colour: '#58c4dd', alpha: .1, geometry: () => box([-caseSize, -caseSize, -caseSize], [caseSize, caseSize, caseSize]), outline: () => boxEdges([-caseSize, -caseSize, -caseSize], [caseSize, caseSize, caseSize], .006), position: [0, 0, 0] as Vec3, label: [-caseSize * 1.02, caseSize * 1.02, caseSize * 1.02] as Vec3 },
+    { name: 'sphere', colour: '#83c167', alpha: .3, geometry: () => sphere(.45), outline: () => wireSphere(.45, 10, 6, .005), position: [-.55, 0, 0] as Vec3, label: [-.55, .62, 0] as Vec3 },
+    { name: 'cylinder', colour: '#f7d681', alpha: .34, geometry: () => cylinder(.38, 1.5), outline: () => cylinderCage(.38, 1.5), position: [.55, 0, 0] as Vec3, label: [.55, .95, 0] as Vec3 },
   ];
-  const solids: { visual: Visual; alpha: number }[] = [];
-  for (const layer of layers) {
-    const solid = new Visual(count(box([-layer.size, -layer.size, -layer.size], [layer.size, layer.size, layer.size])), rgba(layer.colour, layer.alpha));
-    const cage = new Visual(count(boxEdges([-layer.size, -layer.size, -layer.size], [layer.size, layer.size, layer.size], .006)), rgba(layer.colour, .5));
-    spin.add(solid, cage);
-    solids.push({ visual: solid, alpha: layer.alpha });
-    // The size label rides the box's top corner, so it has to turn with the group it belongs to.
-    labels.addHTML(mathml(mn(`${(layer.size * 2).toFixed(1)}`)), () => spinPoint([layer.size * 1.02, layer.size * 1.02, layer.size * 1.02], spin.rotation), layer.colour, 'math-label');
+  const solids: { visual: Visual; alpha: number; colour: string }[] = [];
+  for (const item of contents) {
+    const solid = new Visual(count(item.geometry()), rgba(item.colour, item.alpha));
+    solid.position = item.position;
+    const outline = new Visual(count(item.outline()), rgba(item.colour, .6));
+    outline.position = item.position;
+    spin.add(solid, outline);
+    solids.push({ visual: solid, alpha: item.alpha, colour: item.colour });
+    // The name rides the solid, so it has to turn with the group the solid belongs to.
+    labels.addHTML(tag(item.name), () => spinPoint(item.label, spin.rotation), item.colour, 'math-label');
   }
-  view.world.add(spin, new Visual(count(axes3d(1.6, .008)), rgba('#dbe9f5', .3)));
+  view.world.add(spin, new Visual(count(axes3d(1.6, .008)), rgba('#dbe9f5', .28)));
 
   const opacityInput = $<HTMLInputElement>('transparency-opacity');
   const opacityValue = $('transparency-opacity-value');
@@ -227,8 +233,8 @@ function transparencyDemo(view: WebGPUView): Demo {
   const sync = (): void => {
     const factor = Number(opacityInput.value);
     opacityValue.textContent = factor.toFixed(2);
-    // One face set per box, so each can be faded on its own; here they scale together.
-    solids.forEach((entry, index) => { entry.visual.color = rgba(layers[index].colour, entry.alpha * factor); });
+    // Each solid keeps its own face set, so they can be faded together or one at a time.
+    for (const entry of solids) entry.visual.color = rgba(entry.colour, Math.min(1, entry.alpha * factor));
   };
   const button = (): void => {
     spinButton.textContent = spinning ? 'Spinning' : 'Still';
@@ -241,8 +247,23 @@ function transparencyDemo(view: WebGPUView): Demo {
 
   return {
     labels,
-    update: (delta, time) => { if (spinning) spin.rotation = time * .5; },
+    update: (_delta, time) => { if (spinning) spin.rotation = time * .5; },
   };
+}
+
+/** Rims and staves for a cylinder: the wireframe that reads through translucent faces. */
+function cylinderCage(radius: number, height: number): Geometry {
+  const half = height / 2;
+  const parts: Geometry[] = [circle(radius, 64, 'xz', .005)];
+  const rims = [half, -half].map(y => polyline(Array.from({ length: 65 }, (_, i) => {
+    const angle = i / 64 * Math.PI * 2;
+    return [radius * Math.cos(angle), y, radius * Math.sin(angle)] as Vec3;
+  }), .005));
+  const staves = [0, 1, 2, 3].map(k => {
+    const angle = k / 4 * Math.PI * 2;
+    return polyline([[radius * Math.cos(angle), -half, radius * Math.sin(angle)], [radius * Math.cos(angle), half, radius * Math.sin(angle)]], .005);
+  });
+  return merge(...parts, ...rims, ...staves);
 }
 
 /** Y rotation, matching the transform the renderer applies to a `Visual` or `Group`. */

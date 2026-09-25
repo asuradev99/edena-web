@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { Timeline, tween, Group, Visual, Geometry, functionCurve, functionSurface, arrow, box, OrbitCamera } from '../build/index.js';
+import { Timeline, tween, Group, Visual, Geometry, functionCurve, functionSurface, arrow, box, cylinder, sphere, shadedSphere, parametricSurface, OrbitCamera } from '../build/index.js';
 import { normalizedField, enclosedFraction, chapters, DURATION, chapterAt } from '../build/demo/physics.js';
 
 test('field is finite at the center, continuous at R, and decays outside',()=>{
@@ -82,7 +82,7 @@ test('box builds six outward-wound faces around its bounds', () => {
     const [a, b, c] = [0, 1, 2].map(corner => points[i / 3 + corner]);
     volume += (a[0] * (b[1] * c[2] - b[2] * c[1]) + a[1] * (b[2] * c[0] - b[0] * c[2]) + a[2] * (b[0] * c[1] - b[1] * c[0])) / 6;
   }
-  assert.ok(Math.abs(Math.abs(volume) - 3 * 3 * 3.5) < 1e-9, `enclosed volume ${volume}`);
+  assert.ok(Math.abs(volume - 3 * 3 * 3.5) < 1e-9, `an outward winding encloses a positive volume, got ${volume}`);
   // The surface's centroid is the centre of the box, so no face is missing or doubled.
   for (let axis = 0; axis < 3; axis++) {
     const mean = points.reduce((sum, point) => sum + point[axis], 0) / points.length;
@@ -90,4 +90,59 @@ test('box builds six outward-wound faces around its bounds', () => {
   }
   assert.throws(() => box([0, 0, 0], [0, 1, 1]));
   assert.throws(() => box([0, 0, 0], [1, 1, Infinity]));
+});
+
+test('cylinder encloses its volume for any taper, and a cone closes to a point', () => {
+  // Divergence theorem again: the volume of the triangle soup must match the shape it claims to be.
+  const volume = geometry => {
+    let sum = 0;
+    for (let i = 0; i < geometry.vertices.length; i += 9) {
+      const a = [geometry.vertices[i], geometry.vertices[i + 1], geometry.vertices[i + 2]];
+      const b = [geometry.vertices[i + 3], geometry.vertices[i + 4], geometry.vertices[i + 5]];
+      const c = [geometry.vertices[i + 6], geometry.vertices[i + 7], geometry.vertices[i + 8]];
+      sum += (a[0] * (b[1] * c[2] - b[2] * c[1]) + a[1] * (b[2] * c[0] - b[0] * c[2]) + a[2] * (b[0] * c[1] - b[1] * c[0])) / 6;
+    }
+    return Math.abs(sum);
+  };
+  const sides = 512;   // the polygon approximation, so compare within its own area deficit
+  const straight = cylinder(1.3, 2.4, sides);
+  assert.ok(Math.abs(volume(straight) - Math.PI * 1.3 ** 2 * 2.4) < .002 * Math.PI * 1.3 ** 2 * 2.4);
+  const frustum = cylinder(1.1, 2, sides, .45);
+  assert.ok(Math.abs(volume(frustum) - Math.PI * 2 / 3 * (1.1 ** 2 + 1.1 * .45 + .45 ** 2)) < .004 * Math.PI * 2 / 3 * (1.1 ** 2 + 1.1 * .45 + .45 ** 2));
+  const cone = cylinder(1, 3, sides, 0);
+  assert.ok(Math.abs(volume(cone) - Math.PI * 1 ** 2 * 3 / 3) < .004 * Math.PI);
+  // Capped or not, and the bounds follow the arguments.
+  assert.ok(volume(cylinder(1, 2, 32, 1, false, false)) < volume(cylinder(1, 2, 32)));
+  const points = [];
+  for (let i = 0; i < cone.vertices.length; i += 3) points.push(cone.vertices[i + 1]);
+  assert.equal(Math.min(...points), -1.5); assert.equal(Math.max(...points), 1.5);
+  for (const bad of [() => cylinder(0, 1), () => cylinder(1, 0), () => cylinder(1, 1, 2), () => cylinder(1, 1, 4, -1)]) assert.throws(bad);
+});
+
+test('every closed solid is wound outward, so its signed volume is positive', () => {
+  const signed = geometry => {
+    let sum = 0;
+    for (let i = 0; i < geometry.vertices.length; i += 9) {
+      const a = [geometry.vertices[i], geometry.vertices[i + 1], geometry.vertices[i + 2]];
+      const b = [geometry.vertices[i + 3], geometry.vertices[i + 4], geometry.vertices[i + 5]];
+      const c = [geometry.vertices[i + 6], geometry.vertices[i + 7], geometry.vertices[i + 8]];
+      sum += (a[0] * (b[1] * c[2] - b[2] * c[1]) + a[1] * (b[2] * c[0] - b[0] * c[2]) + a[2] * (b[0] * c[1] - b[1] * c[0])) / 6;
+    }
+    return sum;
+  };
+  // The renderer neither culls nor lights, so this rule is invisible on screen — which is exactly why
+  // it is worth a test: it is the kind of thing that rots silently.
+  const solids = [
+    ['box', box([-2, -1, -.5], [2, 1, .5]), (2 - -2) * (1 - -1) * (.5 - -.5)],
+    ['cylinder', cylinder(1, 2, 128), Math.PI * 2],
+    ['cone', cylinder(1, 2, 128, 0), Math.PI * 2 / 3],
+    ['sphere', sphere(1), 4 * Math.PI / 3],
+    ['shadedSphere', shadedSphere(1), 4 * Math.PI / 3],
+    ['torus', parametricSurface((u, v) => [(1 + .3 * Math.cos(v)) * Math.cos(u), .3 * Math.sin(v), (1 + .3 * Math.cos(v)) * Math.sin(u)], [0, Math.PI * 2], [0, Math.PI * 2], [128, 64]), 2 * Math.PI * Math.PI * 1 * .3 ** 2],
+  ];
+  for (const [name, geometry, expected] of solids) {
+    const volume = signed(geometry);
+    assert.ok(volume > 0, `${name} is wound inward (${volume.toFixed(4)})`);
+    assert.ok(Math.abs(volume - expected) < .01 * expected + 1e-6, `${name} encloses ${volume.toFixed(4)}, expected about ${expected.toFixed(4)}`);
+  }
 });
