@@ -561,3 +561,26 @@ test('every crystal system reports its own holohedry', () => {
     assert.equal(latticePointGroup(lattice, 1e-4).length, expected, `${label} holohedry`);
   }
 });
+
+test('only the point operations that really preserve a cell are kept', () => {
+  const side = 5;
+  const lattice = [[side, 0, 0], [0, side, 0], [0, 0, side]];
+  const operations = latticePointGroup(lattice, 1e-4).map(rotation => ({ rotation, translation: [0, 0, 0], label: '' }));
+  const kept = (species, positions) => operations
+    .filter(operation => mapsOntoSelf({ lattice, species, positions, comment: '' }, operation, 1e-3)).length;
+
+  // Caesium chloride: both sites sit where every cubic operation puts them, so all 48 survive.
+  assert.equal(kept(['Cs', 'Cl'], [[0, 0, 0], [.5, .5, .5]]), 48);
+  // Rock salt is the same story with eight sites.
+  assert.equal(kept(['Na', 'Na', 'Na', 'Na', 'Cl', 'Cl', 'Cl', 'Cl'],
+    [[0, 0, 0], [0, .5, .5], [.5, 0, .5], [.5, .5, 0], [.5, .5, .5], [.5, 0, 0], [0, .5, 0], [0, 0, .5]]), 48);
+  // A two-atom diamond cell reduces 48 to 6. A 4-fold about [001] sends (1/4,1/4,1/4) to
+  // (-1/4,1/4,1/4) ≡ (3/4,1/4,1/4), a different body-diagonal site: the space group reaches it with a
+  // translation, but this cell does not contain it. What is left is the -3m that fixes the [111]
+  // direction — three mirrors and the two 3-folds — and zincblende behaves identically.
+  assert.equal(kept(['C', 'C'], [[0, 0, 0], [.25, .25, .25]]), 6);
+  assert.equal(kept(['Zn', 'S'], [[0, 0, 0], [.25, .25, .25]]), 6);
+  // Nudging one perovskite site off its symmetric position drops the crystal to the operations that
+  // fix the line it now lies on.
+  assert.equal(kept(['Sr', 'Ti', 'O', 'O', 'O'], [[.52, .5, .5], [0, 0, 0], [0, 0, .5], [0, .5, 0], [.5, 0, 0]]), 8);
+});
