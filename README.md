@@ -15,7 +15,7 @@ Open [http://localhost:5173/](http://localhost:5173/). The landing page is an in
 
 Dedicated demos:
 
-- [Basics](basics.html): start here. Eleven small demos, one library idea each — the 3D coordinate
+- [Basics](basics.html): start here. Ten small demos, one library idea each — the 3D coordinate
   system and its projected labels, interpolation with a seekable `Timeline`, solids with transparent
   sides, the geometry primitives and `merge`, groups with nested transforms, typeset maths riding a
   moving point, colour taken from data, a chart drawn in 3D, and depth and draw order. Each panel names the API it uses.
@@ -41,7 +41,7 @@ view.world.add(new Visual(axes3d(1.9, .012), rgba('#dbe9f5', .9)));
 second.world.add(new Visual(box([-1, -1, -1], [1, 1, 1]), rgba('#58c4dd', .18)));
 ```
 
-The eleven ideas, in the order the page presents them: the frame (`axes3d`, `boundsBox`, tick labels
+The ten ideas, in the order the page presents them: the frame (`axes3d`, `boundsBox`, tick labels
 through `LabelLayer`, perspective or orthographic camera); motion (`Timeline`, `tween`, `smooth`,
 `lerp`, absolute-time seeking); volume (`box`, `sphere` and `cylinder` faces, per-face alpha,
 draw-order-independent sorting, wire cages); shape (`polyline`, `arrow`, `circle`, `sphere`,
@@ -52,12 +52,11 @@ with `mathml` nodes, so labels stay sharp, selectable and styleable at any zoom)
 colour); plotting (`plotFrame` with `niceStep`/`tickValues`/`formatTick`, a `functionCurve`, and
 `msup`/`mn` in the equation label); depth (opaque geometry first, then translucent faces sorted
 back to front, so slab order never matters); and sharing (`Geometry` moved and scaled across many nodes,
-which the renderer buckets into one instanced draw per geometry-and-colour); and the camera (yaw,
-pitch and distance driven as a shot, and scrubbed like a storyboard).
+which the renderer buckets into one instanced draw per geometry-and-colour).
 
 ## Crystal workflow
 
-The symmetry viewer accepts exelevensionless POSCAR files, VASP 4 and VASP 5 layouts, positive or target-volume scale factors, Direct or Cartesian positions, Selective Dynamics lines, and phonopy symmetry files in nested, row-oriented, or flat eleven-number rotation formats. Files are parsed locally in the browser: drop them anywhere on the page — the whole window accepts a drop, so a stray file cannot navigate the viewer away — or pick them from the card, which has one chooser for a POSCAR, one for a symmetry file, and a combined one behind the drop zone.
+The symmetry viewer accepts extensionless POSCAR files, VASP 4 and VASP 5 layouts, positive or target-volume scale factors, Direct or Cartesian positions, Selective Dynamics lines, and phonopy symmetry files in nested, row-oriented, or flat ten-number rotation formats. Files are parsed locally in the browser: drop them anywhere on the page — the whole window accepts a drop, so a stray file cannot navigate the viewer away — or pick them from the card, which has one chooser for a POSCAR, one for a symmetry file, and a combined one behind the drop zone.
 
 ```ts
 import { parsePOSCAR, parsePhonopySymmetry } from 'edena-web';
@@ -113,7 +112,7 @@ The public entry point exports:
 | GPU simulation | `GpuParticleSimulation` with ping-pong storage buffers, compute integration, instanced rendering, timestamp timing, reset, and checksums |
 | Crystal data | `parsePOSCAR`, `parsePhonopySymmetry` |
 | Crystal geometry | `cellFromParameters`, `fractionalToCartesian`/`cartesianToFractional`, `supercell`, `latticeSites`, `bonds`, `nearestNeighbours`, `millerPlane`, `latticePointGroup`, `mapsOntoSelf`, `siteMapping`, `symmetryOrbits`, `operationIsometry`/`isometryPoint`/`isometryTarget` |
-| Elements | `ELEMENTS`, `appearanceFor` (CPK-brighelevened colors and covalent radii) |
+| Elements | `ELEMENTS`, `appearanceFor` (CPK-brightened colors and covalent radii) |
 | Math text | `mathml`, `mi`, `mn`, `mo`, `frac`, `msub`, `msup`, `matrix`, … and `LabelLayer.addHTML` to typeset them over the canvas |
 
 ### Plotting and fields
@@ -171,13 +170,13 @@ pass.end();
 simulation.device.queue.submit([encoder.finish()]);
 ```
 
-`mode: 'nbody'` runs direct all-pairs gravity with sofelevening and an optional disc layout. It is ineleventionally a raw O(N²) reference path: on the development GPU, 8,192 bodies take about 0.5 ms/step, 32,768 about 3.7 ms/step, and 50,000 about 8 ms/step. The simple oscillator mode reaches 50,000 particles at 60 FPS in the benchmark page.
+`mode: 'nbody'` runs direct all-pairs gravity with softening and an optional disc layout. It is intentionally a raw O(N²) reference path: on the development GPU, 8,192 bodies take about 0.5 ms/step, 32,768 about 3.7 ms/step, and 50,000 about 8 ms/step. The simple oscillator mode reaches 50,000 particles at 60 FPS in the benchmark page.
 
 ## Rendering behavior
 
 Opaque geometry writes depth, so front surfaces occlude rear surfaces regardless of submission order. Transparent objects render afterward, test against solid depth, and blend back-to-front by projected object origin. Intersecting transparent meshes still need a more advanced transparency technique; use opaque materials for solid scientific plots.
 
-The renderer is ineleventionally unlit at this stage. Color ramps, geometry, camera motion, antialiasing, and DOM-projected labels provide the visual language. `GpuParticleSimulation` uses its own no-depth sprite path because 50,000 soft, unsorted particles should not hard-occlude one another.
+The renderer is intentionally unlit at this stage. Color ramps, geometry, camera motion, antialiasing, and DOM-projected labels provide the visual language. `GpuParticleSimulation` uses its own no-depth sprite path because 50,000 soft, unsorted particles should not hard-occlude one another.
 
 ## Performance and limits
 
@@ -214,7 +213,7 @@ than trusting the code that drew it:
 ```sh
 node scripts/check-links.mjs           # every page resolves, and every page reaches the tour
 node scripts/check-depth.mjs [port]    # renderer depth + the crystal viewer, pixel by pixel
-node scripts/check-basics.mjs [port]   # the basics tour: eleven demos, every control, every assertion
+node scripts/check-basics.mjs [port]   # the basics tour: ten demos, every control, every assertion
 ```
 
 `check-basics` captures from the compositor and measures the regions back inside the page, because a
@@ -224,4 +223,4 @@ drifts on its own, since some of them animate), that both spin toggles hold stil
 the helix and the timeline advance, that the transport seeks and resumes, and that nothing logs an
 error. Disconnecting any single control makes it fail.
 
-The project is early and ineleventionally focused. PDE solvers, spatial interaction structures, lighting/material systems, richer text layout, SVG import, and broader Manim feature coverage remain future work. See [VISUALIZATION_LIBRARY_PLAN.md](VISUALIZATION_LIBRARY_PLAN.md) for the roadmap.
+The project is early and intentionally focused. PDE solvers, spatial interaction structures, lighting/material systems, richer text layout, SVG import, and broader Manim feature coverage remain future work. See [VISUALIZATION_LIBRARY_PLAN.md](VISUALIZATION_LIBRARY_PLAN.md) for the roadmap.

@@ -2,16 +2,16 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" conelevent="width=device-width, initial-scale=1">
-  <meta name="theme-color" conelevent="#080809">
-  <meta name="description" conelevent="An interactive WebGPU math and physics playground: Fourier waves, colored surfaces, Möbius strips, implicit shapes, lattice assembly, and GPU particles.">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#080809">
+  <meta name="description" content="An interactive WebGPU math and physics playground: Fourier waves, colored surfaces, Möbius strips, implicit shapes, lattice assembly, and GPU particles.">
   <title>Edena · mathematical visualization with WebGPU</title>
   <style>
     *{box-sizing:border-box}:root{color-scheme:dark;--blue:#58c4dd;--yellow:#ffff00;--green:#83c167;--muted:#85858e;--serif:'STIX Two Text','Cambria','Georgia',serif}
     body{margin:0;background:#080809;color:#ededf0;font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;-webkit-font-smoothing:antialiased}
     a{color:inherit;text-decoration:none}a:hover{color:var(--blue)}button{font:inherit}
     button:focus-visible,a:focus-visible{outline:2px solid var(--blue);outline-offset:4px}
-    .masthead{height:76px;border-bottom:1px solid #222226;padding:0 5%;display:flex;align-items:center;justify-conelevent:space-between;gap:20px}
+    .masthead{height:76px;border-bottom:1px solid #222226;padding:0 5%;display:flex;align-items:center;justify-content:space-between;gap:20px}
     .wordmark{font-family:var(--serif);font-size:25px;letter-spacing:-1px}.wordmark span{font:11px monospace;color:#777;letter-spacing:0;margin-left:15px}
     .edition{font-size:9px;letter-spacing:2px;color:#a2a2ad;display:flex;align-items:center;gap:15px}.edition i{height:3px;width:3px;background:var(--blue);border-radius:50%}
     main{max-width:1320px;margin:auto;padding:0 48px 56px}
@@ -38,7 +38,7 @@
     #pause:hover{border-color:#3b3b43}.stats{font-family:ui-monospace,monospace;font-size:11.5px;color:#8f8f99}
     .status{margin-top:18px;font-size:13px;line-height:1.7;color:#ff9d9d}
     .note{margin:26px 0 0;font-size:11.5px;line-height:1.9;color:#7c7c85;max-width:90ch}
-    footer{max-width:1320px;margin:auto;padding:0 48px 48px;display:flex;justify-conelevent:space-between;gap:20px;font-size:11px;color:#7c7c85}
+    footer{max-width:1320px;margin:auto;padding:0 48px 48px;display:flex;justify-content:space-between;gap:20px;font-size:11px;color:#7c7c85}
     @media(max-width:750px){.masthead{height:61px;padding:0 20px}.wordmark span,.edition{display:none}main{padding:0 16px 40px}h1{font-size:29px}footer{padding:0 16px 36px;flex-direction:column}}
   </style>
 </head>
@@ -48,10 +48,10 @@
     <div class="intro">
       <span class="eyebrow">LIVE WEBGPU · ONE LIBRARY</span>
       <h1>A playground for mathematical motion.</h1>
-      <p class="lede">New here? <a href="basics.html">Basics</a> takes the library apart into eleven small demos — the coordinate frame, interpolation, transparent solids, geometry, nested groups, projected labels, colour from data, a chart in 3D and depth — one idea each. Below, those pieces are combined: build waves from harmonics, explore colored surfaces and implicit shapes, and assemble a lattice with a reversible animation. Four live views share one GPU device. Drag the 3D panels to orbit, scroll to zoom, then open the physics experiments below.</p>
+      <p class="lede">New here? <a href="basics.html">Basics</a> takes the library apart into ten small demos — the coordinate frame, interpolation, transparent solids, geometry, nested groups, projected labels, colour from data, a chart in 3D and depth — one idea each. Below, those pieces are combined: build waves from harmonics, explore colored surfaces and implicit shapes, and assemble a lattice with a reversible animation. Four live views share one GPU device. Drag the 3D panels to orbit, scroll to zoom, then open the physics experiments below.</p>
     </div>
     <nav class="transport" aria-label="Explore examples" style="margin:0 0 24px;line-height:1.8">
-      <a href="basics.html">Basics: eleven little demos ↗</a>
+      <a href="basics.html">Basics: ten little demos ↗</a>
       <a href="particles.html">50K GPU particles · experimental ↗</a>
       <a href="physics-lab.html">Physics laboratory ↗</a>
       <a href="symmetry.html">Crystal symmetry ↗</a>
@@ -81,7 +81,7 @@
     <section class="experiments" aria-label="Physics and animation experiments">
       <h2>From equations to experiments.</h2>
       <p>Open an experiment here to run it live. Each has its own controls and can also open in a dedicated tab.</p>
-      <article class="panel"><div class="panel-head"><h2>Start from the basics</h2><a href="basics.html">Open full screen ↗</a></div><div class="controls"><p>Eleven small demos, one library idea each: the 3D coordinate system and its labels, interpolation with a seekable timeline, solids with transparent sides, the geometry primitives, nested groups, text projected onto the scene, colour taken from data, a chart drawn in 3D, how depth and draw order make transparency work, and how a hundred cubes cost two draw calls. Every other page here is those pieces combined.</p><button data-demo="basics.html">Run the basics</button></div></article>
+      <article class="panel"><div class="panel-head"><h2>Start from the basics</h2><a href="basics.html">Open full screen ↗</a></div><div class="controls"><p>Ten small demos, one library idea each: the 3D coordinate system and its labels, interpolation with a seekable timeline, solids with transparent sides, the geometry primitives, nested groups, text projected onto the scene, colour taken from data, a chart drawn in 3D, how depth and draw order make transparency work, and how a hundred cubes cost two draw calls. Every other page here is those pieces combined.</p><button data-demo="basics.html">Run the basics</button></div></article>
       <article class="panel"><div class="panel-head"><h2>Crystal symmetry: move it, match it</h2><a href="symmetry.html">Open full screen ↗</a></div><div class="controls"><p>Rotate a cubic cell about an axis or body diagonal, reflect it in a mirror plane, or invert it through its center. Scrub each transformation and watch equivalent lattice sites coincide.</p><button data-demo="symmetry.html">Explore crystal symmetry</button></div></article>
       <article class="panel"><div class="panel-head"><h2>The physics laboratory</h2><a href="physics-lab.html">Open full screen ↗</a></div><div class="controls"><p>Explore five live experiments built from the library’s geometry, color maps, CPU and GPU simulation, and animation APIs.</p><button data-demo="physics-lab.html">Run physics laboratory</button></div></article>
       <article class="panel"><div class="panel-head"><h2>50,000 particles in a force field</h2><a href="particles.html">Open full screen ↗</a></div><div class="controls"><p>GPU integration, ping-pong buffers, instanced sprites, reproducible initialization, and timing. The default force is a harmonic oscillator: a = −kx. This is a particle-throughput baseline.</p><button data-demo="particles.html">Run particle experiment</button></div></article>
@@ -99,17 +99,17 @@
     .grid{gap:24px}.panel{border:1px solid #2a3646;border-radius:18px;background:#101925;box-shadow:0 16px 42px #0003}.panel-head{padding:20px 24px;border-color:#263340;background:#14202e}.panel-head h2{font-size:23px;color:#f0f4fa}.panel-head p{margin-top:7px;color:#9cafc1;font-size:11px}.panel-head .index{color:#80d4df;font-size:12px}.panel-head .tag{border-color:#42606b;color:#93d4dc;border-radius:20px;padding:5px 10px}.stage{background:#04080e}
     .controls{padding:22px 24px!important;color:#adbdcc!important;font-size:13px!important}.controls label{gap:12px!important;margin-bottom:14px!important}.controls p{max-width:72ch;line-height:1.8}.controls select{border-radius:8px!important;border-color:#3b4e64!important;background:#1b2b3d!important;padding:9px 12px!important}.controls button,#pause{background:#175d70!important;border:1px solid #398195!important;border-radius:9px!important;color:#eefcff!important;padding:11px 17px!important;cursor:pointer}.controls button:hover,#pause:hover{background:#207487!important}.controls input{accent-color:#79d3dd}.controls output{color:#f1d087}
     .experiments{margin-top:64px!important}.experiments>h2{font-size:38px!important;letter-spacing:-1px}.experiments .panel{margin-top:24px!important}.panel-head a{font-size:12px;color:#93d5e3;white-space:nowrap}.stats{color:#a4b7c9}.note{border-top:1px solid #273546;padding-top:24px;color:#8da2b6;font-size:12px}footer{color:#8da2b6}input:focus-visible,select:focus-visible,button:focus-visible,a:focus-visible{outline:2px solid #f1d087;outline-offset:4px}
-    @media(max-width:750px){main{padding:0 16px 40px}.intro{margin-top:36px}.panel-head{padding:16px;flex-wrap:wrap}.panel-head h2{font-size:21px}.controls{padding:18px!important}.controls label{display:flex!important;justify-conelevent:space-between}.experiments iframe{height:800px}.wordmark span{display:none}}
+    @media(max-width:750px){main{padding:0 16px 40px}.intro{margin-top:36px}.panel-head{padding:16px;flex-wrap:wrap}.panel-head h2{font-size:21px}.controls{padding:18px!important}.controls label{display:flex!important;justify-content:space-between}.experiments iframe{height:800px}.wordmark span{display:none}}
   </style>
   <style>
-    .controls{padding:16px 18px;color:#aaaab7;font-size:12px;line-height:1.7}.controls label{display:inline-flex;align-items:center;gap:10px;margin:0 16px 8px 0}.controls input{accent-color:#58c4dd;max-width:150px}.controls select,.controls button{background:#14151c;border:1px solid #393b48;color:#eee;padding:8px;border-radius:4px;font:inherit}.controls button{cursor:pointer}.controls p{margin:6px 0}.experiments{margin-top:48px}.experiments>h2{font:30px Georgia,serif}.experiments>p{color:#92929c;font-size:13px}.experiments .panel{margin:18px 0}.experiments .panel-head{justify-conelevent:space-between}.experiments iframe{display:block;width:100%;height:720px;border:0;background:#000}
+    .controls{padding:16px 18px;color:#aaaab7;font-size:12px;line-height:1.7}.controls label{display:inline-flex;align-items:center;gap:10px;margin:0 16px 8px 0}.controls input{accent-color:#58c4dd;max-width:150px}.controls select,.controls button{background:#14151c;border:1px solid #393b48;color:#eee;padding:8px;border-radius:4px;font:inherit}.controls button{cursor:pointer}.controls p{margin:6px 0}.experiments{margin-top:48px}.experiments>h2{font:30px Georgia,serif}.experiments>p{color:#92929c;font-size:13px}.experiments .panel{margin:18px 0}.experiments .panel-head{justify-content:space-between}.experiments iframe{display:block;width:100%;height:720px;border:0;background:#000}
   </style>
   <script type="module">
-    document.querySelectorAll('[data-demo]').forEach(button=>button.addEventLiselevener('click',()=>{
+    document.querySelectorAll('[data-demo]').forEach(button=>button.addEventListener('click',()=>{
       const existing=button.closest('article').querySelector('iframe');
-      if(existing){existing.remove();button.textConelevent='Run experiment';return;}
-      const frame=document.createElement('iframe');frame.src=button.dataset.demo;frame.title=button.closest('article').querySelector('h2').textConelevent;
-      button.closest('article').append(frame);button.textConelevent='Close experiment';
+      if(existing){existing.remove();button.textContent='Run experiment';return;}
+      const frame=document.createElement('iframe');frame.src=button.dataset.demo;frame.title=button.closest('article').querySelector('h2').textContent;
+      button.closest('article').append(frame);button.textContent='Close experiment';
     }));
   </script>
 </body>

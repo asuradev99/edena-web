@@ -31,6 +31,9 @@ const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matc
 type Demo = { update(delta: number, clock: number): void; labels: LabelLayer };
 const demos: Demo[] = [];
 const views: WebGPUView[] = [];
+/** Views currently intersecting the viewport; the render loop skips the rest. */
+const onScreen = new Set<WebGPUView>();
+let observer: IntersectionObserver | undefined;
 let disposed = false, frame = 0, last = 0, clock = 0, timer = 0;
 const samples: number[] = [];
 let triangles = 0;
@@ -784,10 +787,11 @@ function plotDemo(view: WebGPUView): Demo {
  * ------------------------------------------------------------------------------------------ */
 
 async function initialize(): Promise<void> {
-  const first = await WebGPUView.create($<HTMLCanvasElement>('coordinates-canvas'), { samples: msaa, maxDpr, onError: report });
+  const canvases = ['coordinates-canvas', 'interpolation-canvas', 'transparency-canvas', 'shapes-canvas', 'groups-canvas', 'labels-canvas', 'colour-canvas', 'plot-canvas', 'depth-canvas', 'instances-canvas', 'camera-canvas'];
+  const first = await WebGPUView.create($<HTMLCanvasElement>(canvases[0]), { samples: msaa, maxDpr, onError: report });
   views.push(first);
   if (disposed) { first.dispose(); return; }
-  for (const id of ['interpolation-canvas', 'transparency-canvas', 'shapes-canvas', 'groups-canvas', 'labels-canvas', 'colour-canvas', 'plot-canvas', 'depth-canvas', 'instances-canvas', 'camera-canvas']) {
+  for (const id of canvases.slice(1)) {
     views.push(await WebGPUView.create($<HTMLCanvasElement>(id), { device: first.device, onError: report }));
   }
   demos.push(
@@ -804,6 +808,20 @@ async function initialize(): Promise<void> {
     cameraDemo(views[10]),
   );
 
+  // Eleven views on one page: drawing the ones below the fold would cost a full render each frame for
+  // nothing. They all start on screen, and the observer takes the hidden ones out of the loop.
+  for (const view of views) onScreen.add(view);
+  const byCanvas = new Map<Element, WebGPUView>(views.map((view, index) => [document.getElementById(canvases[index]) as Element, view]));
+  observer = new IntersectionObserver(entries => {
+    for (const entry of entries) {
+      const view = byCanvas.get(entry.target);
+      if (!view) continue;
+      if (entry.isIntersecting) onScreen.add(view);
+      else onScreen.delete(view);
+    }
+  }, { rootMargin: '150px' });
+  for (const canvas of canvases) observer.observe($(canvas));
+
   const info = first.adapterInfo;
   const name = info?.description || info?.device || info?.architecture || info?.vendor || '';
   const renderer = `${first.isFallbackAdapter ? 'software GPU' : 'GPU'}${name ? ` (${name})` : ''}`;
@@ -817,16 +835,18 @@ function animate(now: number): void {
   const delta = last ? Math.min((now - last) / 1000, .1) : 0;
   last = now;
   clock += delta;
+  // Every demo keeps its own time, on screen or not, so a timeline is where it should be when the
+  // reader scrolls back to it. Only the draw is skipped: that is the part that costs a full pass.
   for (const demo of demos) demo.update(delta, clock);
   for (const demo of demos) demo.labels.update();
-  for (const view of views) view.render();
+  for (const view of views) if (onScreen.has(view)) view.render();
   samples.push(delta * 1000);
   if (samples.length > 120) samples.shift();
   timer += delta;
   if (timer >= .25) {
     timer = 0;
     const average = samples.reduce((sum, value) => sum + value, 0) / samples.length;
-    stats.textContent = `${average.toFixed(1)} ms/frame · ${(1000 / average).toFixed(0)} fps · ${views.length} views · ${Math.round(triangles).toLocaleString()} triangles · ${stats.dataset.renderer ?? ''}`;
+    stats.textContent = `${average.toFixed(1)} ms/frame · ${(1000 / average).toFixed(0)} fps · ${onScreen.size} of ${views.length} views drawing · ${Math.round(triangles).toLocaleString()} triangles · ${stats.dataset.renderer ?? ''}`;
   }
   frame = requestAnimationFrame(animate);
 }
@@ -836,6 +856,7 @@ document.addEventListener('visibilitychange', () => { last = 0; });
 window.addEventListener('pagehide', () => {
   disposed = true;
   cancelAnimationFrame(frame);
+  observer?.disconnect();
   for (const demo of demos) demo.labels.dispose();
   for (const view of [...views].reverse()) view.dispose();
 }, { once: true });
