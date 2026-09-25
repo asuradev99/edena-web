@@ -527,3 +527,19 @@ test('an independent rotation and reflection agree with the isometry', () => {
     }
   }
 });
+
+test('the point group tolerates rounding but not real distortion', () => {
+  // A POSCAR rounded to four decimals gives 2.7366 where γ = 120° wants 2.7366118…, a relative
+  // deviation of 4e-6. The metric tolerance is relative to the cell's own scale, so the hexagonal
+  // holohedry is still found — an absolute tolerance in Å² would have collapsed it to orthorhombic.
+  const rounded = [[3.16, 0, 0], [-1.58, 2.7366, 0], [0, 0, 12.9]];
+  assert.equal(latticePointGroup(rounded, 1e-4).length, 24);
+  // The same cell with a real 0.5% shear is genuinely not hexagonal, and no tolerance should hide it.
+  assert.equal(latticePointGroup([[3.16, 0, 0], [-1.58, 2.75, 0], [0, 0, 12.9]], 1e-4).length, 8);
+  // A large cell is not held to a stricter standard than a small one. Both of these are 1e-5 away
+  // in the metric (5e-6 in length); an absolute tolerance of 1e-4 Å² would reject the large one.
+  assert.equal(latticePointGroup([[39.9998, 0, 0], [0, 40, 0], [0, 0, 40]], 1e-4).length, 48);
+  assert.equal(latticePointGroup([[3.99998, 0, 0], [0, 4, 0], [0, 0, 4]], 1e-4).length, 48);
+  // ...and asking for a tighter tolerance still reports the lower symmetry.
+  assert.equal(latticePointGroup(rounded, 1e-6).length, 8);
+});

@@ -259,6 +259,10 @@ export const CUBIC_OPERATIONS: number[][][] = (() => {
  */
 export function latticePointGroup(lattice: Lattice, tolerance = 1e-6): number[][][] {
   const metric = lattice.map(a => lattice.map(b => a[0] * b[0] + a[1] * b[1] + a[2] * b[2]));
+  // Compare against the cell's own scale. A fixed tolerance in Å² would make a 30 Å cell stricter
+  // than a 3 Å one, so a POSCAR rounded to four decimals (2.7366 for 2.7366118…) would lose symmetry
+  // the crystal really has, while a truly sheared cell must still be rejected.
+  const scale = Math.max(Math.abs(metric[0][0]), Math.abs(metric[1][1]), Math.abs(metric[2][2]), 1e-12);
   const values = [-1, 0, 1];
   const operations: number[][][] = [];
   for (const a of values) for (const b of values) for (const c of values)
@@ -271,7 +275,7 @@ export function latticePointGroup(lattice: Lattice, tolerance = 1e-6): number[][
         for (let p = 0; p < 3 && ok; p++) for (let q = 0; q < 3 && ok; q++) {
           let sum = 0;
           for (let r = 0; r < 3; r++) for (let s = 0; s < 3; s++) sum += m[r][p] * metric[r][s] * m[s][q];
-          if (Math.abs(sum - metric[p][q]) > tolerance) ok = false;
+          if (Math.abs(sum - metric[p][q]) > tolerance * scale) ok = false;
         }
         if (ok) operations.push(m);
       }

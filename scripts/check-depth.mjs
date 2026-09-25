@@ -106,8 +106,19 @@ try {
         if(Number(claimed?.[1]??-1)!==(actual?Number(actual[1]):0))countMismatches.push(size+'x: '+label+' vs '+caption);
       }
     }
+    // Files: a hexagonal POSCAR loads to its own point group, and a file that cannot be parsed
+    // leaves the crystal alone and says why.
+    const newline=String.fromCharCode(10);
+    const statusBeforeFiles=document.getElementById('status').textContent;
+    const hex=['Hexagonal','1.0','3.16 0 0','-1.58 2.7366 0','0 0 12.9','Mo','1','Direct','0 0 0'].join(newline);
+    const drop=async(name,text,target)=>{const dt=new DataTransfer();dt.items.add(new File([text],name));const input=document.getElementById(target);input.files=dt.files;input.dispatchEvent(new Event('change'));await wait(900);};
+    await drop('hex.vasp',hex,'poscar-file');
+    const loaded={status:document.getElementById('status').textContent,state:document.getElementById('status').dataset.state,options:select.options.length,report:document.getElementById('mapping').textContent};
+    const captionBefore=document.getElementById('stage-op').textContent;
+    await drop('broken.vasp','not a poscar at all','poscar-file');
+    const rejected={status:document.getElementById('status').textContent,state:document.getElementById('status').dataset.state,caption:document.getElementById('stage-op').textContent};
     return {first,reversed,translucentBehind,translucentFront,captions,report:document.getElementById('mapping').textContent,status:document.getElementById('status').textContent,
-      distinctLabels,beforeZoom,zoomed,zoomedAfterSwitch,afterReset,countMismatches,slowestSwitch:Math.max(...switchTimes),identityPlayDisabled,rotationPlayDisabled};
+      distinctLabels,beforeZoom,zoomed,zoomedAfterSwitch,afterReset,countMismatches,loaded,rejected,captionBefore,statusBeforeFiles,slowestSwitch:Math.max(...switchTimes),identityPlayDisabled,rotationPlayDisabled};
   })()`});
   if(result.exceptionDetails)throw new Error(result.exceptionDetails.text+JSON.stringify(result.exceptionDetails));
   const value=result.result.value;
@@ -133,7 +144,7 @@ try {
   assert.ok(counts.filter(count=>count.movers>0).length>=20,'most operations must visibly move sites');
   assert.ok(Math.max(...counts.map(count=>count.movers))>=4,'the inversion moves 4 of the 5 perovskite sites');
   assert.match(value.report,/verified: every site maps to a distinct equivalent site/);
-  assert.match(value.status,/^Ready/);
+  assert.match(value.statusBeforeFiles,/^Ready/);
   assert.equal(value.distinctLabels,48,'every operation must read distinctly (S4 and S4^3 differ only by the power)');
 
   // Viewer interaction locks.
@@ -144,6 +155,15 @@ try {
   assert.ok(Math.abs(value.afterReset-value.beforeZoom)<=2,`a double-click must put the camera back (${value.beforeZoom} -> ${value.afterReset})`);
   assert.ok(value.slowestSwitch<80,`choosing an operation must stay inside a frame budget (slowest ${value.slowestSwitch.toFixed(1)} ms)`);
   assert.deepEqual(value.countMismatches,[],'the picker and the caption must agree on how many sites move');
+
+  // Loading a file, and refusing one.
+  assert.match(value.loaded.status,/loaded$/);
+  assert.equal(value.loaded.state,'ok');
+  assert.equal(value.loaded.options,24,`a hexagonal lattice shows 6/mmm: 24 operations (got ${value.loaded.options})`);
+  assert.match(value.loaded.report,/map this cell onto itself/);
+  assert.match(value.rejected.status,/broken\.vasp: /);
+  assert.equal(value.rejected.state,'error');
+  assert.equal(value.rejected.caption,value.captionBefore,'a rejected file must leave the crystal alone');
   console.log('PASS: opaque depth, draw-order independence, translucent depth, every operation captioned, and the viewer interaction locks',
-    {operations:value.captions.length,moving:counts.filter(count=>count.movers>0).length,movedPerOperation:counts.map(count=>count.movers),slowestSwitchMs:Number(value.slowestSwitch.toFixed(1)),status:value.status});
+    {operations:value.captions.length,moving:counts.filter(count=>count.movers>0).length,movedPerOperation:counts.map(count=>count.movers),slowestSwitchMs:Number(value.slowestSwitch.toFixed(1)),loaded:value.loaded.options,status:value.statusBeforeFiles});
 } finally {socket.close();await fetch(`http://localhost:${port}/json/close/${target.id}`);}
