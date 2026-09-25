@@ -131,6 +131,8 @@ const STYLES = `
 .dvn-note{white-space:nowrap;font-size:.78em;color:var(--dvn-muted);letter-spacing:.01em}
 .dvn-note.is-in{color:var(--dvn-accent)}
 .dvn-anchor{position:absolute;left:50%;top:-.2em;transform:translate(-50%,-100%);white-space:nowrap;font-size:.7em;color:var(--dvn-accent)}
+/* The spoken form of the current line, kept out of the picture but in the accessibility tree. */
+.dvn-sr{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
 .dvn *,.dvn *::before,.dvn *::after{transition-property:color,opacity,transform;transition-duration:.45s}
 .dvn.no-anim,.dvn.no-anim *,.dvn.no-anim *::before,.dvn.no-anim *::after{transition:none !important}
 @media (prefers-reduced-motion: reduce){.dvn *,.dvn *::before,.dvn *::after{transition-duration:.01s !important}}
@@ -174,13 +176,19 @@ export class Derivation {
   private timer: number | undefined;
   private observer: ResizeObserver | undefined;
   private readonly root: HTMLDivElement;
+  private readonly live: HTMLDivElement;
 
   constructor(private host: HTMLElement, private options: DerivationOptions = {}) {
     ensureStyles(host.ownerDocument);
     this.root = host.ownerDocument.createElement('div');
     this.root.className = `dvn${options.className ? ` ${options.className}` : ''}`;
     this.root.setAttribute('role', 'math');
-    this.root.setAttribute('aria-live', 'polite');
+    // The state a reader hears has to be *content* that changes: a changing aria-label is not
+    // announced, so the plain form of the current line has its own polite live region.
+    this.live = host.ownerDocument.createElement('div');
+    this.live.className = 'dvn-sr';
+    this.live.setAttribute('aria-live', 'polite');
+    this.root.append(this.live);
     host.append(this.root);
   }
 
@@ -290,6 +298,7 @@ export class Derivation {
     void this.host.ownerDocument.fonts?.ready.then(() => this.repositionStrikes());
     if (!animate && view) view.requestAnimationFrame(() => this.root.classList.remove('no-anim'));
     this.root.setAttribute('aria-label', this.describe(step, beat));
+    this.live.textContent = this.describe(step, beat);
   }
 
   /** Plain-text form of the current state, for screen readers and for tests. */
