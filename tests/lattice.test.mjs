@@ -543,3 +543,21 @@ test('the point group tolerates rounding but not real distortion', () => {
   // ...and asking for a tighter tolerance still reports the lower symmetry.
   assert.equal(latticePointGroup(rounded, 1e-6).length, 8);
 });
+
+test('every crystal system reports its own holohedry', () => {
+  const systems = [
+    ['triclinic', cellFromParameters(5, 6, 7, 80, 90, 100), 2],
+    ['monoclinic', cellFromParameters(5, 6, 7, 90, 100, 90), 4],
+    ['orthorhombic', cellFromParameters(5, 6, 7), 8],
+    ['tetragonal', cellFromParameters(5, 5, 7), 16],
+    ['hexagonal', cellFromParameters(5, 5, 7, 90, 90, 120), 24],
+    ['rhombohedral', cellFromParameters(5, 5, 5, 75, 75, 75), 12],
+    ['cubic', cellFromParameters(5, 5, 5), 48],
+    // The primitive cell of a face-centred cubic lattice is rhombohedral with α = β = γ = 60°, and it
+    // really is cubic: m-3m is the right answer there, not -3m.
+    ['fcc primitive', cellFromParameters(5, 5, 5, 60, 60, 60), 48],
+  ];
+  for (const [label, lattice, expected] of systems) {
+    assert.equal(latticePointGroup(lattice, 1e-4).length, expected, `${label} holohedry`);
+  }
+});
