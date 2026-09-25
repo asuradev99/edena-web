@@ -554,6 +554,74 @@ function colourDemo(view: WebGPUView): Demo {
 }
 
 /* --------------------------------------------------------------------------------------------
+ * 21 · A camera that follows: the scene does not move, only the point being looked at.
+ * ------------------------------------------------------------------------------------------ */
+
+function followDemo(view: WebGPUView): Demo {
+  look(view, .6, .38, 9.5);
+  const labels = new LabelLayer($('follow-labels'), view.camera);
+  const scene = new Group();
+  view.world.add(scene, new Visual(count(axes3d(1.4, .006)), rgba('#dbe9f5', .18)));
+
+  /** A lopsided closed loop: two frequencies of different period, so it never repeats visibly. */
+  const along = (t: number): Vec3 => [
+    2.6 * Math.cos(t * Math.PI * 2),
+    .95 * Math.sin(t * Math.PI * 2 * 2.5),
+    2.1 * Math.sin(t * Math.PI * 2),
+  ];
+  const trail: Vec3[] = Array.from({ length: 240 }, (_, index) => along(index / 240));
+  scene.add(new Visual(count(polyline(trail, .012, 6)), rgba('#58c4dd', .45)));
+  // A few fixed pillars: something in the frame that does not move, so following is visible.
+  for (const [x, z] of [[-3.2, -3.2], [3.2, -3.2], [-3.2, 3.2], [3.2, 3.2]] as [number, number][]) {
+    const pillar = new Visual(count(box([x - .12, -1.6, z - .12], [x + .12, 1.6, z + .12])), rgba('#9db0c2', .35));
+    scene.add(pillar);
+  }
+  const marker = new Visual(count(shadedSphere(.34)), rgba('#f7d681'));
+  scene.add(marker);
+  const readout = labels.addHTML(mathml(mn('')), () => [0, -2.6, 0], '#9db0c2', 'math-label');
+
+  let follow = true, phase = 0, playing = !reducedMotion;
+  const lockButton = $<HTMLButtonElement>('follow-lock');
+  const playButton = $<HTMLButtonElement>('follow-play');
+  const pitchInput = $<HTMLInputElement>('follow-pitch');
+  const distanceInput = $<HTMLInputElement>('follow-distance');
+  const panelReadout = $('follow-readout');
+  const buttons = (): void => {
+    lockButton.textContent = follow ? 'Following' : 'Fixed view';
+    lockButton.setAttribute('aria-pressed', String(follow));
+    playButton.textContent = playing ? 'Pause' : 'Play';
+    playButton.setAttribute('aria-pressed', String(playing));
+  };
+  const place = (): void => {
+    const point = along(phase);
+    marker.position = [...point];
+    // Only the looked-at point moves; the camera's angle and distance are the reader's to set.
+    // "Fixed view" looks at the origin, so the switch always does something definite.
+    view.camera.target = follow ? point : [0, 0, 0];
+    view.camera.pitch = Number(pitchInput.value);
+    view.camera.distance = Number(distanceInput.value);
+    const text = `target ${point.map(value => value.toFixed(1)).join(', ')}`;
+    readout.innerHTML = mathml(mtext(text));
+    panelReadout.textContent = text;
+  };
+  lockButton.addEventListener('click', () => { follow = !follow; buttons(); place(); });
+  playButton.addEventListener('click', () => { playing = !playing; buttons(); });
+  pitchInput.addEventListener('input', () => { $('follow-pitch-value').textContent = Number(pitchInput.value).toFixed(2); place(); });
+  distanceInput.addEventListener('input', () => { $('follow-distance-value').textContent = Number(distanceInput.value).toFixed(1); place(); });
+  buttons();
+  place();
+
+  return {
+    labels,
+    update: delta => {
+      if (!playing) return;
+      phase = (phase + delta * .12) % 1;
+      place();
+    },
+  };
+}
+
+/* --------------------------------------------------------------------------------------------
  * 20 · A bar chart in 3D: data becomes geometry, and a sort eases rather than jumps.
  * ------------------------------------------------------------------------------------------ */
 
@@ -1560,7 +1628,7 @@ function plotDemo(view: WebGPUView): Demo {
  * ------------------------------------------------------------------------------------------ */
 
 async function initialize(): Promise<void> {
-  const canvases = ['coordinates-canvas', 'interpolation-canvas', 'transparency-canvas', 'shapes-canvas', 'groups-canvas', 'labels-canvas', 'colour-canvas', 'plot-canvas', 'depth-canvas', 'instances-canvas', 'camera-canvas', 'simulation-canvas', 'field-canvas', 'streamlines-canvas', 'story-canvas', 'vectors-canvas', 'path-canvas', 'normals-canvas', 'layers-canvas', 'bars-canvas'];
+  const canvases = ['coordinates-canvas', 'interpolation-canvas', 'transparency-canvas', 'shapes-canvas', 'groups-canvas', 'labels-canvas', 'colour-canvas', 'plot-canvas', 'depth-canvas', 'instances-canvas', 'camera-canvas', 'simulation-canvas', 'field-canvas', 'streamlines-canvas', 'story-canvas', 'vectors-canvas', 'path-canvas', 'normals-canvas', 'layers-canvas', 'bars-canvas', 'follow-canvas'];
   const first = await WebGPUView.create($<HTMLCanvasElement>(canvases[0]), { samples: msaa, maxDpr, onError: report });
   views.push(first);
   if (disposed) { first.dispose(); return; }
@@ -1588,6 +1656,7 @@ async function initialize(): Promise<void> {
     normalDemo(views[17]),
     layerDemo(views[18]),
     barDemo(views[19]),
+    followDemo(views[20]),
   );
 
   // Eleven views on one page: drawing the ones below the fold would cost a full render each frame for

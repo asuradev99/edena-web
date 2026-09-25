@@ -1,7 +1,7 @@
 // Run against a Chrome debugging session: node scripts/check-basics.mjs [port]
 //
 // Checks the basics tour the way a reader meets it:
-//   1. every one of the twenty demos draws something, and each draws something distinct;
+//   1. every one of the twenty-one demos draws something, and each draws something distinct;
 //   2. every control changes its own stage — projection, grid, marker height, opacity, spin, the mesh
 //      selector, the group's spread and opacity, and the helix's turn count — and leaves the others be;
 //   3. the two moving demos advance on their own, and the transport seeks;
@@ -106,7 +106,7 @@ try {
     return evaluate(`window.__measureRegion(${JSON.stringify(shot)}, ${JSON.stringify(rect)})`);
   };
 
-  const stageIds = ['coordinates', 'interpolation', 'transparency', 'shapes', 'groups', 'labels', 'colour', 'plot', 'depth', 'instances', 'camera', 'simulation', 'field', 'streamlines', 'story', 'vectors', 'path', 'normals', 'layers', 'bars'];
+  const stageIds = ['coordinates', 'interpolation', 'transparency', 'shapes', 'groups', 'labels', 'colour', 'plot', 'depth', 'instances', 'camera', 'simulation', 'field', 'streamlines', 'story', 'vectors', 'path', 'normals', 'layers', 'bars', 'follow'];
   const startup = await evaluate(`({ stats: document.getElementById('stats').textContent, status: document.getElementById('status').hidden, labels: document.querySelectorAll('.labels span').length })`);
   assert.ok(startup.status, `the page reported an error: ${await evaluate('document.getElementById("status").textContent')}`);
   assert.match(startup.stats, /fps/);
@@ -160,18 +160,21 @@ try {
     ['layers-axes', false, 'layers'],
     ['bars-series', 'moons', 'bars'],
     ['bars-sort', 1, 'bars'],
+    ['follow-distance', 14, 'follow'],
+    ['follow-pitch', 1.2, 'follow'],
   ];
   // Stop the demos that spin, so every control can be judged against a still picture. The spin buttons
   // themselves are checked afterwards, by measuring exactly this drift.
   await evaluate(`document.getElementById('transparency-spin').click(); document.getElementById('groups-spin').click(); document.getElementById('depth-spin').click(); document.getElementById('instances-spin').click(); document.getElementById('field-spin').click(); document.getElementById('streamlines-turn').click(); document.getElementById('vectors-spin').click(); document.getElementById('normals-spin').click(); document.getElementById('layers-turn').click(); document.getElementById('bars-spin').click();`);
+  await evaluate(`{ const node = document.getElementById('follow-play'); if (node.textContent === 'Pause') node.click(); }`);
   await evaluate(`{ const node = document.getElementById('path-play'); if (node.textContent === 'Pause') node.click(); }`);
   await evaluate(`{ const node = document.getElementById('story-play'); if (node.textContent === 'Pause') node.click(); }`);
   await wait(500);
   // Only these hold still on their own, so only they can prove that a control left them alone.
-  const still = new Set(['coordinates', 'shapes', 'groups', 'colour', 'plot', 'depth', 'instances', 'field', 'streamlines', 'story', 'vectors', 'path', 'normals', 'layers', 'bars']);
+  const still = new Set(['coordinates', 'shapes', 'groups', 'colour', 'plot', 'depth', 'instances', 'field', 'streamlines', 'story', 'vectors', 'path', 'normals', 'layers', 'bars', 'follow']);
   for (const [control, value, stageId] of changes) {
     // The helix keeps moving, so stop it first: then the turn count is the only thing that changes.
-    if (control === 'labels-turns' || control.startsWith('camera-') || control.startsWith('simulation-')) {
+    if (control === 'labels-turns' || control.startsWith('camera-') || control.startsWith('simulation-') || control.startsWith('follow-')) {
       // Only click a button that is currently playing: the state depends on prefers-reduced-motion.
       await evaluate(`for (const id of ['labels-play', 'camera-play', 'simulation-play']) { const node = document.getElementById(id); if (node.textContent === 'Pause') node.click(); }`);
       await wait(300);
@@ -247,6 +250,16 @@ try {
   await evaluate(`window.__set('streamlines-speed', 0.7)`);
   await wait(200);
 
+  // The follow switch: released, the camera looks at the origin instead of at the marker, which is a
+  // change of view rather than a change of motion.
+  const followed = await region('follow');
+  await evaluate(`document.getElementById('follow-lock').click()`);
+  await wait(400);
+  const released = await region('follow');
+  assert.ok(difference(followed, released) > .02, `releasing the camera should change the view (moved ${difference(followed, released).toFixed(5)})`);
+  await evaluate(`document.getElementById('follow-lock').click()`);
+  await wait(200);
+
   // The path's marker reads its position from the same parameter the scrubber sets, and the readout
   // shows the raw parameter beside the eased one.
   const alongBefore = await evaluate(`document.getElementById('path-readout').textContent`);
@@ -291,11 +304,11 @@ try {
   const stats = await evaluate(`document.getElementById('stats').textContent`);
   const fps = Number(/· (\d+) fps/.exec(stats)?.[1] ?? 0);
   assert.ok(fps >= 50, `expected a healthy frame rate, saw ${stats}`);
-  assert.match(stats, /20 views/);
+  assert.match(stats, /21 views/);
   const problems = events.filter(event => event.method === 'Runtime.exceptionThrown' || (event.method === 'Runtime.consoleAPICalled' && event.params.type === 'error') || (event.method === 'Log.entryAdded' && event.params.entry.level === 'error'));
   assert.equal(problems.length, 0, `the page reported ${problems.length} problem(s): ${JSON.stringify(problems[0]?.params ?? {}).slice(0, 300)}`);
 
-  console.log('PASS: twenty demos drawing distinct scenes, every control moving its own stage alone,');
+  console.log('PASS: twenty-one demos drawing distinct scenes, every control moving its own stage alone,');
   console.log('      the helix and the timeline running, the transport seeking and resuming,', stats);
   console.log('     ', JSON.stringify(Object.fromEntries(stageIds.map(stageId => [stageId, Number(signatures[stageId].mean.toFixed(3))]))));
 } finally {
