@@ -23,7 +23,7 @@ Dedicated demos:
 
 ## Crystal workflow
 
-The symmetry viewer accepts extensionless POSCAR files, VASP 4 and VASP 5 layouts, positive or target-volume scale factors, Direct or Cartesian positions, Selective Dynamics lines, and phonopy symmetry files in nested, row-oriented, or flat nine-number rotation formats. Files are parsed locally in the browser.
+The symmetry viewer accepts extensionless POSCAR files, VASP 4 and VASP 5 layouts, positive or target-volume scale factors, Direct or Cartesian positions, Selective Dynamics lines, and phonopy symmetry files in nested, row-oriented, or flat nine-number rotation formats. Files are parsed locally in the browser: drop them anywhere on the page — the whole window accepts a drop, so a stray file cannot navigate the viewer away — or pick them from the card, which has one chooser for a POSCAR, one for a symmetry file, and a combined one behind the drop zone.
 
 ```ts
 import { parsePOSCAR, parsePhonopySymmetry } from 'edena-web';
