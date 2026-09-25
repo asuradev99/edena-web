@@ -16,7 +16,7 @@ Open [http://localhost:5173/](http://localhost:5173/). The landing page is an in
 Dedicated demos:
 
 - [Physics laboratory](physics-lab.html): Kepler orbits, direct all-pairs GPU gravity, double pendulums, the Lorenz attractor, wave interference, and a vibrating drumhead.
-- [Crystal symmetry](symmetry.html): upload a POSCAR/CONTCAR and phonopy `symmetry.yaml`, then inspect rotations, mirrors, inversion, translations, atom types, and atomic radii.
+- [Crystal symmetry](symmetry.html): upload a POSCAR/CONTCAR and phonopy `symmetry.yaml`, then watch each rotation, mirror, inversion and roto-reflection play on the structure — bonds, periodic neighbours, orbit trails and a live site-mapping report.
 - [GPU particles](particles.html): compare the 50K oscillator baseline with direct O(N²) GPU gravity.
 - [Electric-field animatic](electrostatics.html): a complete visual derivation for a uniformly charged ball, including the volume integral and a Gauss-law check.
 - [3D field explorer](field.html): an isolated implicit-surface example.
@@ -33,6 +33,18 @@ const operations = parsePhonopySymmetry(await symmetryFile.text());
 console.log(structure.species, structure.positions.length);
 console.log(operations[0].rotation, operations[0].translation);
 ```
+
+The viewer draws the cell centred on a lattice point rather than on a corner, because every point-group element passes through the origin: with the origin in the middle of the picture the drawn axis or mirror plane is where the crystal actually turns, and no atom sweeps around the edge of the box. `isometryTarget` only nudges an atom by a lattice vector when its image leaves the cell, which never happens for a cubic cell.
+
+```ts
+import { operationIsometry, isometryPoint, isometryTarget } from 'edena-web';
+
+const isometry = operationIsometry(structure.lattice, operation);
+const atHalfway = isometryPoint(isometry, start, 0.5);   // the identity at t = 0, the full map at t = 1
+const resting = isometryTarget(isometry, start, structure.lattice);
+```
+
+Improper operations are reported as the rotoreflection they are, `S(θ, n) = R(θ, n)·σ_n`, so a mirror plane is labelled and drawn normal to `n` and a roto-reflection shows both the plane and its spin.
 
 ## Library quick start
 
@@ -62,6 +74,9 @@ The public entry point exports:
 | CPU simulation | `createParticleState`, `stepParticles`, `ParticleSimulation` |
 | GPU simulation | `GpuParticleSimulation` with ping-pong storage buffers, compute integration, instanced rendering, timestamp timing, reset, and checksums |
 | Crystal data | `parsePOSCAR`, `parsePhonopySymmetry` |
+| Crystal geometry | `cellFromParameters`, `fractionalToCartesian`/`cartesianToFractional`, `supercell`, `latticeSites`, `bonds`, `nearestNeighbours`, `millerPlane`, `latticePointGroup`, `mapsOntoSelf`, `siteMapping`, `symmetryOrbits`, `operationIsometry`/`isometryPoint`/`isometryTarget` |
+| Elements | `ELEMENTS`, `appearanceFor` (CPK-brightened colors and covalent radii) |
+| Math text | `mathml`, `mi`, `mn`, `mo`, `frac`, `msub`, `msup`, `matrix`, … and `LabelLayer.addHTML` to typeset them over the canvas |
 
 ### Plotting and fields
 
@@ -133,6 +148,7 @@ Measurements were taken on Chrome Beta with Vulkan and an AMD RX 6700 XT. They a
 | Workload | Result |
 | --- | --- |
 | Landing showcase | 60 FPS, four views, about 123K triangles |
+| Crystal symmetry viewer | 60 FPS, 1x1x1 to 2x2x2 perovskite (40 atoms, 38 moving sites, 38 orbit trails in one merged draw) |
 | Physics laboratory | 60 FPS, six views, about 54K triangles |
 | GPU oscillator | 50,000 particles, about 0.022 ms GPU integration per step |
 | GPU direct n-body | 8,192 bodies ≈ 0.5 ms/step; 32,768 ≈ 3.7 ms/step |

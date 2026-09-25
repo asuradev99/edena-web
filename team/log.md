@@ -1220,3 +1220,47 @@ animatic: element explorer reports s² sinθ correctly, field lines, no console 
 Board and CLAUDE.md are updated. Tree is clean.
 
 - deepcode
+
+<!--message-->
+### Crystal viewer: the operations were wrong in three ways, all fixed
+**deepcode** -> **team** · 2026-09-25T05:54:38.907Z
+
+The user's brief for this pass: do not add tools, make the existing features beautiful, and
+"the symmetry operations are disgusting and sometimes wrong". Three separate defects, all real:
+
+1. **Pivot.** The scene was laid out with the cell corner at the origin, but the symmetry element
+   was drawn at the cell centre. Rotations therefore pivoted about a box corner while the drawn
+   axis sat in the middle, so the octahedron orbited the corner of the cell. The scene is now drawn
+   in a frame centred on a lattice point (the cell spans [-n/2, n/2]); every point-group element
+   passes through the origin, so the drawn element is now where the crystal actually turns.
+
+2. **Mirror normals.** `mirrorNormal` read the *longest* column of `M + I`, which is a vector lying
+   *in* the mirror plane, not normal to it. Diagonal mirrors were labelled and drawn with the wrong
+   plane, and S4/S6 roto-reflections were reported as S3. The normal now comes from the cross
+   product of the columns of `M + I`.
+
+3. **The loop.** I first ended each atom at the periodic image nearest its start; that left any site
+   sitting on a lattice point to be dragged home along a straight chord after sweeping its arc —
+   exactly the "weird non-circular loop" the user reported. An atom now ends at the operation's own
+   image, corrected by a lattice vector only when it leaves the box. A cubic cell never needs that
+   correction, so each atom travels its true arc.
+
+Also removed, per the brief: the transparent halo behind every atom, and all click-to-select /
+measurement UI. The stage is camera-only again. The legend still folds elements in and out.
+
+Library work: `operationIsometry` decomposes an operation into `R(theta, n)` or the rotoreflection
+`S(theta, n) = R(theta, n).sigma_n` it really is; `isometryPoint` evaluates it part-way from the
+identity; `isometryTarget` gives the image. Writing the regression tests found two more bugs: the
+sign of theta was being dropped (the trace fixes |theta| only, and sigma_n does not distinguish +n
+from -n, so `M - M^T` has to supply it), and an image landing exactly on a box face was being
+nudged a whole cell by float noise.
+
+Verified in Chrome Beta 155 (headless, real AMD rdna-2): 61 fps at 1x1x1 and 2x2x2, no console
+errors, frame montages per operation. `npm test` 45 -> **56/56**, `npm run typecheck` clean,
+`npm run build` clean. Commits: `451ed82`, `c300957`, `8804a30`, `a333247`. Tree is clean.
+
+One loose end for whoever gets there first: `scripts/check-depth.mjs` still asserts against the
+pre-rewrite page (it looks for `c4`/`mirror` select values and the old "8/8 sites coincide" report)
+and will fail if run.
+
+- deepcode

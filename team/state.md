@@ -1,18 +1,19 @@
 # Shared state
 
-Last updated: 2026-09-25 by **deepcode** (lattice/streamline/MathML library layer, crystal viewer rewrite, electromagnetism upgrade, interactive field example, showcase typesetting). Prior: color lane, Phase 6 docs, simulation cleanup, all-pairs n-body + physics lab, crystal docs; **astra** (perspective camera, Phase 5 seam, landing gallery, crystal viewer uploads). Update the date and author when you change this.
+Last updated: 2026-09-25 by **deepcode** (crystal viewer: centred-lattice animation, element folding, camera-only stage; lattice isometry API + regression tests). Prior: lattice/streamline/MathML library layer, crystal viewer rewrite, electromagnetism upgrade, interactive field example, showcase typesetting; color lane, Phase 6 docs, simulation cleanup, all-pairs n-body + physics lab, crystal docs; **astra** (perspective camera, Phase 5 seam, landing gallery, crystal viewer uploads). Update the date and author when you change this.
 
 ## Where things stand
 
-- Branch `main`, tree **clean**. The session is committed: `3054fd1` (library + pages), `5bb690a`
-  (first log note), `5e28935` (lattice/vectorfield/mathtext foundations), `134ff03` (crystal viewer
-  rewrite), `edad9c1` (electromagnetism upgrade), `f83ee5e` (field example + showcase typesetting).
-- `npm run typecheck` → clean. `npm test` → **45/45** pass (~1.2 s; the sample-budget boundary
+- Branch `main`, tree **clean**. This line of work is committed: `451ed82` (legend element folding),
+  `c300957` (centred, correct operation animation; halos and clicking removed), `8804a30`
+  (lattice isometry API + tests), `a333247` (supercell trail legibility). Earlier: `3054fd1`
+  (library + pages), `5bb690a`, `5e28935`, `134ff03`, `edad9c1`, `f83ee5e`.
+- `npm run typecheck` → clean. `npm test` → **56/56** pass (~1.2 s; the sample-budget boundary
   test alone costs ~0.9 s). `npm run build` → `build/`.
 - Pages all serve 200 from `npm run dev` (http://localhost:5173): `/`, `/field.html`,
   `/particles.html`, `/physics-lab.html`, `/symmetry.html`, `/electrostatics.html`, `/legacy.html`.
-- Rendering verified in Chrome Beta on the Vulkan path: 60 fps vsync-capped,
-  ~1450 fps uncapped at DPR 1 and 2, ~0.4 ms CPU/frame, no console/WebGPU errors.
+- Rendering verified in Chrome Beta 155 on the Vulkan path (`--headless=new`, CDP 9444, real AMD
+  rdna-2 adapter): 61 fps on `symmetry.html` at 1x1x1 and 2x2x2, no console/WebGPU errors.
 
 ## Layout
 
@@ -26,7 +27,7 @@ Last updated: 2026-09-25 by **deepcode** (lattice/streamline/MathML library laye
 | `src/examples/particles.ts` + `particles.html` | Particle benchmark page: oscillator and all-pairs `nbody` modes, count selector, GPU-step timing |
 | `src/demo/*` + `electrostatics.html` + `demo.css` | Archived 3:12 charged-ball animatic |
 | `src/lib/crystal.ts` (**chatgpt**) + `tests/crystal.test.mjs` | Crystal data: POSCAR and phonopy symmetry parsers |
-| `symmetry.html` + `src/examples/symmetry.ts` (**astra**) | Crystal viewer: drag/drop POSCAR/CONTCAR + phonopy symmetry uploads, species-coloured atoms, animated symmetry operations |
+| `symmetry.html` + `src/examples/symmetry.ts` | Crystal viewer: drag/drop POSCAR/CONTCAR + phonopy symmetry uploads, species-coloured atoms with periodic ghost neighbours and two-tone bonds, supercell 1–3 drawn centred on a lattice point, arc-animated operations with orbit trails, live site-mapping report, and a legend that folds elements in and out. Camera-only (no picking/measurement) |
 | `src/*.ts`, `dist/`, `legacy.html` | Older physics prototype; excluded from the library build |
 | `tests/*.test.mjs` | `core.test.mjs` (physics/geometry/timeline), `plot.test.mjs` (ticks/isosurface/colors/budgets), `camera.test.mjs` (projection), `simulation.test.mjs` (CPU seam), `particles.test.mjs` (GPU option validation) |
 | `team/` | This coordination channel |
@@ -44,6 +45,14 @@ Last updated: 2026-09-25 by **deepcode** (lattice/streamline/MathML library laye
   `bonds` (every periodic image within the cutoff), `nearestNeighbours`, `millerPlane`,
   `CUBIC_OPERATIONS` (all 48), `applyOperation`, `mapsOntoSelf`, `siteMapping`, `symmetryOrbits`,
   `cartesianOperation`/`axisAngle`/`rotateAboutAxis`, `structureBounds`, `shortestDistance`, `isCubic`
+- `src/lib/lattice.ts` (new in this pass): `operationIsometry(lattice, operation)` decomposes an
+  operation into the rotation `R(θ, n)`, or the **rotoreflection** `S(θ, n) = R(θ, n)·σ_n` it
+  actually is (`{ axis, angle, improper, inversion, translation, trivial }`); `isometryPoint(iso, p, t)`
+  evaluates that map part-way from the identity; `isometryTarget(iso, p, lattice)` gives the image
+  slid into the origin-centred cell only when it leaves one; `improperNormal(m)` is the mirror-plane
+  normal. Two bugs came out of writing the tests: the sign of θ was being dropped (the trace fixes
+  |θ| only, and σ_n does not distinguish ±n, so M − Mᵀ supplies it), and an image landing exactly on
+  a box face was being nudged a whole cell by float noise.
 - `src/lib/vectorfield.ts`: `streamline`/`streamlines` (RK4, arc-length stepping) and `sphereSeeds`
 - `src/lib/elements.ts`: `ELEMENTS` + `appearanceFor` (CPK-brightened colours, covalent radii)
 - `src/lib/mathtext.ts`: MathML builders (`mi`/`mn`/`mo`/`row`/`frac`/`msup`/`msub`/`sqrt`/`vec`/
@@ -78,31 +87,51 @@ Last updated: 2026-09-25 by **deepcode** (lattice/streamline/MathML library laye
 
 ## In flight (claimed)
 
-- **deepcode** — docs only right now (`README.md`, `CLAUDE.md`, this board). The GPU particle core
-  (`src/lib/particles.ts`) and the physics lab are landed and free.
-- **astra** — `symmetry.html`, `src/examples/symmetry.ts`, `src/lib/view.ts` (crystal uploads +
-  atom appearance just landed); earlier: `particles.html`, `src/examples/particles.ts`,
-  `index.html`, `src/showcase/main.ts`, `src/examples/field.ts`.
-- **chatgpt** — `src/lib/crystal.ts` (parsing done; the `src/lib/lattice.ts` geometry layer deepcode
-  offered is still unclaimed pending their answer).
+- **deepcode** — just landed the crystal viewer pass and the lattice isometry layer; tree is clean and
+  everything below is free to edit. Available for docs or another page.
+- **astra** — earlier: `symmetry.html`, `src/examples/symmetry.ts`, `src/lib/view.ts`, `particles.*`,
+  `index.html`, `src/showcase/main.ts`, `src/examples/field.ts`. Those claims are now released:
+  deepcode edited `symmetry.html` and `src/examples/symmetry.ts` in this pass.
+- **chatgpt** — `src/lib/crystal.ts` (parsing done; the `src/lib/lattice.ts` geometry layer is now
+  built out as well).
 - Everything else is free. Post before you edit so we do not collide.
 
 ## Open items / good next steps
 
-1. Commit the current work (nobody has committed this session).
+1. Tree is clean and committed; `npm test` is 56/56.
 2. **astra:** Phase 5 remainder in `src/lib/simulation.ts` — fixed-step accumulation, pause,
    and single-step as explicit runtime policies. Unclaimed by deepcode.
 3. Spatial interaction kernels (neighbour search, Barnes-Hut, all-pairs) are explicitly **out of
    scope** for the current baseline; the user asked for the simplest raw throughput baseline first.
 4. Phase 6 remainder: API naming decisions and measurement notes.
    See `VISUALIZATION_LIBRARY_PLAN.md` and `README.md`.
-5. Crystal viewer follow-ups: the `src/lib/lattice.ts` geometry layer (cell parameters,
-   SC/BCC/FCC/diamond sites, bonds, Miller planes, the 48 generated cubic operations,
-   `mapsOntoSelf`) is offered but unclaimed until chatgpt answers; the page currently derives
-   atom sites straight from the parsed POSCAR positions.
+5. Crystal viewer follow-ups: `scripts/check-depth.mjs` still asserts against the pre-rewrite page
+   (it looks for `c4`/`mirror` select values and the old "8/8 sites coincide" report); refresh or
+   delete it. `src/lib/lattice.ts` is now built out, and `structureBounds` is no longer used by the
+   viewer (it computes the bounds of the drawn box instead).
 
 ## Landed recently
 
+- **Crystal viewer pass (deepcode, 2026-09-25, second session).** The user's brief was "don't add
+  tools, make what is there beautiful, and the operations are disgusting and sometimes wrong".
+  - **The animation bug.** The scene was laid out with the cell corner at the origin while the
+    symmetry element was drawn at the cell centre, so rotations pivoted about a corner of the box and
+    atoms swept in wide arcs across it. The scene is now drawn in a frame centred on a lattice point
+    (the cell spans `[-n/2, n/2]`), which puts every element — they all pass through the origin — in
+    the middle of the picture, where the crystal now turns.
+  - **The "sometimes wrong" bug.** `mirrorNormal` read the *longest* column of `M + I`, which lies in
+    the mirror plane, so diagonal mirrors were labelled and drawn with the wrong normal (and `S₄`/`S₆`
+    were reported as `S₃`). The normal now comes from the cross product of the columns of `M + I`,
+    and every improper operation is decomposed as the rotoreflection it is.
+  - **The loop bug.** Ending an atom at the image *nearest its start* meant a site on a lattice point
+    was dragged home along a straight chord after sweeping its arc. An atom now ends at the
+    operation's own image, corrected by a lattice vector only if it leaves the box — which a cubic
+    cell never needs, so each atom travels its true arc.
+  - **Removed** the transparent halo behind every atom and all click-to-select/measurement UI: the
+    stage is camera-only. The legend still folds elements in and out, and dense supercell trails thin
+    out so 38 orbit arcs stay legible.
+  - Verified in Chrome Beta 155 (headless, CDP 9444, AMD rdna-2): 61 fps, no console errors, frame
+    montages per operation (`/tmp/edena/montage-*.png`), `npm test` 45 → **56/56**.
 - **Crystal viewer, library layer (chatgpt):** `src/lib/crystal.ts` — `parsePOSCAR` (VASP 4/5,
   selective dynamics, Cartesian or direct, negative scale as target volume) and
   `parsePhonopySymmetry`, exported through `src/index.ts` with `tests/crystal.test.mjs`.

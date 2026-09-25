@@ -64,6 +64,8 @@ input[type=range]{width:100%;accent-color:#70d7df;margin:2px 0}
 #description{margin-top:8px}
 .op-name{font-family:Georgia,serif;font-size:14px;color:var(--gold)}
 .op-matrix{font:10.5px ui-monospace,monospace;color:var(--muted);margin-top:4px;word-break:break-all}
+.element-key{margin-top:7px;font-size:10.5px;color:var(--muted)}
+.element-key b{font-weight:600}
 .report-line{font-size:11.5px;color:#c3d2e2;margin:3px 0;line-height:1.45}
 .report-line.ok{color:var(--ok)}
 .report-line.bad{color:var(--bad)}
@@ -108,6 +110,7 @@ input[type=range]{width:100%;accent-color:#70d7df;margin:2px 0}
     <details class="card" open><summary>Symmetry operation</summary>
       <div class="op-row"><button id="prev-op" aria-label="Previous operation">‹</button><select id="operation" aria-label="Symmetry operation"></select><button id="next-op" aria-label="Next operation">›</button></div>
       <div id="description"></div>
+      <div class="element-key"><b style="color:#f7d681">gold</b> axis · <b style="color:#58c4dd">blue</b> sweep · <b style="color:#83c167">green</b> mirror plane</div>
       <div class="transport" style="margin-top:10px">
         <button id="play" aria-label="Play">▶</button>
         <button id="reset" aria-label="Reset">↺</button>
