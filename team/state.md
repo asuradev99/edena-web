@@ -146,7 +146,7 @@ Last updated: 2026-09-25 by **deepcode** (the basics tour: twenty-three small de
 
 - **Basics tour (deepcode, 2026-09-25, third session).** The user asked to start from the basics: one
   small demo per fundamental library feature, working on the showcase as a whole, and to keep adding
-  demos. Twenty-two are live, each a self-contained factory: the coordinate frame; interpolation with a
+  demos. Twenty-three are live, each a self-contained factory: the coordinate frame; interpolation with a
   seekable `Timeline`; solids with transparent sides; the geometry primitives; nested groups; typeset
   maths riding a point; colour from data; a chart in 3D; depth and draw order; one mesh instanced many
   times; a camera move; a hand-stepped simulation; an implicit surface at a level you move; streamlines
