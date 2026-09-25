@@ -683,6 +683,7 @@ function writeMapping(): void {
   const orbitList = orbits.slice(0, 8).map(orbit => orbit.length > 12 ? `{${orbit.slice(0, 12).join(', ')}, …}` : `{${orbit.join(', ')}}`).join(' ');
   mappingPanel.innerHTML = `
     <div class="report-line"><strong>${exact.length}</strong> of ${operationsFromFile ? `${operations.length} listed operations` : `the lattice's ${latticeGroupSize} point-group operations`} map this cell onto itself.</div>
+    ${!operationsFromFile && exact.length < latticeGroupSize ? '<div class="report-line muted">The rest are either broken by this decoration or need a lattice translation as well, which makes them space-group operations rather than point operations about the origin.</div>' : ''}
     <div class="report-line ${valid ? 'ok' : 'bad'}">${valid ? '✓ verified: every site maps to a distinct equivalent site, and the animation ends back inside the cell.' : '✗ this operation does not preserve the structure.'}</div>
     <div class="report-line"><strong>${orbits.length}</strong> symmetry orbit${orbits.length === 1 ? '' : 's'}: ${orbitList}${orbits.length > 8 ? ` … ${orbits.length - 8} more` : ''}</div>
     <div class="report-line">This operation <strong>permutes</strong> ${moved} of the cell's ${base.positions.length} sites; the caption counts the drawn sites that visibly move.</div>
