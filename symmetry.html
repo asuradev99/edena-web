@@ -86,8 +86,9 @@ input[type=range]{width:100%;accent-color:#70d7df;margin:2px 0}
 </div>
 <main>
   <div class="stage">
-    <canvas id="scene" aria-label="Crystal structure with animated symmetry operations"></canvas>
-    <div id="labels"></div>
+    <canvas id="scene" role="img" aria-label="Crystal structure with animated symmetry operations"></canvas>
+    <!-- Projected annotations duplicate the caption and the report, so assistive tech can skip them. -->
+    <div id="labels" aria-hidden="true"></div>
     <div class="stage-op" id="stage-op"></div>
     <div class="stage-hint">shaded balls = atoms · translucent = periodic neighbours · arcs trace each site's path · outlined balls mark where they started</div>
   </div>
