@@ -192,12 +192,70 @@ try {
   assert.equal(value.rutileResult.options,8,`rutile has 8 origin-centred point operations (got ${value.rutileResult.options})`);
   assert.match(value.rutileResult.report,/8 of the lattice's 16 point-group operations/);
   assert.match(value.rutileResult.report,/need a lattice translation/,'the report explains the missing operations');
+  // The drawn animation, measured rather than assumed: a rotation about a fixed axis projects onto an
+  // ellipse whatever the timing, so hide everything that shares the element's colour, sample the
+  // atom's centroid through the sweep, and fit the general conic. A chord or a stray loop misses it
+  // by tens of pixels; a real projected circle sits inside a fraction of one.
+  await call('Page.navigate',{url:'http://127.0.0.1:5173/symmetry.html'});
+  await new Promise(resolve=>setTimeout(resolve,2500));
+  const shape=await call('Runtime.evaluate',{awaitPromise:true,returnByValue:true,expression:`(async()=>{
+    const wait=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+    const select=document.getElementById('operation');
+    const index=[...select.options].findIndex(option=>option.textContent.includes('180° ‖ [010]'));
+    select.value=String(index);select.dispatchEvent(new Event('change'));
+    await wait(250);
+    const play=document.getElementById('play');if(play.textContent==='Ⅱ')play.click();
+    for(const id of ['trails','start-sites','cell','bonds']){const input=document.getElementById(id);if(input.checked)input.click();}
+    await wait(300);
+    const scene=document.getElementById('scene');
+    const probe=document.createElement('canvas');probe.width=440;probe.height=360;
+    const context=probe.getContext('2d',{willReadFrequently:true});
+    const measure=async()=>{
+      const image=new Image();image.src=scene.toDataURL();await image.decode();
+      context.clearRect(0,0,440,360);context.drawImage(image,0,0,440,360);
+      const data=context.getImageData(0,0,440,360).data;
+      let sx=0,sy=0,n=0;
+      for(let y=0;y<360;y++)for(let x=0;x<440;x++){
+        const i=(y*440+x)*4,r=data[i],g=data[i+1],b=data[i+2];
+        if(g>150&&g>r*1.45&&g>b*1.35){sx+=x;sy+=y;n++;}
+      }
+      return n?[sx/n,sy/n,n]:null;
+    };
+    const samples=[];
+    for(let step=0;step<=16;step++){
+      const progress=document.getElementById('progress');
+      progress.value=String(step/16);progress.dispatchEvent(new Event('input'));
+      await wait(80);
+      const point=await measure();
+      samples.push({t:step/16,x:point?point[0]:null,y:point?point[1]:null,pixels:point?point[2]:0});
+    }
+    return {label:select.options[Number(select.value)].textContent,samples};
+  })()`});
+  const points=(shape.result?.value?.samples??[]).filter(sample=>sample.x!==null&&sample.pixels>150);
+  assert.ok(points.length>=15,`the shape check must see the atom in every frame (${points.length})`);
+  const rows=points.map(s=>[s.x*s.x,s.x*s.y,s.y*s.y,s.x,s.y]);
+  const size=5,matrix=Array.from({length:size},()=>new Array(size).fill(0)),rhs=new Array(size).fill(0);
+  for(let i=0;i<rows.length;i++)for(let a=0;a<size;a++){rhs[a]+=rows[i][a];for(let c=0;c<size;c++)matrix[a][c]+=rows[i][a]*rows[i][c];}
+  for(let col=0;col<size;col++){
+    let pivot=col;for(let row=col+1;row<size;row++)if(Math.abs(matrix[row][col])>Math.abs(matrix[pivot][col]))pivot=row;
+    [matrix[col],matrix[pivot]]=[matrix[pivot],matrix[col]];[rhs[col],rhs[pivot]]=[rhs[pivot],rhs[col]];
+    for(let row=0;row<size;row++)if(row!==col){const factor=matrix[row][col]/matrix[col][col];rhs[row]-=factor*rhs[col];for(let k=0;k<size;k++)matrix[row][k]-=factor*matrix[col][k];}
+  }
+  const [A,B,C,D,E]=[0,1,2,3,4].map(i=>rhs[i]/matrix[i][i]);
+  const deviations=points.map(s=>{
+    const F=A*s.x*s.x+B*s.x*s.y+C*s.y*s.y+D*s.x+E*s.y-1;
+    return Math.abs(F)/Math.hypot(2*A*s.x+B*s.y+D,B*s.x+2*C*s.y+E);
+  });
+  const worst=Math.max(...deviations);
+  assert.ok(B*B-4*A*C<0,'the drawn path must be an ellipse, not a line or a hyperbola');
+  assert.ok(worst<=4,`the drawn animation must follow the projected circle (worst ${worst.toFixed(2)} px off)`);
+
   // Nothing may have complained along the way: no exception, no console.error, no severe log entry.
   const complaints=events.filter(event=>event.method==='Runtime.exceptionThrown'
     || (event.method==='Runtime.consoleAPICalled'&&event.params.type==='error')
     || (event.method==='Log.entryAdded'&&event.params.entry.level==='error'))
     .map(event=>event.params.exceptionDetails?.text ?? event.params.entry?.text ?? event.params.args?.map(arg=>arg.value).join(' ') ?? event.method);
   assert.deepEqual(complaints,[],'the page must run without errors');
-  console.log('PASS: opaque depth, draw-order independence, translucent depth, every operation captioned, and the viewer interaction locks',
-    {operations:value.captions.length,moving:counts.filter(count=>count.movers>0).length,movedPerOperation:counts.map(count=>count.movers),slowestSwitchMs:Number(value.slowestSwitch.toFixed(1)),loaded:value.loaded.options,rutile:value.rutileResult.options,rutileFamilies:value.rutileResult.families,status:value.statusBeforeFiles});
+  console.log('PASS: opaque depth, draw-order independence, translucent depth, every operation captioned, the drawn path is a projected circle, and the viewer interaction locks',
+    {operations:value.captions.length,moving:counts.filter(count=>count.movers>0).length,movedPerOperation:counts.map(count=>count.movers),slowestSwitchMs:Number(value.slowestSwitch.toFixed(1)),loaded:value.loaded.options,rutile:value.rutileResult.options,rutileFamilies:value.rutileResult.families,pathDeviationPx:Number(worst.toFixed(2)),status:value.statusBeforeFiles});
 } finally {socket.close();await fetch(`http://localhost:${port}/json/close/${target.id}`);}
