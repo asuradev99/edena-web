@@ -7,9 +7,10 @@ Last updated: 2026-09-25 by **deepcode** (crystal viewer: centred-lattice animat
 - Branch `main`, tree **clean**. This line of work is committed: `451ed82` (legend element folding),
   `c300957` (centred, correct operation animation; halos and clicking removed), `8804a30`
   (lattice isometry API + tests), `a333247` (supercell trail legibility), `ed22831` (docs + harness), `fda9879` (auto-play, outlined markers), `1b41ff4` (per-family animation), `1cea681`
-  (swatch/transport polish), `dddf686` and `cea41f5` (performance). Earlier: `3054fd1`
+  (swatch/transport polish), `dddf686`, `cea41f5`, `00834b2`, `6276022` (performance), `cd10b3e` (coverage), `4ab8e75` (refit on
+  reshape). Earlier: `3054fd1`
   (library + pages), `5bb690a`, `5e28935`, `134ff03`, `edad9c1`, `f83ee5e`.
-- `npm run typecheck` → clean. `npm test` → **59/59** pass (~1.2 s; the sample-budget boundary
+- `npm run typecheck` → clean. `npm test` → **61/61** pass (~1.2 s; the sample-budget boundary
   test alone costs ~0.9 s). `npm run build` → `build/`.
 - Pages all serve 200 from `npm run dev` (http://localhost:5173): `/`, `/field.html`,
   `/particles.html`, `/physics-lab.html`, `/symmetry.html`, `/electrostatics.html`, `/legacy.html`.
@@ -99,7 +100,7 @@ Last updated: 2026-09-25 by **deepcode** (crystal viewer: centred-lattice animat
 
 ## Open items / good next steps
 
-1. Tree is clean and committed; `npm test` is 59/59.
+1. Tree is clean and committed; `npm test` is 61/61.
 2. **astra:** Phase 5 remainder in `src/lib/simulation.ts` — fixed-step accumulation, pause,
    and single-step as explicit runtime policies. Unclaimed by deepcode.
 3. Spatial interaction kernels (neighbour search, Barnes-Hut, all-pairs) are explicitly **out of
@@ -138,9 +139,11 @@ Last updated: 2026-09-25 by **deepcode** (crystal viewer: centred-lattice animat
   - **Removed** the transparent halo behind every atom and all click-to-select/measurement UI: the
     stage is camera-only. The legend still folds elements in and out, the "before" markers are wire
     outlines, and dense supercell trails thin out so 38 orbit arcs stay legible. Choosing an operation
-    plays it immediately.
+    plays it immediately, the caption says how many sites the element pins, rotoreflections are named
+    by their power (S4 vs S4 cubed) with the signed spin drawn, and a ResizeObserver re-fits the
+    camera when the stage changes shape without discarding the zoom.
   - Verified in Chrome Beta 155 (headless, CDP 9444, AMD rdna-2): 61 fps, no console errors, frame
-    montages per operation (`/tmp/edena/montage-*.png`), `npm test` 45 → **59/59**.
+    montages per operation (`/tmp/edena/montage-*.png`), `npm test` 45 → **61/61** (and `lattice.ts` is now at 100% line and function coverage).
   - **Performance (found while checking a large upload).** `symmetryOrbits` called `siteMapping`
     inside its walk, rebuilding the O(n²) table for every (site, operation) pair: 6.5 s for a
     400-atom cell, 23 ms now. The "before" wire markers each built their own wireframe geometry, and
