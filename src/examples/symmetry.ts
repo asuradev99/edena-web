@@ -1,12 +1,12 @@
 import {
   WebGPUView, Visual, Group, Geometry, LabelLayer, rgba, smooth, clamp, polyline, merge, sphere, shadedSphere, circle, arrow, wireSphere,
   parsePOSCAR, parsePhonopySymmetry,
-  latticeSites, supercell as makeSupercell, bonds as findBonds,
+  latticeSites, supercell as makeSupercell, bonds as findBonds, cellVolume,
   fractionalToCartesian, cartesianToFractional, structureBounds, shortestDistance, appearanceFor,
   CUBIC_OPERATIONS, latticePointGroup, mapsOntoSelf, siteMapping, symmetryOrbits, applyOperation,
   cartesianOperation, axisAngle, rotateAboutAxis, isCubic,
   sphericalWedge, sphericalWedgeOutline,
-  mathml, mi, mn, mo, msub, msup, frac, row,
+  mathml, mi, mn, mo, msub, msup, frac, row, matrix, vec,
   type Vec3, type CrystalStructure, type CrystalOperation, type Supercell,
 } from '../index.js';
 
@@ -420,7 +420,7 @@ function writeStructureInfo(): void {
   // Two short lines instead of one long row, so nothing needs a horizontal scrollbar.
   const lengthsLine = mathml(row(msub(mi('a'), mn(1)), mo('='), mn(lengths[0].toFixed(3)), mo(','), msub(mi('b'), mn(1)), mo('='), mn(lengths[1].toFixed(3)), mo(','), msub(mi('c'), mn(1)), mo('='), mn(lengths[2].toFixed(3)), mo(' Å')));
   const anglesLine = mathml(row(mi('α'), mo('='), mn(angle(base.lattice[1], base.lattice[2]).toFixed(1)), mo('°'), mo(','), mi('β'), mo('='), mn(angle(base.lattice[0], base.lattice[2]).toFixed(1)), mo('°'), mo(','), mi('γ'), mo('='), mn(angle(base.lattice[0], base.lattice[1]).toFixed(1)), mo('°')));
-  info.innerHTML = `<div class="info-title">${base.comment || 'Crystal structure'}</div><div class="info-math">${lengthsLine}</div><div class="info-math">${anglesLine}</div><div class="info-line">${base.positions.length} atoms · ${[...new Set(base.species)].join(', ')}</div>`;
+  info.innerHTML = `<div class="info-title">${base.comment || 'Crystal structure'}</div><div class="info-math">${lengthsLine}</div><div class="info-math">${anglesLine}</div><div class="info-line">${base.positions.length} atoms · ${[...new Set(base.species)].join(', ')} · ${cellVolume(base.lattice).toFixed(1)} Å³</div>`;
 }
 
 function writeLegend(elements: string[], appearance: Map<string, { radius: number; color: string }>, big: Supercell): void {
@@ -527,8 +527,12 @@ function setOperation(index: number): void {
   progress = 0; playing = false;
   operationSelect.value = String(operationIndex);
   const operation = operations[operationIndex];
+  const matrixMarkup = mathml(row(mi('R'), mo('='), matrix(operation.rotation.map(values => values.map(value => mn(value))))));
+  const shiftMarkup = operation.translation.some(Boolean)
+    ? mathml(row(mo('+'), vec(row(mn(operation.translation[0].toFixed(2)), mo(','), mn(operation.translation[1].toFixed(2)), mo(','), mn(operation.translation[2].toFixed(2))))))
+    : '';
   $('description').innerHTML = `<div class="op-name">${describeOperation(operation)}</div>
-    <div class="op-matrix">R = [${operation.rotation.map(rowValues => `[${rowValues.join(', ')}]`).join(', ')}]${operation.translation.some(Boolean) ? ` + (${operation.translation.join(', ')})` : ''}</div>`;
+    <div class="op-matrix">${matrixMarkup}${shiftMarkup}</div>`;
   $('stage-op').textContent = `${describeOperation(operation)} — moves ${movedCount(operation)} site${movedCount(operation) === 1 ? '' : 's'}`;
   rebuild();
   update();
