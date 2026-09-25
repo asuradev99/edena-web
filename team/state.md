@@ -1,6 +1,6 @@
 # Shared state
 
-Last updated: 2026-09-25 by **deepcode** (the basics tour: twenty-two small demos, one library idea each, with a pixel-level browser check that audits every control; plus `box`/`cylinder` solids, a unified outward winding rule, an optional Euler `orientation` on `Visual`/`Group`, a page-health check for the whole showcase, a favicon, and an honestly retired legacy page). Prior: (crystal viewer: centred-lattice animation, element folding, camera-only stage with a reset, per-family moves, picker grouped by family, consistent counts and states; lattice isometry API, 100% line coverage, and a browser harness that audits all 48 operations). Prior: lattice/streamline/MathML library layer, crystal viewer rewrite, electromagnetism upgrade, interactive field example, showcase typesetting; color lane, Phase 6 docs, simulation cleanup, all-pairs n-body + physics lab, crystal docs; **astra** (perspective camera, Phase 5 seam, landing gallery, crystal viewer uploads). Update the date and author when you change this.
+Last updated: 2026-09-25 by **deepcode** (the basics tour: twenty-three small demos, one library idea each, with a pixel-level browser check that audits every control; plus `box`/`cylinder` solids, a unified outward winding rule, an optional Euler `orientation` on `Visual`/`Group`, a page-health check for the whole showcase, a favicon, and an honestly retired legacy page). Prior: (crystal viewer: centred-lattice animation, element folding, camera-only stage with a reset, per-family moves, picker grouped by family, consistent counts and states; lattice isometry API, 100% line coverage, and a browser harness that audits all 48 operations). Prior: lattice/streamline/MathML library layer, crystal viewer rewrite, electromagnetism upgrade, interactive field example, showcase typesetting; color lane, Phase 6 docs, simulation cleanup, all-pairs n-body + physics lab, crystal docs; **astra** (perspective camera, Phase 5 seam, landing gallery, crystal viewer uploads). Update the date and author when you change this.
 
 ## Where things stand
 
@@ -19,11 +19,11 @@ Last updated: 2026-09-25 by **deepcode** (the basics tour: twenty-two small demo
   `scripts/check-pages.mjs` loads all eight over CDP and asserts each has a title, drew every canvas
   it declares, shows no error state, and logs nothing — all eight pass, and it found two real
   faults the first time it ran (below).
-- **The basics tour** (`basics.html`) is where a reader starts: twenty-two demos, each isolating one
+- **The basics tour** (`basics.html`) is where a reader starts: twenty-three demos, each isolating one
   fundamental idea, one device and one render loop, `?samples=1`/`?dpr=1` for diagnostics,
   `prefers-reduced-motion` respected. `scripts/check-basics.mjs` drives every control on every demo
   against compositor screenshots measured back inside the page, and reports
-  `22 of 22 canvases drawing · 60 fps`.
+  `23 of 23 canvases drawing · 60 fps`.
 - Rendering verified in Chrome Beta 155 on the Vulkan path (`--headless=new`, CDP 9444, real AMD
   rdna-2 adapter): 61 fps on `symmetry.html` from 1x1x1 to a 1600-atom cell, no console/WebGPU
   errors. A 400-atom POSCAR loads in ~0.5 s and a 1600-atom one in ~1.1 s; changing operation is
@@ -45,7 +45,7 @@ Last updated: 2026-09-25 by **deepcode** (the basics tour: twenty-two small demo
 |------|------------|
 | `src/lib/*.ts` | The library, re-exported by `src/index.ts` |
 | `src/index.ts` | Public entry point (exports math, geometry, colormap, plot, field, world, camera, view, timeline, simulation) |
-| `src/examples/basics.ts` + `basics.html` | The basics tour: twenty-two demos, one idea each (frame, interpolation, transparent solids, primitives, groups, labels, colour, plot, depth, batching, camera, simulation, implicit surface, streamlines, story, diagram, path, normals, layers, chart, follow, transform). Each is a self-contained factory returning its own `update`; the page shares one device, skips drawing for off-screen views, and isolates a throwing demo. |
+| `src/examples/basics.ts` + `basics.html` | The basics tour: twenty-three demos, one idea each (frame, interpolation, transparent solids, primitives, groups, labels, colour, plot, depth, batching, camera, simulation, implicit surface, streamlines, story, diagram, path, normals, layers, chart, follow, transform, measure). Each is a self-contained factory returning its own `update`; the page shares one device, skips drawing for off-screen views, and isolates a throwing demo. |
 | `scripts/check-{links,pages,basics,depth}.mjs` | The four checks: static links, page health, the tour, and the renderer + crystal viewer |
 | `src/showcase/main.ts` + `index.html` (**astra**, do not edit) | Landing gallery: Fourier harmonics curve, palette/frequency surface, level-set shapes with a projection switch, lattice assembly timeline, plus inline-launching experiment embeds |
 | `src/examples/field.ts` + `field.html` | Focused single-panel isosurface example |
@@ -151,7 +151,7 @@ Last updated: 2026-09-25 by **deepcode** (the basics tour: twenty-two small demo
   maths riding a point; colour from data; a chart in 3D; depth and draw order; one mesh instanced many
   times; a camera move; a hand-stepped simulation; an implicit surface at a level you move; streamlines
   in a vector field; a story built from four cues; a vector diagram; a Bézier path with its control
-  polygon; surface normals from central differences; layers switched with `visible`; a 3D bar chart whose sort eases; a camera that follows a marker; and a node's own transform matrix read back and typeset. The panels are in the order the table of contents lists them, which an audit of TOC-against-panel order now checks.
+  polygon; surface normals from central differences; layers switched with `visible`; a 3D bar chart whose sort eases; a camera that follows a marker; a node's own transform matrix read back and typeset; and a measurement figure whose labels are recomputed from the same two points as the geometry. `check-links.mjs` now also asserts that the table of contents lists the panels in the order the page presents them (`scripts/tidy-panels.mjs` is the repair). The panels are in the order the table of contents lists them, which an audit of TOC-against-panel order now checks.
   - **Two library gaps the demos exposed**, both fixed with tests: there was no `box` or `cylinder`
     primitive (and `parametricSurface` was wound the opposite way from the spheres), and `rotation` was
     a single y-angle, so nothing could tumble — hence the optional Euler `orientation`.
@@ -174,7 +174,7 @@ Last updated: 2026-09-25 by **deepcode** (the basics tour: twenty-two small demo
   - **Check hygiene:** the browser checks opened a tab per run and never closed it — sixty leftover
     pages were competing with the one under test and the tour had fallen to 36 fps. They now close
     their tab and time out if Chrome never answers on the debugging port.
-  - Verified in Chrome Beta 155 (headless Vulkan, CDP 9444, AMD rdna-2): 60 fps with all twenty-two
+  - Verified in Chrome Beta 155 (headless Vulkan, CDP 9444, AMD rdna-2): 60 fps with all twenty-three
     demos, ~30–100k triangles depending on the settings left behind, no console errors, `npm test`
     70/70, and `check-basics` passing in ~2.5 min.
 
