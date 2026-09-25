@@ -6,9 +6,10 @@ Last updated: 2026-09-25 by **deepcode** (crystal viewer: centred-lattice animat
 
 - Branch `main`, tree **clean**. This line of work is committed: `451ed82` (legend element folding),
   `c300957` (centred, correct operation animation; halos and clicking removed), `8804a30`
-  (lattice isometry API + tests), `a333247` (supercell trail legibility), `ed22831` (docs + harness), `fda9879` (auto-play, outlined markers). Earlier: `3054fd1`
+  (lattice isometry API + tests), `a333247` (supercell trail legibility), `ed22831` (docs + harness), `fda9879` (auto-play, outlined markers), `1b41ff4` (per-family animation), `1cea681`
+  (swatch/transport polish), `dddf686` and `cea41f5` (performance). Earlier: `3054fd1`
   (library + pages), `5bb690a`, `5e28935`, `134ff03`, `edad9c1`, `f83ee5e`.
-- `npm run typecheck` → clean. `npm test` → **57/57** pass (~1.2 s; the sample-budget boundary
+- `npm run typecheck` → clean. `npm test` → **58/58** pass (~1.2 s; the sample-budget boundary
   test alone costs ~0.9 s). `npm run build` → `build/`.
 - Pages all serve 200 from `npm run dev` (http://localhost:5173): `/`, `/field.html`,
   `/particles.html`, `/physics-lab.html`, `/symmetry.html`, `/electrostatics.html`, `/legacy.html`.
@@ -98,7 +99,7 @@ Last updated: 2026-09-25 by **deepcode** (crystal viewer: centred-lattice animat
 
 ## Open items / good next steps
 
-1. Tree is clean and committed; `npm test` is 57/57.
+1. Tree is clean and committed; `npm test` is 58/58.
 2. **astra:** Phase 5 remainder in `src/lib/simulation.ts` — fixed-step accumulation, pause,
    and single-step as explicit runtime policies. Unclaimed by deepcode.
 3. Spatial interaction kernels (neighbour search, Barnes-Hut, all-pairs) are explicitly **out of
@@ -139,7 +140,13 @@ Last updated: 2026-09-25 by **deepcode** (crystal viewer: centred-lattice animat
     outlines, and dense supercell trails thin out so 38 orbit arcs stay legible. Choosing an operation
     plays it immediately.
   - Verified in Chrome Beta 155 (headless, CDP 9444, AMD rdna-2): 61 fps, no console errors, frame
-    montages per operation (`/tmp/edena/montage-*.png`), `npm test` 45 → **57/57**.
+    montages per operation (`/tmp/edena/montage-*.png`), `npm test` 45 → **58/58**.
+  - **Performance (found while checking a large upload).** `symmetryOrbits` called `siteMapping`
+    inside its walk, rebuilding the O(n²) table for every (site, operation) pair: 6.5 s for a
+    400-atom cell, 23 ms now. The "before" wire markers each built their own wireframe geometry;
+    they now share one per element. The bond list, the nearest-neighbour distance and the structure
+    summary describe the crystal rather than the chosen operation, so they are cached across
+    operation changes. A 400-atom SrTiO3 POSCAR went from ~13 s to **473 ms** and renders at 61 fps.
 - **Crystal viewer, library layer (chatgpt):** `src/lib/crystal.ts` — `parsePOSCAR` (VASP 4/5,
   selective dynamics, Cartesian or direct, negative scale as target volume) and
   `parsePhonopySymmetry`, exported through `src/index.ts` with `tests/crystal.test.mjs`.
