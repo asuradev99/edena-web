@@ -538,6 +538,82 @@ function colourDemo(view: WebGPUView): Demo {
 }
 
 /* --------------------------------------------------------------------------------------------
+ * 10 · One mesh, many copies: shared geometry, moved and scaled, batched by the renderer.
+ * ------------------------------------------------------------------------------------------ */
+
+function instancesDemo(view: WebGPUView): Demo {
+  look(view, .66, .38, 8.6);
+  const labels = new LabelLayer($('instances-labels'), view.camera);
+  const grid = new Group();
+  view.world.add(grid);
+  // One mesh for every copy. Nothing below rebuilds geometry.
+  const mesh = box([-.42, -.42, -.42], [.42, .42, .42]);
+  const colours = ['#58c4dd', '#83c167'];
+  let copies: { visual: Visual; at: Vec3; parity: number }[] = [];
+  let count = Number($<HTMLInputElement>('instances-count').value);
+  let wave = Number($<HTMLInputElement>('instances-wave').value);
+
+  const summary = labels.addHTML(mathml(mn('')), () => [0, -2.85, 0], '#9db0c2', 'math-label');
+  /** The grid always spans the same world extent, so more copies means smaller cubes, not a bigger box. */
+  const spacing = () => 4.2 / count;
+  const baseScale = () => 1.6 / count;
+
+  const build = (): void => {
+    grid.clear();
+    copies = [];
+    const gap = spacing(), half = 4.2 / 2 - gap / 2;
+    for (let i = 0; i < count; i++) for (let j = 0; j < count; j++) for (let k = 0; k < count; k++) {
+      const at: Vec3 = [-half + i * gap, -half + j * gap, -half + k * gap];
+      const parity = (i + j + k) % 2;
+      const visual = new Visual(mesh, rgba(colours[parity]));
+      visual.position = at;
+      grid.add(visual);
+      copies.push({ visual, at, parity });
+    }
+    const nodes = count ** 3;
+    // One text run: separate mtext runs swallow their leading spaces.
+    summary.innerHTML = mathml(mtext(`${nodes} nodes · 1 mesh · ${(nodes * 12).toLocaleString()} triangles · 2 draws`));
+  };
+
+  const countInput = $<HTMLInputElement>('instances-count');
+  const waveInput = $<HTMLInputElement>('instances-wave');
+  const spinButton = $<HTMLButtonElement>('instances-spin');
+  let spinning = !reducedMotion, phase = 0;
+  const button = (): void => {
+    spinButton.textContent = spinning ? 'Animating' : 'Still';
+    spinButton.setAttribute('aria-pressed', String(spinning));
+  };
+  countInput.addEventListener('input', () => {
+    count = Number(countInput.value);
+    $('instances-count-value').textContent = `${count}³ = ${count ** 3} cubes`;
+    build();
+  });
+  waveInput.addEventListener('input', () => {
+    wave = Number(waveInput.value);
+    $('instances-wave-value').textContent = wave.toFixed(2);
+  });
+  spinButton.addEventListener('click', () => { spinning = !spinning; button(); });
+  build();
+  button();
+
+  return {
+    labels,
+    // One phase drives both the turn and the wave, so "Still" holds the whole picture — which also
+    // lets the check tell a control's effect apart from the animation's own drift.
+    update: delta => {
+      if (spinning) phase += delta * .3;
+      grid.rotation = phase;
+      // Sizes follow a travelling wave, which is one assignment per copy — no geometry is touched.
+      const base = baseScale();
+      for (const copy of copies) {
+        const size = base * (1 + wave * .85 * Math.sin(2.4 * (copy.at[0] + copy.at[1] + copy.at[2]) - phase * 7.3));
+        copy.visual.scale = [size, size, size];
+      }
+    },
+  };
+}
+
+/* --------------------------------------------------------------------------------------------
  * 09 · Depth and draw order: translucent slabs crossed by opaque solids.
  * ------------------------------------------------------------------------------------------ */
 
@@ -646,7 +722,7 @@ async function initialize(): Promise<void> {
   const first = await WebGPUView.create($<HTMLCanvasElement>('coordinates-canvas'), { samples: msaa, maxDpr, onError: report });
   views.push(first);
   if (disposed) { first.dispose(); return; }
-  for (const id of ['interpolation-canvas', 'transparency-canvas', 'shapes-canvas', 'groups-canvas', 'labels-canvas', 'colour-canvas', 'plot-canvas', 'depth-canvas']) {
+  for (const id of ['interpolation-canvas', 'transparency-canvas', 'shapes-canvas', 'groups-canvas', 'labels-canvas', 'colour-canvas', 'plot-canvas', 'depth-canvas', 'instances-canvas']) {
     views.push(await WebGPUView.create($<HTMLCanvasElement>(id), { device: first.device, onError: report }));
   }
   demos.push(
@@ -659,6 +735,7 @@ async function initialize(): Promise<void> {
     colourDemo(views[6]),
     plotDemo(views[7]),
     depthDemo(views[8]),
+    instancesDemo(views[9]),
   );
 
   const info = first.adapterInfo;

@@ -15,7 +15,7 @@ Open [http://localhost:5173/](http://localhost:5173/). The landing page is an in
 
 Dedicated demos:
 
-- [Basics](basics.html): start here. Nine small demos, one library idea each — the 3D coordinate
+- [Basics](basics.html): start here. Ten small demos, one library idea each — the 3D coordinate
   system and its projected labels, interpolation with a seekable `Timeline`, solids with transparent
   sides, the geometry primitives and `merge`, groups with nested transforms, typeset maths riding a
   moving point, colour taken from data, a chart drawn in 3D, and depth and draw order. Each panel names the API it uses.
@@ -41,7 +41,7 @@ view.world.add(new Visual(axes3d(1.9, .012), rgba('#dbe9f5', .9)));
 second.world.add(new Visual(box([-1, -1, -1], [1, 1, 1]), rgba('#58c4dd', .18)));
 ```
 
-The nine ideas, in the order the page presents them: the frame (`axes3d`, `boundsBox`, tick labels
+The ten ideas, in the order the page presents them: the frame (`axes3d`, `boundsBox`, tick labels
 through `LabelLayer`, perspective or orthographic camera); motion (`Timeline`, `tween`, `smooth`,
 `lerp`, absolute-time seeking); volume (`box`, `sphere` and `cylinder` faces, per-face alpha,
 draw-order-independent sorting, wire cages); shape (`polyline`, `arrow`, `circle`, `sphere`,
@@ -50,12 +50,13 @@ draw-order-independent sorting, wire cages); shape (`polyline`, `arrow`, `circle
 with `mathml` nodes, so labels stay sharp, selectable and styleable at any zoom); colour
 (`new Geometry(vertices, colors)`, with `viridis`/`plasma`/`ramp` as functions from [0, 1] to a
 colour); plotting (`plotFrame` with `niceStep`/`tickValues`/`formatTick`, a `functionCurve`, and
-`msup`/`mn` in the equation label); and depth (opaque geometry first, then translucent faces sorted
-back to front, so slab order never matters).
+`msup`/`mn` in the equation label); depth (opaque geometry first, then translucent faces sorted
+back to front, so slab order never matters); and sharing (`Geometry` moved and scaled across many nodes,
+which the renderer buckets into one instanced draw per geometry-and-colour).
 
 ## Crystal workflow
 
-The symmetry viewer accepts extensionless POSCAR files, VASP 4 and VASP 5 layouts, positive or target-volume scale factors, Direct or Cartesian positions, Selective Dynamics lines, and phonopy symmetry files in nested, row-oriented, or flat nine-number rotation formats. Files are parsed locally in the browser: drop them anywhere on the page — the whole window accepts a drop, so a stray file cannot navigate the viewer away — or pick them from the card, which has one chooser for a POSCAR, one for a symmetry file, and a combined one behind the drop zone.
+The symmetry viewer accepts extensionless POSCAR files, VASP 4 and VASP 5 layouts, positive or target-volume scale factors, Direct or Cartesian positions, Selective Dynamics lines, and phonopy symmetry files in nested, row-oriented, or flat ten-number rotation formats. Files are parsed locally in the browser: drop them anywhere on the page — the whole window accepts a drop, so a stray file cannot navigate the viewer away — or pick them from the card, which has one chooser for a POSCAR, one for a symmetry file, and a combined one behind the drop zone.
 
 ```ts
 import { parsePOSCAR, parsePhonopySymmetry } from 'edena-web';
@@ -212,7 +213,7 @@ than trusting the code that drew it:
 ```sh
 node scripts/check-links.mjs           # every page resolves, and every page reaches the tour
 node scripts/check-depth.mjs [port]    # renderer depth + the crystal viewer, pixel by pixel
-node scripts/check-basics.mjs [port]   # the basics tour: nine demos, every control, every assertion
+node scripts/check-basics.mjs [port]   # the basics tour: ten demos, every control, every assertion
 ```
 
 `check-basics` captures from the compositor and measures the regions back inside the page, because a
