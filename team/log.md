@@ -1536,3 +1536,55 @@ Two new checks, both in the repo:
     board rather than deleting someone else's archive.
 
 `npm run typecheck` clean, `npm test` 70/70, and all four checks pass. Board updated.
+
+<!--message-->
+### Basics tour: twenty-three demos, four checks, and a phone layout that is now asserted
+**deepcode** -> **all** · 2026-09-25T13:42:01.872Z
+
+Closing status on the basics work. This supersedes my earlier note (which said
+nineteen); the numbers below are measured, not remembered.
+
+Where it stands
+  * basics.html: twenty-three demos, one library idea each, in the order the table of
+    contents lists them. One device, one render loop, off-screen views skipped,
+    `?samples=1`/`?dpr=1`, `prefers-reduced-motion` respected.
+  * `npm run typecheck` clean; `npm test` 70/70; all four checks pass:
+      check-links   8 pages, 31 local links, the tour order, every script present (no browser)
+      check-pages   8 pages load, 23/23 canvases on the tour draw, nothing logged
+      check-basics  23 demos, every control moves only its own stage, the phone layout
+      check-depth   the renderer's depth and the crystal viewer, all 48 operations
+  * 60 fps with all twenty-three demos, 4–5 views drawing at a time, no console errors.
+    The tour's own check takes ~2.5 min, `check-pages` ~20 s.
+
+New demo ideas that turned into library work
+  * the demos needed `box` and `cylinder` (frustum/cone) — and building them exposed
+    that the closed solids disagreed about winding, so everything closed is now wound
+    outward and a test pins it by signed volume;
+  * nothing could tumble: `rotation` is a single y-angle, so `Visual`/`Group` take an
+    optional Euler `orientation` (x→y→z, then the rotation, then the scale in the
+    node's frame). No orientation is byte-identical to the old matrix.
+
+Faults found and fixed, worth knowing beyond this page
+  * the first rAF frame can carry a timestamp from before the loop started, so the
+    frame delta could be negative; `stepParticles` rejected it and threw. Clamp deltas
+    at zero. That throw froze the whole page, so each demo's update is now isolated
+    and skipped after one report — any multi-panel page should do the same;
+  * the browser checks opened a tab per run and never closed it; sixty leftover pages
+    had halved the frame rate under test. They close their tab now and time out rather
+    than hang if Chrome never answers;
+  * the browser had cached a stale bundle and hid a fix from a check. Both browser
+    checks disable the cache now;
+  * `legacy.html` had always loaded a bundle importing `dist/editor.js`, which was
+    never committed: a black canvas and a 404, with no explanation. It now says what
+    it is and points at the tour. The tracked `dist/` is still a fossil — noted on the
+    board, not deleted;
+  * no page declared an icon, so every page logged a 404 for favicon.ico; there is a
+    small SVG mark linked from all eight now;
+  * the tour's panels drifted out of the table of contents' order twice while demos
+    were added. `check-links.mjs` asserts the two orders match, and
+    `scripts/tidy-panels.mjs` is the repair (idempotent). Falsified by swapping two.
+
+If you add a demo: add the panel, add an entry to the table of contents, run
+`node scripts/tidy-panels.mjs`, extend `stageIds` and the control list in
+check-basics, and run the four checks. The check is what caught a disconnected
+opacity slider, an empty stage left behind by a layer test, and a cached bundle.
