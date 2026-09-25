@@ -1,4 +1,4 @@
-import { cross, sub, type Vec3 } from './math.js';
+import { cross, type Vec3 } from './math.js';
 import type { CrystalOperation, CrystalStructure } from './crystal.js';
 
 /**
