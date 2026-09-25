@@ -275,16 +275,21 @@ function rebuild(): void {
   if (!view) return;
   view.world.clear();
   const baseCount = base.positions.length;
-  let effectiveRepeats = repeats;
-  while (baseCount * effectiveRepeats ** 3 > 1600 && effectiveRepeats > 1) effectiveRepeats--;
-  const n = effectiveRepeats;
-  // Say how many atoms each choice really draws, including the 1600-atom cap.
+  // Say how many atoms each choice draws, and disable the ones the 1600-atom budget would quietly
+  // shrink to the same cell — a 2x2x2 that draws the 1x1x1 cell is worse than no option at all.
+  let largest = 1;
   for (const option of [...supercellSelect.options]) {
     const asked = Number(option.value);
     let drawn = asked;
     while (baseCount * drawn ** 3 > 1600 && drawn > 1) drawn--;
-    option.textContent = `${asked} × ${asked} × ${asked} · ${baseCount * drawn ** 3} atoms`;
+    const capped = drawn !== asked;
+    option.textContent = `${asked} × ${asked} × ${asked} · ${baseCount * drawn ** 3} atoms${capped ? ' (capped)' : ''}`;
+    option.disabled = capped;
+    option.title = capped ? `${baseCount} atoms per cell exceeds the 1600-atom budget at ${asked} × ${asked} × ${asked}` : '';
+    if (!capped) largest = asked;
   }
+  if (repeats > largest) { repeats = largest; supercellSelect.value = String(largest); }
+  const n = repeats;
   const big = makeSupercell(base, [n, n, n]);
   const pivot = fracToCart([n / 2, n / 2, n / 2]);
   const corners = [0, n].flatMap(i => [0, n].flatMap(j => [0, n].map(k => sub(fractionalToCartesian([i, j, k], base.lattice), pivot))));
@@ -554,7 +559,7 @@ function writeMapping(): void {
     <div class="report-line"><strong>${exact}</strong> of ${operations.length} listed operations map this cell onto itself.</div>
     <div class="report-line ${valid ? 'ok' : 'bad'}">${valid ? '✓ verified: every site maps to a distinct equivalent site, and the animation ends back inside the cell.' : '✗ this operation does not preserve the structure.'}</div>
     <div class="report-line"><strong>${orbits.length}</strong> symmetry orbit${orbits.length === 1 ? '' : 's'}: ${orbits.map(orbit => `{${orbit.join(', ')}}`).join(' ')}</div>
-    <div class="report-line">This operation moves <strong>${moved}</strong> site${moved === 1 ? '' : 's'} of the cell.</div>
+    <div class="report-line">This operation <strong>permutes</strong> ${moved} of the cell's ${base.positions.length} sites; the caption counts the drawn sites that visibly move.</div>
     <div class="map-grid">${rows}${mapping.length > 14 ? `<span class="map-cell muted">+${mapping.length - 14} more</span>` : ''}</div>`;
 }
 
