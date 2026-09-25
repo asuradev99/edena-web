@@ -88,8 +88,26 @@ try {
       select.value=String(index);select.dispatchEvent(new Event('change'));
       switchTimes.push(performance.now()-started);
     }
+
+    // The picker's "N moved" and the caption's "N of M sites move" describe the same thing and must
+    // agree — at every supercell size, since both count the drawn cell.
+    const countMismatches=[];
+    const supercell=document.getElementById('supercell');
+    for(const size of ['1','2','3']){
+      supercell.value=size;supercell.dispatchEvent(new Event('change'));
+      await wait(500);
+      for(let index=0;index<select.options.length;index++){
+        const label=select.options[index].textContent;
+        select.value=String(index);select.dispatchEvent(new Event('change'));
+        await wait(0);
+        const caption=document.getElementById('stage-op').textContent;
+        const claimed=/· ([0-9]+) moved/.exec(label);
+        const actual=/([0-9]+) of [0-9]+ sites move/.exec(caption);
+        if(Number(claimed?.[1]??-1)!==(actual?Number(actual[1]):0))countMismatches.push(size+'x: '+label+' vs '+caption);
+      }
+    }
     return {first,reversed,translucentBehind,translucentFront,captions,report:document.getElementById('mapping').textContent,status:document.getElementById('status').textContent,
-      distinctLabels,beforeZoom,zoomed,zoomedAfterSwitch,afterReset,slowestSwitch:Math.max(...switchTimes),identityPlayDisabled,rotationPlayDisabled};
+      distinctLabels,beforeZoom,zoomed,zoomedAfterSwitch,afterReset,countMismatches,slowestSwitch:Math.max(...switchTimes),identityPlayDisabled,rotationPlayDisabled};
   })()`});
   if(result.exceptionDetails)throw new Error(result.exceptionDetails.text+JSON.stringify(result.exceptionDetails));
   const value=result.result.value;
@@ -125,6 +143,7 @@ try {
   assert.ok(Math.abs(value.zoomedAfterSwitch-value.zoomed)<=3,`choosing an operation must keep the zoom (${value.zoomed} -> ${value.zoomedAfterSwitch})`);
   assert.ok(Math.abs(value.afterReset-value.beforeZoom)<=2,`a double-click must put the camera back (${value.beforeZoom} -> ${value.afterReset})`);
   assert.ok(value.slowestSwitch<80,`choosing an operation must stay inside a frame budget (slowest ${value.slowestSwitch.toFixed(1)} ms)`);
+  assert.deepEqual(value.countMismatches,[],'the picker and the caption must agree on how many sites move');
   console.log('PASS: opaque depth, draw-order independence, translucent depth, every operation captioned, and the viewer interaction locks',
     {operations:value.captions.length,moving:counts.filter(count=>count.movers>0).length,movedPerOperation:counts.map(count=>count.movers),slowestSwitchMs:Number(value.slowestSwitch.toFixed(1)),status:value.status});
 } finally {socket.close();await fetch(`http://localhost:${port}/json/close/${target.id}`);}

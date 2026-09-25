@@ -332,6 +332,30 @@ function boundsOf(points: Vec3[]): { min: Vec3; max: Vec3; centre: Vec3; extent:
   };
 }
 
+/** How many repeats the viewer actually draws, once the atom budget is applied. */
+function drawnRepeats(): number {
+  const baseCount = base.positions.length;
+  let n = repeats;
+  while (baseCount * n ** 3 > 1600 && n > 1) n--;
+  return n;
+}
+
+/**
+ * The drawn supercell, its pivot, the corners of the box and the box's bounds — everything that
+ * depends on the crystal and the repeat count but not on the selected operation. The picker's counts
+ * and the scene both need it, so it is built once and shared.
+ */
+let drawnCache: { base: CrystalStructure; n: number; big: Supercell; pivot: Vec3; corners: Vec3[]; bounds: { min: Vec3; max: Vec3; centre: Vec3; extent: number } } | undefined;
+function drawnFor(n: number) {
+  if (!drawnCache || drawnCache.base !== base || drawnCache.n !== n) {
+    const big = makeSupercell(base, [n, n, n]);
+    const pivot = fracToCart([n / 2, n / 2, n / 2]);
+    const corners = [0, n].flatMap(i => [0, n].flatMap(j => [0, n].map(k => sub(fractionalToCartesian([i, j, k], base.lattice), pivot))));
+    drawnCache = { base, n, big, pivot, corners, bounds: boundsOf(corners) };
+  }
+  return drawnCache;
+}
+
 /**
  * The scene is laid out in a frame centred on a lattice point, i.e. the cell spans [-n/2, n/2]
  * rather than [0, n]. Every point-group element passes through the origin, so this puts the drawn
@@ -357,16 +381,15 @@ function rebuild(): void {
   }
   if (repeats > largest) { repeats = largest; supercellSelect.value = String(largest); }
   const n = repeats;
-  const big = makeSupercell(base, [n, n, n]);
-  const pivot = fracToCart([n / 2, n / 2, n / 2]);
-  const corners = [0, n].flatMap(i => [0, n].flatMap(j => [0, n].map(k => sub(fractionalToCartesian([i, j, k], base.lattice), pivot))));
-  const bounds = boundsOf(corners);
+  const { big, pivot, corners, bounds } = drawnFor(n);
   // Frame the box once per structure. Re-framing on every operation change would throw away the
   // zoom and orbit the user just set up.
   if (!framed || framed.base !== base || framed.n !== n) {
     frameFor(corners, bounds.centre, bounds.extent);
     framed = { base, n };
     markerCache.clear();
+    // The picker's "N moved" counts the drawn cell, so it has to be restated when that changes.
+    refreshOperationLabels();
   }
 
   // The nearest-neighbour search and the bond list describe the structure, not the operation, and
@@ -711,17 +734,26 @@ function setOperation(index: number): void {
 }
 
 /**
- * How many sites of one cell the animation visibly relocates. Because the cell is drawn centred on
- * a lattice point, a rotation that swaps a site with a corner image counts as moving it — which is
- * exactly what the picture shows.
+ * How many drawn sites the animation visibly relocates. It counts the *supercell* the viewer draws,
+ * with the same tolerance the caption uses, so the picker's "N moved" and the caption's "N of M sites
+ * move" always agree. Because the cell is drawn centred on a lattice point, a rotation that swaps a
+ * site with a corner image counts as moving it — which is exactly what the picture shows.
  */
+let movedCounts: { base: CrystalStructure; n: number; counts: Map<CrystalOperation, number> } | undefined;
 function visibleMovedCount(operation: CrystalOperation): number {
+  const n = drawnRepeats();
+  if (!movedCounts || movedCounts.base !== base || movedCounts.n !== n) movedCounts = { base, n, counts: new Map() };
+  const cached = movedCounts.counts.get(operation);
+  if (cached !== undefined) return cached;
+  const drawn = drawnFor(n);
   const motion = motionFor(operation);
-  const pivot = fracToCart([.5, .5, .5]);
-  return base.positions.reduce((count, position) => {
-    const point = sub(fractionalToCartesian(position, base.lattice), pivot);
-    return count + (between(point, isometryTarget(motion, point, base.lattice)) > 1e-3 ? 1 : 0);
+  const tolerance = Math.max(1e-3, drawn.bounds.extent * 2e-4);
+  const count = drawn.big.positions.reduce((total, position) => {
+    const point = sub(fractionalToCartesian(position, drawn.big.lattice), drawn.pivot);
+    return total + (between(point, isometryTarget(motion, point, drawn.big.lattice)) > tolerance ? 1 : 0);
   }, 0);
+  movedCounts.counts.set(operation, count);
+  return count;
 }
 
 /** Teaching order: identity, rotations by size, then roto-reflections, mirrors, inversion. */
@@ -761,7 +793,7 @@ function populateOperationOptions(): void {
   operations.forEach((operation, index) => {
     const family = operationFamily(operation);
     const list = groups.get(family) ?? [];
-    list.push(new Option(`${index + 1}. ${describeOperation(operation)} · ${visibleMovedCount(operation)} moved`, String(index)));
+    list.push(new Option(operationLabel(operation, index), String(index)));
     groups.set(family, list);
   });
   operationSelect.replaceChildren(...[...groups].map(([family, options]) => {
@@ -772,6 +804,19 @@ function populateOperationOptions(): void {
   }));
   const firstMoving = operations.findIndex((operation, index) => index > 0 && visibleMovedCount(operation) > 0);
   setOperation(firstMoving >= 0 ? firstMoving : 0);
+}
+
+/** One picker line: index, name, and how many of the drawn sites it moves. */
+function operationLabel(operation: CrystalOperation, index: number): string {
+  return `${index + 1}. ${describeOperation(operation)} · ${visibleMovedCount(operation)} moved`;
+}
+
+/** Restate every option after the drawn cell changes, without disturbing the selection. */
+function refreshOperationLabels(): void {
+  operations.forEach((operation, index) => {
+    const option = operationSelect.options[index];
+    if (option) option.textContent = operationLabel(operation, index);
+  });
 }
 
 function recomputeOperations(): void {
