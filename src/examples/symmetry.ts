@@ -5,7 +5,7 @@ import {
   fractionalToCartesian, shortestDistance, appearanceFor,
   latticePointGroup, mapsOntoSelf, siteMapping, symmetryOrbits,
   operationIsometry, isometryPoint, isometryTarget, rotateAboutAxis,
-  mathml, mi, mn, mo, msub, row, matrix, vec,
+  mathml, mi, mn, mo, row, matrix, vec,
   type Vec3, type Bond, type Lattice, type CrystalStructure, type CrystalOperation, type Supercell, type Isometry,
 } from '../index.js';
 
@@ -582,8 +582,9 @@ function rebuild(): void {
 function writeStructureInfo(): void {
   const lengths = base.lattice.map(vector => Math.hypot(...vector));
   const angle = (a: Vec3, b: Vec3) => Math.acos(clamp(dot3(a, b) / (Math.hypot(...a) * Math.hypot(...b)), -1, 1)) * 180 / Math.PI;
-  // Two short lines instead of one long row, so nothing needs a horizontal scrollbar.
-  const lengthsLine = mathml(row(msub(mi('a'), mn(1)), mo('='), mn(lengths[0].toFixed(3)), mo(','), msub(mi('b'), mn(1)), mo('='), mn(lengths[1].toFixed(3)), mo(','), msub(mi('c'), mn(1)), mo('='), mn(lengths[2].toFixed(3)), mo(' Å')));
+  // Two short lines instead of one long row, so nothing needs a horizontal scrollbar. Plain a, b, c
+  // matches the α, β, γ below it.
+  const lengthsLine = mathml(row(mi('a'), mo('='), mn(lengths[0].toFixed(3)), mo(','), mi('b'), mo('='), mn(lengths[1].toFixed(3)), mo(','), mi('c'), mo('='), mn(lengths[2].toFixed(3)), mo(' Å')));
   const anglesLine = mathml(row(mi('α'), mo('='), mn(angle(base.lattice[1], base.lattice[2]).toFixed(1)), mo('°'), mo(','), mi('β'), mo('='), mn(angle(base.lattice[0], base.lattice[2]).toFixed(1)), mo('°'), mo(','), mi('γ'), mo('='), mn(angle(base.lattice[0], base.lattice[1]).toFixed(1)), mo('°')));
   info.innerHTML = `<div class="info-title">${base.comment || 'Crystal structure'}</div><div class="info-math">${lengthsLine}</div><div class="info-math">${anglesLine}</div><div class="info-line">${base.positions.length} atoms · ${[...new Set(base.species)].join(', ')} · ${cellVolume(base.lattice).toFixed(1)} Å³</div>`;
 }
