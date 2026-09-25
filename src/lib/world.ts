@@ -8,7 +8,12 @@ export class Visual {
   opacity=1;
   visible=true;
   reveal=1;
-  constructor(readonly geometry:Geometry, public color:Color=[1,1,1,1]) {}
+  /**
+   * Geometry is normally treated as immutable and shared. It is writable for the rare
+   * animated shape (a re-sized volume element, a live arrow); the renderer re-uploads the
+   * position buffer when the object identity changes.
+   */
+  constructor(public geometry:Geometry, public color:Color=[1,1,1,1]) {}
   get matrix():Float32Array { return transform(this.position,this.scale,this.rotation); }
 }
 export class Group {
