@@ -359,7 +359,9 @@ function rebuild(): void {
 
   const cellVisual = showCell ? new Visual(cellWire(big.lattice, pivot, Math.max(.006, bounds.extent * .0018)), rgba('#a4b3c6', .55)) : undefined;
 
-  // Orbit trails: one arc per moving site, with an arrowhead so the direction is explicit.
+  // Orbit trails: one arc per moving site, with an arrowhead so the direction is explicit. In a
+  // dense supercell the arrowheads are dropped and the arcs are thinned by their opacity, so the
+  // picture reads as a few sweeping orbits instead of a hairball.
   const trailVisual = showTrails && movers.size && big.positions.length <= 400 ? (() => {
     const paths: Geometry[] = [];
     for (const index of movers) {
@@ -368,7 +370,7 @@ function rebuild(): void {
         return add(isometryPoint(motion, ideal[index], t), times(drift[index], t));
       });
       paths.push(polyline(series, Math.max(.004, bounds.extent * .0012)));
-      paths.push(arrow(series[series.length - 3], series[series.length - 1], Math.max(.015, bounds.extent * .006)));
+      if (moverList.length <= 12) paths.push(arrow(series[series.length - 3], series[series.length - 1], Math.max(.015, bounds.extent * .006)));
     }
     return paths.length ? new Visual(merge(...paths), rgba('#ffffff', .34)) : undefined;
   })() : undefined;
@@ -481,7 +483,10 @@ function update(): void {
   // dissolve as soon as the atoms leave and reassemble as they settle; trails fade out at the end.
   const flight = smooth(clamp(progress * 4)) * (1 - smooth(clamp((progress - .82) / .18)));
   const bondOpacity = 1 - .94 * flight;
-  const trailOpacity = showTrails ? (.12 + .78 * clamp(smooth(progress * 4))) * (1 - smooth(clamp((progress - .88) / .12))) : 0;
+  // A supercell can move dozens of sites at once; thin the arcs out so 40 orbits do not read as a
+  // single bright haze over the crystal.
+  const orbitWeight = Math.min(1, 10 / Math.max(1, state.movers.size));
+  const trailOpacity = showTrails ? (.12 + .78 * clamp(smooth(progress * 4))) * (1 - smooth(clamp((progress - .88) / .12))) * orbitWeight : 0;
   // Folding an element away from the legend silences everything that carries it: its half-bonds,
   // its periodic ghosts, its atoms, its "before" markers, and its floating symbols.
   state.bondVisuals.forEach(visual => { visual.opacity = showBonds && !hiddenElements.has(state.bondSymbols.get(visual) ?? '') ? bondOpacity : 0; });
