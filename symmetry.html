@@ -48,6 +48,8 @@ input[type=range]{width:100%;accent-color:#70d7df;margin:2px 0}
 .info-math{overflow:visible;line-height:1.5}
 .info-math math,.op-matrix math{font-family:"STIX Two Math","STIXGeneral","Cambria Math","DejaVu Serif",serif}
 .info-line{color:var(--muted);font-size:11.5px;margin-top:4px}
+/* The drop zone is this input's button, so the bare chooser would be a duplicate row. */
+#files-input{display:none}
 .file-list{display:grid;gap:4px;margin-top:8px}
 .file-item{padding:5px 8px;border-radius:6px;background:#162536;color:#cde5e9;font:10.5px ui-monospace,monospace;word-break:break-all}
 .file-item.error{color:#ffaaa1;background:#30202a}
@@ -96,7 +98,7 @@ input[type=range]{width:100%;accent-color:#70d7df;margin:2px 0}
   <aside>
     <details class="card" open><summary>Files</summary>
       <div id="drop-zone" class="file" role="button" tabindex="0" title="Open the file chooser">Drop a POSCAR and/or symmetry.yaml here — or click to choose</div>
-      <input id="files-input" type="file" multiple aria-label="Load files together">
+      <input id="files-input" type="file" multiple aria-hidden="true" tabindex="-1">
       <div class="row"><div><label for="poscar-file">POSCAR / CONTCAR</label><input id="poscar-file" type="file"></div><div><label for="symmetry-file">phonopy symmetry</label><input id="symmetry-file" type="file"></div></div>
       <div id="file-list" class="file-list" aria-live="polite"></div>
       <p id="status" role="alert"></p>
