@@ -9,6 +9,7 @@ import {
   WebGPUView, LabelLayer, Group, Visual, Timeline, tween,
   axes3d, boundsBox, box, boxEdges, cylinder, polyline, arrow, circle, sphere, shadedSphere, wireSphere,
   parametricSurface, functionSurface, functionCurve, merge, rgba, lerp, smooth, transform, applyMatrix,
+  createParticleState, stepParticles, type ParticleAcceleration,
   mathml, mi, mn, mo, mtext, msup, row, tickValues, formatTick, plotFrame, viridis, plasma,
   Geometry, type Vec3, type Rgb,
 } from '../index.js';
@@ -31,6 +32,8 @@ const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matc
 type Demo = { update(delta: number, clock: number): void; labels: LabelLayer };
 const demos: Demo[] = [];
 const views: WebGPUView[] = [];
+/** Demos that threw; they are reported once and then skipped, so one cannot freeze the page. */
+const broken = new Set<Demo>();
 /** Views currently intersecting the viewport; the render loop skips the rest. */
 const onScreen = new Set<WebGPUView>();
 let observer: IntersectionObserver | undefined;
@@ -541,6 +544,108 @@ function colourDemo(view: WebGPUView): Demo {
 }
 
 /* --------------------------------------------------------------------------------------------
+ * 12 · A simulation, stepped by hand: the CPU particle seam, one acceleration function.
+ * ------------------------------------------------------------------------------------------ */
+
+function simulationDemo(view: WebGPUView): Demo {
+  look(view, .5, .3, 12);
+  const labels = new LabelLayer($('simulation-labels'), view.camera);
+  const cloud = new Group();
+  const mesh = shadedSphere(.075);
+  view.world.add(cloud, new Visual(count(axes3d(1.1, .005)), rgba('#dbe9f5', .18)));
+
+  let state = createParticleState([0, 0, 0], 3);
+  let dots: Visual[] = [];
+  let particles = Number($<HTMLInputElement>('simulation-count').value);
+  let force = 'spring', elapsed = 0, steps = 0, playing = !reducedMotion;
+  const summary = labels.addHTML(mathml(mn('')), () => [0, -5.4, 0], '#9db0c2', 'math-label');
+
+  /** Three accelerations, all bounded, so the cloud stays in frame however long it runs. */
+  const forces: Record<string, ParticleAcceleration> = {
+    spring: (_index, p) => [-1.8 * p[0], -1.8 * p[1], -1.8 * p[2]],
+    swirl: (_index, p, v) => [-1.5 * p[0] - 1.3 * v[1], -1.5 * p[1] + 1.3 * v[0], -1.5 * p[2]],
+    pair: (_index, p) => {
+      const pull = (cx: number, cz: number) => {
+        const dx = p[0] - cx, dy = p[1], dz = p[2] - cz;
+        const radius = Math.max(.4, Math.hypot(dx, dy, dz));
+        return -2.2 / (radius * radius * radius);
+      };
+      const a = pull(-2.4, 0), b = pull(2.4, 0);
+      return [a * (p[0] + 2.4) + b * (p[0] - 2.4), (a + b) * p[1], a * p[2] + b * p[2]];
+    },
+  };
+
+  const build = (): void => {
+    const positions: number[] = [], velocities: number[] = [];
+    for (let index = 0; index < particles; index++) {
+      // A shell of particles, each with a tangential kick, seeded deterministically so the demo is
+      // the same on every reload.
+      const radius = 2.4 + 2.1 * ((index * 0.6180339887) % 1);
+      const theta = index * 2.399963229728653, phi = Math.acos(1 - 2 * ((index * 0.7548776662) % 1));
+      const x = radius * Math.sin(phi) * Math.cos(theta), y = radius * Math.cos(phi), z = radius * Math.sin(phi) * Math.sin(theta);
+      positions.push(x, y, z);
+      velocities.push(-z * .42, y * .12, x * .42);
+    }
+    state = createParticleState(positions, 3, velocities);
+    cloud.clear();
+    dots = [];
+    for (let index = 0; index < particles; index++) {
+      const dot = new Visual(mesh, rgba('#9ad0ff'));
+      dot.position = [positions[index * 3], positions[index * 3 + 1], positions[index * 3 + 2]];
+      cloud.add(dot);
+      dots.push(dot);
+    }
+    update();
+  };
+
+  const readout = (): void => {
+    summary.innerHTML = mathml(mtext(`${force} · ${particles} particles · ${steps} steps · t = ${elapsed.toFixed(1)} s`));
+  };
+  const update = (): void => {
+    const positions = state.positions;
+    for (let index = 0; index < dots.length; index++) {
+      // Mutating in place: writing positions[index] would allocate a fresh array every frame.
+      dots[index].position[0] = positions[index * 3];
+      dots[index].position[1] = positions[index * 3 + 1];
+      dots[index].position[2] = positions[index * 3 + 2];
+    }
+  };
+
+  const forceSelect = $<HTMLSelectElement>('simulation-force');
+  const countInput = $<HTMLInputElement>('simulation-count');
+  const playButton = $<HTMLButtonElement>('simulation-play');
+  const button = (): void => {
+    playButton.textContent = playing ? 'Pause' : 'Play';
+    playButton.setAttribute('aria-pressed', String(playing));
+  };
+  forceSelect.addEventListener('change', () => { force = forceSelect.value; readout(); });
+  countInput.addEventListener('input', () => {
+    particles = Number(countInput.value);
+    $('simulation-count-value').textContent = String(particles);
+    elapsed = 0; steps = 0;
+    build();
+  });
+  playButton.addEventListener('click', () => { playing = !playing; button(); });
+  build();
+  button();
+
+  return {
+    labels,
+    update: delta => {
+      if (!playing) return;
+      // Two half-steps: plenty stable for springs at this stiffness, and cheap.
+      const step = Math.min(delta, .05) / 2;
+      stepParticles(state, step, forces[force]);
+      stepParticles(state, step, forces[force]);
+      steps += 2;
+      elapsed += Math.min(delta, .05);
+      update();
+      readout();
+    },
+  };
+}
+
+/* --------------------------------------------------------------------------------------------
  * 11 · A camera move: the orbit camera driven like a shot, and scrubbed like a storyboard.
  * ------------------------------------------------------------------------------------------ */
 
@@ -787,7 +892,7 @@ function plotDemo(view: WebGPUView): Demo {
  * ------------------------------------------------------------------------------------------ */
 
 async function initialize(): Promise<void> {
-  const canvases = ['coordinates-canvas', 'interpolation-canvas', 'transparency-canvas', 'shapes-canvas', 'groups-canvas', 'labels-canvas', 'colour-canvas', 'plot-canvas', 'depth-canvas', 'instances-canvas', 'camera-canvas'];
+  const canvases = ['coordinates-canvas', 'interpolation-canvas', 'transparency-canvas', 'shapes-canvas', 'groups-canvas', 'labels-canvas', 'colour-canvas', 'plot-canvas', 'depth-canvas', 'instances-canvas', 'camera-canvas', 'simulation-canvas'];
   const first = await WebGPUView.create($<HTMLCanvasElement>(canvases[0]), { samples: msaa, maxDpr, onError: report });
   views.push(first);
   if (disposed) { first.dispose(); return; }
@@ -806,6 +911,7 @@ async function initialize(): Promise<void> {
     depthDemo(views[8]),
     instancesDemo(views[9]),
     cameraDemo(views[10]),
+    simulationDemo(views[11]),
   );
 
   // Eleven views on one page: drawing the ones below the fold would cost a full render each frame for
@@ -832,13 +938,25 @@ async function initialize(): Promise<void> {
 
 function animate(now: number): void {
   if (disposed) return;
-  const delta = last ? Math.min((now - last) / 1000, .1) : 0;
+  // The first animation frame can carry a timestamp from before this loop started, so clamp both ways:
+  // a negative delta once reached a simulation and threw on its own guard.
+  const delta = last ? Math.max(0, Math.min((now - last) / 1000, .1)) : 0;
   last = now;
   clock += delta;
   // Every demo keeps its own time, on screen or not, so a timeline is where it should be when the
   // reader scrolls back to it. Only the draw is skipped: that is the part that costs a full pass.
-  for (const demo of demos) demo.update(delta, clock);
-  for (const demo of demos) demo.labels.update();
+  for (const demo of demos) {
+    // One demo throwing must not freeze the other eleven: report it, then leave that one alone.
+    try {
+      demo.update(delta, clock);
+      demo.labels.update();
+    } catch (error) {
+      if (!broken.has(demo)) {
+        broken.add(demo);
+        report(`${error instanceof Error ? error.message : String(error)} — one demo has stopped`);
+      }
+    }
+  }
   for (const view of views) if (onScreen.has(view)) view.render();
   samples.push(delta * 1000);
   if (samples.length > 120) samples.shift();

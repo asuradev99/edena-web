@@ -24,6 +24,9 @@ try {
   // Enable the domains before the page runs so nothing it reports is missed, and reload so the load
   // itself is covered too.
   await call('Runtime.enable');await call('Log.enable');await call('Page.enable');
+  // Always test the current build: a cached bundle once hid a fix from this check.
+  await call('Network.enable');
+  await call('Network.setCacheDisabled',{cacheDisabled:true});
   await call('Page.navigate',{url:'http://127.0.0.1:5173/symmetry.html'});
   await new Promise(resolve=>setTimeout(resolve,2500));
   const result=await call('Runtime.evaluate',{awaitPromise:true,returnByValue:true,expression:`(async()=>{

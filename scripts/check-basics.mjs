@@ -1,7 +1,7 @@
 // Run against a Chrome debugging session: node scripts/check-basics.mjs [port]
 //
 // Checks the basics tour the way a reader meets it:
-//   1. every one of the eleven demos draws something, and each draws something distinct;
+//   1. every one of the twelve demos draws something, and each draws something distinct;
 //   2. every control changes its own stage — projection, grid, marker height, opacity, spin, the mesh
 //      selector, the group's spread and opacity, and the helix's turn count — and leaves the others be;
 //   3. the two moving demos advance on their own, and the transport seeks;
@@ -42,6 +42,9 @@ try {
   await call('Runtime.enable');
   await call('Log.enable');
   await call('Page.enable');
+  // Always test the current build: a cached bundle once hid a fix from this check.
+  await call('Network.enable');
+  await call('Network.setCacheDisabled',{cacheDisabled:true});
   await call('Page.navigate', { url });
   await wait(4000);
 
@@ -98,7 +101,7 @@ try {
     return evaluate(`window.__measureRegion(${JSON.stringify(shot)}, ${JSON.stringify(rect)})`);
   };
 
-  const stageIds = ['coordinates', 'interpolation', 'transparency', 'shapes', 'groups', 'labels', 'colour', 'plot', 'depth', 'instances', 'camera'];
+  const stageIds = ['coordinates', 'interpolation', 'transparency', 'shapes', 'groups', 'labels', 'colour', 'plot', 'depth', 'instances', 'camera', 'simulation'];
   const startup = await evaluate(`({ stats: document.getElementById('stats').textContent, status: document.getElementById('status').hidden, labels: document.querySelectorAll('.labels span').length })`);
   assert.ok(startup.status, `the page reported an error: ${await evaluate('document.getElementById("status").textContent')}`);
   assert.match(startup.stats, /fps/);
@@ -136,6 +139,7 @@ try {
     ['instances-wave', 1, 'instances'],
     ['camera-path', 'top', 'camera'],
     ['camera-time', .45, 'camera'],
+    ['simulation-count', 400, 'simulation'],
   ];
   // Stop the demos that spin, so every control can be judged against a still picture. The spin buttons
   // themselves are checked afterwards, by measuring exactly this drift.
@@ -145,9 +149,9 @@ try {
   const still = new Set(['coordinates', 'shapes', 'groups', 'colour', 'plot', 'depth', 'instances']);
   for (const [control, value, stageId] of changes) {
     // The helix keeps moving, so stop it first: then the turn count is the only thing that changes.
-    if (control === 'labels-turns' || control.startsWith('camera-')) {
+    if (control === 'labels-turns' || control.startsWith('camera-') || control.startsWith('simulation-')) {
       // Only click a button that is currently playing: the state depends on prefers-reduced-motion.
-      await evaluate(`for (const id of ['labels-play', 'camera-play']) { const node = document.getElementById(id); if (node.textContent === 'Pause') node.click(); }`);
+      await evaluate(`for (const id of ['labels-play', 'camera-play', 'simulation-play']) { const node = document.getElementById(id); if (node.textContent === 'Pause') node.click(); }`);
       await wait(300);
     }
     // Measure everything fresh: earlier controls have already changed the other stages, and some demos
@@ -180,6 +184,17 @@ try {
     await wait(300);
   }
 
+  // The force selector changes the dynamics rather than the still picture, so it is judged by its
+  // own readout instead of by pixels.
+  await evaluate(`window.__set('simulation-force', 'swirl')`);
+  await wait(300);
+  assert.match(await evaluate(`document.querySelector('#simulation-labels span').textContent`), /^swirl · /, 'the readout should name the chosen force');
+  const probeStart = await evaluate(`document.querySelector('#simulation-labels span').textContent`);
+  await evaluate(`document.getElementById('simulation-play').click()`);
+  await wait(900);
+  assert.notEqual(await evaluate(`document.querySelector('#simulation-labels span').textContent`), probeStart, 'the simulation should advance when played');
+  await evaluate(`document.getElementById('simulation-play').click()`);
+
   // 3. Motion: the helix label advances on its own, and the transport seeks and resumes.
   const liveTime = () => evaluate(`document.querySelectorAll('#labels-stage-labels span')[1]?.textContent ?? ''`);
   // The control sweep stopped the helix to measure the turn count, so set it going again.
@@ -201,11 +216,11 @@ try {
   const stats = await evaluate(`document.getElementById('stats').textContent`);
   const fps = Number(/· (\d+) fps/.exec(stats)?.[1] ?? 0);
   assert.ok(fps >= 50, `expected a healthy frame rate, saw ${stats}`);
-  assert.match(stats, /11 views/);
+  assert.match(stats, /12 views/);
   const problems = events.filter(event => event.method === 'Runtime.exceptionThrown' || (event.method === 'Runtime.consoleAPICalled' && event.params.type === 'error') || (event.method === 'Log.entryAdded' && event.params.entry.level === 'error'));
   assert.equal(problems.length, 0, `the page reported ${problems.length} problem(s): ${JSON.stringify(problems[0]?.params ?? {}).slice(0, 300)}`);
 
-  console.log('PASS: eleven demos drawing distinct scenes, every control moving its own stage alone,');
+  console.log('PASS: twelve demos drawing distinct scenes, every control moving its own stage alone,');
   console.log('      the helix and the timeline running, the transport seeking and resuming,', stats);
   console.log('     ', JSON.stringify(Object.fromEntries(stageIds.map(stageId => [stageId, Number(signatures[stageId].mean.toFixed(3))]))));
 } finally {
