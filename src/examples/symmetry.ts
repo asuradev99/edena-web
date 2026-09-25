@@ -40,6 +40,9 @@ const cellToggle = $<HTMLInputElement>('cell');
 const trailsToggle = $<HTMLInputElement>('trails');
 const legendAnchor = $<HTMLElement>('legend-anchor');
 const atomLabelsToggle = $<HTMLInputElement>('atom-labels');
+const holdStartToggle = $<HTMLInputElement>('start-sites');
+const prevButton = $<HTMLButtonElement>('prev-op');
+const nextButton = $<HTMLButtonElement>('next-op');
 
 const SITE_COLORS = ['#62d6e8', '#f7d681', '#ef9273', '#b5a1ff', '#9ae6b4', '#ff9ec4', '#8ff0b0', '#9ad0ff'];
 const ELEMENT_COLOR = (() => { const map = new Map<string, string>(); return (symbol: string) => { if (!map.has(symbol)) map.set(symbol, appearanceFor(symbol).color); return map.get(symbol)!; }; })();
@@ -84,6 +87,8 @@ let speed = 1;
 let showBonds = true;
 let showCell = true;
 let showTrails = true;
+/** Keep the faint "before" markers visible after the operation, for side-by-side comparison. */
+let holdStart = false;
 let colourMode: 'species' | 'site' = 'species';
 let selectedAtom = -1;
 let built: Built | undefined;
@@ -209,10 +214,12 @@ function operationElement(operation: CrystalOperation, centre: Vec3, extent: num
     const half: Vec3 = [centre[0] - rotation.axis[0] * extent * .8, centre[1] - rotation.axis[1] * extent * .8, centre[2] - rotation.axis[2] * extent * .8];
     const end: Vec3 = [centre[0] + rotation.axis[0] * extent * .8, centre[1] + rotation.axis[1] * extent * .8, centre[2] + rotation.axis[2] * extent * .8];
     visuals.push(new Visual(polyline([half, end], .012), gold));
-    const ring = rotationRing(centre, rotation.axis, extent * .26);
-    visuals.push(new Visual(polyline(ring, .009), blue));
-    visuals.push(new Visual(arrow(ring[ring.length - 3], ring[ring.length - 1], .02), blue));
-    return { visuals, anchor: end, label: 'rotation axis' };
+    // The arc spans exactly the rotation angle and carries an arrowhead, so the angle is visible.
+    const ring = rotationRing(centre, rotation.axis, extent * .26, rotation.angle / (Math.PI * 2));
+    visuals.push(new Visual(polyline(ring, .01), blue));
+    visuals.push(new Visual(arrow(ring[ring.length - 3], ring[ring.length - 1], .022), blue));
+    const degrees = Math.round(rotation.angle * 180 / Math.PI);
+    return { visuals, anchor: end, label: `${degrees}° rotation about ${axisLabel(rotation.axis)}` };
   }
   if (trace <= -3 + 1e-6) {
     visuals.push(new Visual(wireSphere(extent * .09, 10, 6, .01), gold));
@@ -233,13 +240,16 @@ function operationElement(operation: CrystalOperation, centre: Vec3, extent: num
     visuals.push(new Visual(polyline(outline, .009), rgba('#83c167', .85)));
     const normalEnd: Vec3 = [centre[0] + normal[0] * extent * .55, centre[1] + normal[1] * extent * .55, centre[2] + normal[2] * extent * .55];
     visuals.push(new Visual(arrow(centre, normalEnd, .016), rgba('#83c167', .85)));
-    return { visuals, anchor: normalEnd, label: 'mirror plane' };
+    return { visuals, anchor: normalEnd, label: `mirror plane ⟂ ${axisLabel(normal)}` };
   }
   const proper = axisAngle(negate(m));
   if (proper) {
     const end: Vec3 = [centre[0] + proper.axis[0] * extent * .8, centre[1] + proper.axis[1] * extent * .8, centre[2] + proper.axis[2] * extent * .8];
     visuals.push(new Visual(polyline([[2 * centre[0] - end[0], 2 * centre[1] - end[1], 2 * centre[2] - end[2]], end], .012), gold));
-    return { visuals, anchor: end, label: 'rotoreflection axis' };
+    const ring = rotationRing(centre, proper.axis, extent * .26, proper.angle / (Math.PI * 2));
+    visuals.push(new Visual(polyline(ring, .01), blue));
+    visuals.push(new Visual(arrow(ring[ring.length - 3], ring[ring.length - 1], .022), blue));
+    return { visuals, anchor: end, label: `${Math.round(proper.angle * 180 / Math.PI)}° rotoreflection about ${axisLabel(proper.axis)}` };
   }
   return { visuals, anchor: centre, label: 'improper operation' };
 }
@@ -357,13 +367,27 @@ function rebuild(): void {
         series.push([position[0] + shift[0], position[1] + shift[1], position[2] + shift[2]]);
       }
       paths.push(polyline(series, Math.max(.004, bounds.extent * .0012)));
+      // An arrowhead on the path of any site that actually moves makes the direction explicit.
+      const baseIndex = index % baseCount;
+      const target = applyOperation(operations[operationIndex], base.positions[baseIndex]);
+      const moved = [0, 1, 2].some(axis => { const raw = Math.abs(target[axis] - base.positions[baseIndex][axis]); return Math.min(raw, 1 - raw) > 1e-4; });
+      if (moved) paths.push(arrow(series[series.length - 3], series[series.length - 1], Math.max(.015, bounds.extent * .006)));
     }
-    return paths.length ? new Visual(merge(...paths), rgba('#ffffff', .3)) : undefined;
+    return paths.length ? new Visual(merge(...paths), rgba('#ffffff', .34)) : undefined;
   })() : undefined;
 
   const selectionVisuals: Visual[] = [];
   if (selectedAtom >= 0 && selectedAtom < ideal.length) {
     selectionVisuals.push(...selectionDetail(selectedAtom, ideal).visuals);
+    // Outline every site in the selected atom's symmetry orbit: "these atoms are equivalent".
+    const orbits = symmetryOrbits(base, operations, 1e-3);
+    const orbit = new Set(orbits.find(list => list.includes(selectedAtom % baseCount)) ?? [selectedAtom % baseCount]);
+    for (let index = 0; index < ideal.length; index++) {
+      if (index === selectedAtom || !orbit.has(index % baseCount)) continue;
+      const ring = new Visual(wireSphere(atomScales[index][0] * 1.45, 8, 5, .006), rgba('#ffff00', .5));
+      ring.position = ideal[index];
+      selectionVisuals.push(ring);
+    }
   }
 
   built = { big, baseCount, ideal, atomVisuals, atomScales, bondVisuals, ghostVisuals, haloVisuals, startVisuals, atomLabels: [], cellVisual, trailVisual, elementVisuals: element.visuals, selectionVisuals, elementLabel: element.label, elementAnchor: element.anchor, motion, centre: bounds.centre, extent: bounds.extent };
@@ -488,7 +512,7 @@ function update(): void {
   });
   // Start markers: faint "before" rings that fade in as atoms leave their sites and out again
   // as the operation returns them home, so before → after is unambiguous.
-  const startOpacity = showTrails ? smooth(progress * 3) * (1 - smooth((progress - .82) / .18)) * .55 : 0;
+  const startOpacity = showTrails ? (holdStart ? .55 : smooth(progress * 3) * (1 - smooth((progress - .82) / .18)) * .55) : 0;
   state.startVisuals.forEach(marker => { marker.opacity = startOpacity; });
   progressInput.value = String(progress);
   playButton.textContent = playing ? 'Ⅱ' : progress >= 1 ? '↺' : '▶';
@@ -621,6 +645,22 @@ async function init(): Promise<void> {
   cellToggle.addEventListener('change', () => { showCell = cellToggle.checked; rebuild(); update(); }, events);
   trailsToggle.addEventListener('change', () => { showTrails = trailsToggle.checked; rebuild(); update(); }, events);
   atomLabelsToggle.addEventListener('change', () => { rebuild(); update(); }, events);
+  holdStartToggle.addEventListener('change', () => { holdStart = holdStartToggle.checked; update(); }, events);
+  const step = (delta: number) => setOperation((operationIndex + delta + operations.length) % operations.length);
+  prevButton.addEventListener('click', () => step(-1), events);
+  nextButton.addEventListener('click', () => step(1), events);
+  document.addEventListener('keydown', event => {
+    if (event.altKey || event.ctrlKey || event.metaKey) return;
+    const tag = (event.target as HTMLElement)?.tagName;
+    if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
+    if (event.code === 'Space') { event.preventDefault(); playButton.click(); }
+    else if (event.code === 'ArrowLeft') { event.preventDefault(); playing = false; progress = clamp(progress - .05, 0, 1); update(); }
+    else if (event.code === 'ArrowRight') { event.preventDefault(); playing = false; progress = clamp(progress + .05, 0, 1); update(); }
+    else if (event.key === '[') step(-1);
+    else if (event.key === ']') step(1);
+    else if (event.key === 'r' || event.key === 'R') { playing = false; progress = 0; update(); }
+    else if (event.key === 'p' || event.key === 'P') playButton.click();
+  }, events);
   // Select on click, not on drag: the camera also listens for pointerdown, so a tiny
   // movement threshold keeps orbiting from changing the selection.
   let pressX = 0, pressY = 0, pressed = false;

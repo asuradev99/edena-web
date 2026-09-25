@@ -19,6 +19,8 @@ main{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) 372px;
 .atom-tag{font-size:10px;font-weight:700;background:rgba(6,10,16,.66);border-radius:5px;padding:1px 3px;text-shadow:none}
 .stage-op{position:absolute;left:14px;top:12px;font-family:Georgia,serif;font-size:15px;color:var(--gold);text-shadow:0 1px 6px #000;pointer-events:none}
 .stage-hint{position:absolute;left:14px;bottom:10px;font-size:10.5px;color:#7d90a6;pointer-events:none}
+.op-row{display:grid;grid-template-columns:34px minmax(0,1fr) 34px;gap:6px;align-items:center}
+.op-row button{padding:7px 0}
 aside{min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:10px;padding-right:2px;scrollbar-width:thin}
 .card{background:var(--panel);border:1px solid var(--line);border-radius:13px;padding:11px 13px}
 .card[open]{padding-bottom:13px}
@@ -80,7 +82,7 @@ input[type=range]{width:100%;accent-color:#70d7df;margin:2px 0}
     <canvas id="scene" aria-label="Crystal structure with animated symmetry operations"></canvas>
     <div id="labels"></div>
     <div class="stage-op" id="stage-op"></div>
-    <div class="stage-hint">shaded balls = atoms · translucent balls = periodic neighbours · white trails = the path</div>
+    <div class="stage-hint">shaded balls = atoms · translucent = periodic neighbours · arrows = the path home · space play · ← → step · [ ] operation · r reset</div>
   </div>
   <aside>
     <details class="card" open><summary>Files</summary>
@@ -99,11 +101,11 @@ input[type=range]{width:100%;accent-color:#70d7df;margin:2px 0}
         <div><label for="supercell">Supercell</label><select id="supercell"><option value="1" selected>1 × 1 × 1</option><option value="2">2 × 2 × 2</option><option value="3">3 × 3 × 3</option></select></div>
         <div><label for="colour">Atom colour</label><select id="colour"><option value="species" selected>by element</option><option value="site">by site index</option></select></div>
       </div>
-      <div class="toggles"><label><input type="checkbox" id="bonds" checked> bonds</label><label><input type="checkbox" id="cell" checked> cell</label><label><input type="checkbox" id="trails" checked> trails</label><label><input type="checkbox" id="atom-labels"> symbols</label></div>
+      <div class="toggles"><label><input type="checkbox" id="bonds" checked> bonds</label><label><input type="checkbox" id="cell" checked> cell</label><label><input type="checkbox" id="trails" checked> trails</label><label><input type="checkbox" id="atom-labels"> symbols</label><label><input type="checkbox" id="start-sites"> compare</label></div>
     </details>
 
     <details class="card" open><summary>Symmetry operation</summary>
-      <select id="operation" aria-label="Symmetry operation"></select>
+      <div class="op-row"><button id="prev-op" aria-label="Previous operation">‹</button><select id="operation" aria-label="Symmetry operation"></select><button id="next-op" aria-label="Next operation">›</button></div>
       <div id="description"></div>
       <div class="transport" style="margin-top:10px">
         <button id="play" aria-label="Play">▶</button>
