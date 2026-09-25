@@ -8,7 +8,7 @@
 import {
   WebGPUView, LabelLayer, Group, Visual, Timeline, tween,
   axes3d, boundsBox, box, boxEdges, cylinder, polyline, arrow, circle, sphere, shadedSphere, wireSphere, isosurface,
-  parametricSurface, functionSurface, functionCurve, merge, rgba, lerp, smooth, transform, applyMatrix,
+  parametricSurface, functionSurface, functionCurve, colorMappedSurface, ramp, merge, rgba, lerp, smooth, transform, applyMatrix,
   createParticleState, stepParticles, streamlines, sphereSeeds, type VectorField, type ParticleAcceleration,
   mathml, mi, mn, mo, mtext, msub, msup, row, matrix, vec, tickValues, niceStep, formatTick, plotFrame, viridis, plasma,
   Geometry, type Vec3, type Rgb,
@@ -551,6 +551,78 @@ function colourDemo(view: WebGPUView): Demo {
   sync();
 
   return { labels, update: () => {} };
+}
+
+/* --------------------------------------------------------------------------------------------
+ * 24 · Colour as a second dimension: one field, sampled once, mapped through a ramp.
+ * ------------------------------------------------------------------------------------------ */
+
+function contrastDemo(view: WebGPUView): Demo {
+  // The domains are a few units across, so the camera has to stand well back to see one whole.
+  look(view, .58, .46, 14);
+  const labels = new LabelLayer($('contrast-labels'), view.camera);
+  const spin = new Group();
+  view.world.add(spin, new Visual(count(axes3d(1.2, .005)), rgba('#dbe9f5', .2)));
+
+  const fields: Record<string, { f: (x: number, y: number) => number; domain: number; name: string }> = {
+    wave: { f: (x, y) => Math.sin(2.4 * Math.hypot(x, y)) / (1 + Math.hypot(x, y)), domain: 3.6, name: 'sin(r)/(1+r)' },
+    saddle: { f: (x, y) => .38 * (x * x - y * y), domain: 2.4, name: 'x² − y²' },
+    bowl: { f: (x, y) => .55 * Math.cos(3.1 * Math.hypot(x, y)) * Math.exp(-Math.hypot(x, y) / 2.2), domain: 4.0, name: 'a decaying ripple' },
+  };
+  const palettes: Record<string, (t: number) => [number, number, number]> = {
+    viridis,
+    plasma,
+    heat: ramp([0, [0.05, 0.02, 0.2]], [.45, [0.75, 0.16, 0.24]], [.75, [0.98, 0.62, 0.07]], [1, [1, 0.98, 0.82]]),
+  };
+  let kind = 'wave', palette = 'viridis', contrast = 100, phase = 0, spinning = !reducedMotion;
+  const readout = labels.addHTML(mathml(mn('')), () => [0, -1.5, 0], '#cfe4ea', 'math-label');
+  const panelReadout = $('contrast-readout');
+
+  const build = (): void => {
+    const field = fields[kind], [low, high] = [-field.domain, field.domain];
+    // Sample the field once to find its extremes, then hand the mapper a range narrowed by the
+    // contrast control: the ends clip, and the band in the middle gets the whole palette.
+    let lo = Infinity, hi = -Infinity;
+    for (let i = 0; i <= 24; i++) for (let j = 0; j <= 24; j++) {
+      const value = field.f(low + (high - low) * i / 24, low + (high - low) * j / 24);
+      if (value < lo) lo = value;
+      if (value > hi) hi = value;
+    }
+    const middle = (lo + hi) / 2, half = (hi - lo) / 2 * (100 / contrast);
+    const range: [number, number] = [middle - half, middle + half];
+    spin.clear();
+    spin.add(new Visual(count(colorMappedSurface(field.f, [low, high], [low, high], palettes[palette], [64, 64], range)), rgba('#ffffff', .95)));
+    const text = `${field.name} · ${palette} · range ${range[0].toFixed(2)} … ${range[1].toFixed(2)}`;
+    readout.innerHTML = mathml(mtext(text));
+    panelReadout.textContent = text;
+  };
+
+  const fieldSelect = $<HTMLSelectElement>('contrast-field');
+  const paletteSelect = $<HTMLSelectElement>('contrast-palette');
+  const rangeInput = $<HTMLInputElement>('contrast-range');
+  const spinButton = $<HTMLButtonElement>('contrast-spin');
+  const button = (): void => {
+    spinButton.textContent = spinning ? 'Turning' : 'Still';
+    spinButton.setAttribute('aria-pressed', String(spinning));
+  };
+  fieldSelect.addEventListener('change', () => { kind = fieldSelect.value; build(); });
+  paletteSelect.addEventListener('change', () => { palette = paletteSelect.value; build(); });
+  rangeInput.addEventListener('input', () => {
+    contrast = Number(rangeInput.value);
+    $('contrast-range-value').textContent = `${contrast}%`;
+    build();
+  });
+  spinButton.addEventListener('click', () => { spinning = !spinning; button(); });
+  build();
+  button();
+
+  return {
+    labels,
+    update: delta => {
+      if (spinning) phase += delta * .22;
+      spin.rotation = phase;
+    },
+  };
 }
 
 /* --------------------------------------------------------------------------------------------
@@ -1771,7 +1843,7 @@ function plotDemo(view: WebGPUView): Demo {
  * ------------------------------------------------------------------------------------------ */
 
 async function initialize(): Promise<void> {
-  const canvases = ['coordinates-canvas', 'interpolation-canvas', 'transparency-canvas', 'shapes-canvas', 'groups-canvas', 'labels-canvas', 'colour-canvas', 'plot-canvas', 'depth-canvas', 'instances-canvas', 'camera-canvas', 'simulation-canvas', 'field-canvas', 'streamlines-canvas', 'story-canvas', 'vectors-canvas', 'path-canvas', 'normals-canvas', 'layers-canvas', 'bars-canvas', 'follow-canvas', 'transform-canvas', 'measure-canvas'];
+  const canvases = ['coordinates-canvas', 'interpolation-canvas', 'transparency-canvas', 'shapes-canvas', 'groups-canvas', 'labels-canvas', 'colour-canvas', 'plot-canvas', 'depth-canvas', 'instances-canvas', 'camera-canvas', 'simulation-canvas', 'field-canvas', 'streamlines-canvas', 'story-canvas', 'vectors-canvas', 'path-canvas', 'normals-canvas', 'layers-canvas', 'bars-canvas', 'follow-canvas', 'transform-canvas', 'measure-canvas', 'contrast-canvas'];
   const first = await WebGPUView.create($<HTMLCanvasElement>(canvases[0]), { samples: msaa, maxDpr, onError: report });
   views.push(first);
   if (disposed) { first.dispose(); return; }
@@ -1802,6 +1874,7 @@ async function initialize(): Promise<void> {
     followDemo(views[20]),
     transformDemo(views[21]),
     measureDemo(views[22]),
+    contrastDemo(views[23]),
   );
 
   // Eleven views on one page: drawing the ones below the fold would cost a full render each frame for

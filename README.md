@@ -15,7 +15,7 @@ Open [http://localhost:5173/](http://localhost:5173/). The landing page is an in
 
 Dedicated demos:
 
-- [Basics](basics.html): start here. Twenty-three small demos, one library idea each — the 3D coordinate
+- [Basics](basics.html): start here. Twenty-four small demos, one library idea each — the 3D coordinate
   system and its projected labels, interpolation with a seekable `Timeline`, solids with transparent
   sides, the geometry primitives and `merge`, groups with nested transforms, typeset maths riding a
   moving point, colour taken from data, a chart drawn in 3D, and depth and draw order. Each panel names the API it uses.
@@ -41,7 +41,7 @@ view.world.add(new Visual(axes3d(1.9, .012), rgba('#dbe9f5', .9)));
 second.world.add(new Visual(box([-1, -1, -1], [1, 1, 1]), rgba('#58c4dd', .18)));
 ```
 
-The twenty-three ideas, in the order the page presents them:
+The twenty-four ideas, in the order the page presents them:
 
 | # | Idea | What it shows |
 | --- | --- | --- |
@@ -68,6 +68,7 @@ The twenty-three ideas, in the order the page presents them:
 | 21 | Follow | `camera.target` animated under a marker while the scene stands still — a shot, not a diagram |
 | 22 | Transform | a node's own matrix read back and typeset, as its scale, yaw and tilt change |
 | 23 | Measure | a dimension line, its legs, an angle arc and three labels, all recomputed from the same two points |
+| 24 | Colour map | `colorMappedSurface` sampling a field once, with the range it maps printed and clampable |
 | 16 | Diagram | `arrow` plus `polyline` construction lines, named with the `vec` accent, and a readout that restates the sum |
 | 17 | Path | a cubic Bézier sampled into a tube with its control polygon, and a marker whose raw and eased parameters are both printed |
 | 18 | Normals | a height field sampled on a grid, with `(−f_x, 1, −f_y)` from central differences drawn as a comb of arrows |
@@ -76,6 +77,7 @@ The twenty-three ideas, in the order the page presents them:
 | 21 | Follow | `camera.target` animated under a marker while the scene stands still — a shot, not a diagram |
 | 22 | Transform | a node's own matrix read back and typeset, as its scale, yaw and tilt change |
 | 23 | Measure | a dimension line, its legs, an angle arc and three labels, all recomputed from the same two points |
+| 24 | Colour map | `colorMappedSurface` sampling a field once, with the range it maps printed and clampable |
 
 ## Crystal workflow
 
@@ -236,7 +238,7 @@ rather than trusting the code that drew it:
 ```sh
 node scripts/check-links.mjs           # every page's links, scripts and route to the tour — no browser
 node scripts/check-pages.mjs [port]    # every page loads, draws every canvas, and stays quiet
-node scripts/check-basics.mjs [port]   # the basics tour: twenty-three demos, every control, every assertion
+node scripts/check-basics.mjs [port]   # the basics tour: twenty-four demos, every control, every assertion
 node scripts/check-depth.mjs [port]    # renderer depth and the crystal viewer, pixel by pixel
 ```
 
