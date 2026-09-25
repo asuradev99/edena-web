@@ -231,24 +231,90 @@ try {
     }
     return {label:select.options[Number(select.value)].textContent,samples};
   })()`});
-  const points=(shape.result?.value?.samples??[]).filter(sample=>sample.x!==null&&sample.pixels>150);
-  assert.ok(points.length>=15,`the shape check must see the atom in every frame (${points.length})`);
-  const rows=points.map(s=>[s.x*s.x,s.x*s.y,s.y*s.y,s.x,s.y]);
-  const size=5,matrix=Array.from({length:size},()=>new Array(size).fill(0)),rhs=new Array(size).fill(0);
-  for(let i=0;i<rows.length;i++)for(let a=0;a<size;a++){rhs[a]+=rows[i][a];for(let c=0;c<size;c++)matrix[a][c]+=rows[i][a]*rows[i][c];}
-  for(let col=0;col<size;col++){
-    let pivot=col;for(let row=col+1;row<size;row++)if(Math.abs(matrix[row][col])>Math.abs(matrix[pivot][col]))pivot=row;
-    [matrix[col],matrix[pivot]]=[matrix[pivot],matrix[col]];[rhs[col],rhs[pivot]]=[rhs[pivot],rhs[col]];
-    for(let row=0;row<size;row++)if(row!==col){const factor=matrix[row][col]/matrix[col][col];rhs[row]-=factor*rhs[col];for(let k=0;k<size;k++)matrix[row][k]-=factor*matrix[col][k];}
-  }
-  const [A,B,C,D,E]=[0,1,2,3,4].map(i=>rhs[i]/matrix[i][i]);
-  const deviations=points.map(s=>{
-    const F=A*s.x*s.x+B*s.x*s.y+C*s.y*s.y+D*s.x+E*s.y-1;
-    return Math.abs(F)/Math.hypot(2*A*s.x+B*s.y+D,B*s.x+2*C*s.y+E);
-  });
-  const worst=Math.max(...deviations);
-  assert.ok(B*B-4*A*C<0,'the drawn path must be an ellipse, not a line or a hyperbola');
-  assert.ok(worst<=4,`the drawn animation must follow the projected circle (worst ${worst.toFixed(2)} px off)`);
+  const solveLinear=(matrix,rhs)=>{
+    const size=rhs.length,rows=matrix.map(row=>[...row]);
+    for(let col=0;col<size;col++){
+      let pivot=col;for(let row=col+1;row<size;row++)if(Math.abs(rows[row][col])>Math.abs(rows[pivot][col]))pivot=row;
+      [rows[col],rows[pivot]]=[rows[pivot],rows[col]];[rhs[col],rhs[pivot]]=[rhs[pivot],rhs[col]];
+      for(let row=0;row<size;row++)if(row!==col){const factor=rows[row][col]/rows[col][col];rhs[row]-=factor*rhs[col];for(let k=0;k<size;k++)rows[row][k]-=factor*rows[col][k];}
+    }
+    return rhs.map((value,index)=>value/rows[index][index]);
+  };
+  // Fit the general conic ax^2+bxy+cy^2+dx+ey=1 and report how far the drawn path sits from it.
+  const fitEllipse=(list)=>{
+    const size=5,matrix=Array.from({length:size},()=>new Array(size).fill(0)),rhs=new Array(size).fill(0);
+    for(const point of list){const row=[point.x*point.x,point.x*point.y,point.y*point.y,point.x,point.y];for(let a=0;a<size;a++){rhs[a]+=row[a];for(let b=0;b<size;b++)matrix[a][b]+=row[a]*row[b];}}
+    const [A,B,C,D,E]=solveLinear(matrix,rhs);
+    const deviations=list.map(point=>{
+      const F=A*point.x*point.x+B*point.x*point.y+C*point.y*point.y+D*point.x+E*point.y-1;
+      return Math.abs(F)/Math.hypot(2*A*point.x+B*point.y+D,B*point.x+2*C*point.y+E);
+    });
+    return {discriminant:B*B-4*A*C,worst:Math.max(...deviations)};
+  };
+  const rotationPoints=(shape.result?.value?.samples??[]).filter(sample=>sample.x!==null&&sample.pixels>150);
+  assert.ok(rotationPoints.length>=15,`the shape check must see the atom in every frame (${rotationPoints.length})`);
+  const rotation=fitEllipse(rotationPoints);
+  assert.ok(rotation.discriminant<0,'the drawn path must be an ellipse, not a line or a hyperbola');
+  assert.ok(rotation.worst<=4,`the drawn animation must follow the projected circle (worst ${rotation.worst.toFixed(2)} px off)`);
+
+  // A roto-reflection has to be two moves in turn, so measure its two halves separately: the first is
+  // a rotation, and the second folds straight through the plane. Asserted from the drawn pixels.
+  await call('Page.navigate',{url:'http://127.0.0.1:5173/symmetry.html'});
+  await new Promise(resolve=>setTimeout(resolve,2500));
+  const split=await call('Runtime.evaluate',{awaitPromise:true,returnByValue:true,expression:`(async()=>{
+    const wait=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+    const poscar=['Single Sr','1.0','4 0 0','0 4 0','0 0 4','Sr','1','Direct','0.12 0.22 0.34'].join(String.fromCharCode(10));
+    const dt=new DataTransfer();dt.items.add(new File([poscar],'sr.vasp'));
+    const input=document.getElementById('poscar-file');input.files=dt.files;input.dispatchEvent(new Event('change'));
+    let guard=0;while(!/loaded/.test(document.getElementById('status').textContent)&&guard++<200)await wait(25);
+    await wait(700);
+    // Colour by site index: site 0 is cyan, while every symmetry element is drawn in the green that
+    // strontium would share.
+    const colour=document.getElementById('colour');colour.value='site';colour.dispatchEvent(new Event('change'));
+    await wait(400);
+    const select=document.getElementById('operation');
+    const index=[...select.options].findIndex(option=>option.textContent.includes('S₄ ·')&&option.textContent.includes('[001]'));
+    select.value=String(index);select.dispatchEvent(new Event('change'));
+    await wait(250);
+    const play=document.getElementById('play');if(play.textContent==='Ⅱ')play.click();
+    for(const id of ['trails','start-sites','cell','bonds']){const node=document.getElementById(id);if(node.checked)node.click();}
+    await wait(300);
+    const scene=document.getElementById('scene');
+    const probe=document.createElement('canvas');probe.width=440;probe.height=360;
+    const context=probe.getContext('2d',{willReadFrequently:true});
+    const measure=async()=>{
+      const image=new Image();image.src=scene.toDataURL();await image.decode();
+      context.clearRect(0,0,440,360);context.drawImage(image,0,0,440,360);
+      const data=context.getImageData(0,0,440,360).data;
+      let sx=0,sy=0,n=0;
+      for(let y=0;y<360;y++)for(let x=0;x<440;x++){
+        const i=(y*440+x)*4,r=data[i],g=data[i+1],b=data[i+2];
+        if(b>150&&b>r*1.7&&g>110&&b>=g){sx+=x;sy+=y;n++;}
+      }
+      return n?[sx/n,sy/n,n]:null;
+    };
+    const samples=[];
+    for(let step=0;step<=16;step++){
+      const progress=document.getElementById('progress');
+      progress.value=String(step/16);progress.dispatchEvent(new Event('input'));
+      await wait(80);
+      const point=await measure();
+      samples.push({t:step/16,x:point?point[0]:null,y:point?point[1]:null,pixels:point?point[2]:0});
+    }
+    return {label:select.options[Number(select.value)].textContent,samples};
+  })()`});
+  const splitPoints=(split.result?.value?.samples??[]).filter(sample=>sample.x!==null&&sample.pixels>120);
+  assert.ok(splitPoints.length>=15,`the roto-reflection check must see the atom in every frame (${splitPoints.length})`);
+  const spun=fitEllipse(splitPoints.filter(point=>point.t<=0.5+1e-9));
+  assert.ok(spun.discriminant<0,'the first half of a roto-reflection must turn about the axis');
+  assert.ok(spun.worst<=4,`the first half must be a rotation arc (worst ${spun.worst.toFixed(2)} px off)`);
+  const folded=splitPoints.filter(point=>point.t>=0.5-1e-9);
+  const from=folded[0],to=folded[folded.length-1];
+  const span=Math.hypot(to.x-from.x,to.y-from.y);
+  const bow=Math.max(...folded.map(point=>Math.abs((point.x-from.x)*(to.y-from.y)-(point.y-from.y)*(to.x-from.x))/span));
+  assert.ok(span>10,`the second half must actually move (${span.toFixed(1)} px)`);
+  assert.ok(bow<=5,`the second half must be a straight fold, not an arc (bows ${bow.toFixed(2)} px)`);
+  const worst=rotation.worst;
 
   // Nothing may have complained along the way: no exception, no console.error, no severe log entry.
   const complaints=events.filter(event=>event.method==='Runtime.exceptionThrown'
@@ -257,5 +323,5 @@ try {
     .map(event=>event.params.exceptionDetails?.text ?? event.params.entry?.text ?? event.params.args?.map(arg=>arg.value).join(' ') ?? event.method);
   assert.deepEqual(complaints,[],'the page must run without errors');
   console.log('PASS: opaque depth, draw-order independence, translucent depth, every operation captioned, the drawn path is a projected circle, and the viewer interaction locks',
-    {operations:value.captions.length,moving:counts.filter(count=>count.movers>0).length,movedPerOperation:counts.map(count=>count.movers),slowestSwitchMs:Number(value.slowestSwitch.toFixed(1)),loaded:value.loaded.options,rutile:value.rutileResult.options,rutileFamilies:value.rutileResult.families,pathDeviationPx:Number(worst.toFixed(2)),status:value.statusBeforeFiles});
+    {operations:value.captions.length,moving:counts.filter(count=>count.movers>0).length,movedPerOperation:counts.map(count=>count.movers),slowestSwitchMs:Number(value.slowestSwitch.toFixed(1)),loaded:value.loaded.options,rutile:value.rutileResult.options,rutileFamilies:value.rutileResult.families,pathDeviationPx:Number(worst.toFixed(2)),spinDeviationPx:Number(spun.worst.toFixed(2)),foldBowPx:Number(bow.toFixed(2)),status:value.statusBeforeFiles});
 } finally {socket.close();await fetch(`http://localhost:${port}/json/close/${target.id}`);}
