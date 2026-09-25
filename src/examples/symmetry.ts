@@ -733,8 +733,32 @@ function orderOperations(list: CrystalOperation[]): CrystalOperation[] {
 }
 
 /** Fill the picker (name + how many sites move) and open on an operation that visibly moves sites. */
+/** Which family an operation belongs to, for the picker's optgroups. */
+function operationFamily(operation: CrystalOperation): string {
+  const motion = motionFor(operation);
+  if (motion.trivial) return 'Identity';
+  if (motion.inversion) return 'Inversion';
+  if (motion.improper) return Math.abs(motion.angle) < 1e-6 ? 'Mirrors' : 'Roto-reflections';
+  // Group by the order of the axis, not by the angle: 180° is 2-fold, 120° is 3-fold, 90° is 4-fold.
+  return `Rotations · ${Math.round(360 / (Math.abs(motion.angle) * 180 / Math.PI))}-fold`;
+}
+
 function populateOperationOptions(): void {
-  operationSelect.replaceChildren(...operations.map((operation, index) => new Option(`${index + 1}. ${describeOperation(operation)} · ${visibleMovedCount(operation)} moved`, String(index))));
+  // Forty-eight flat entries are hard to scan, so group them by family. Option values stay the
+  // indices of the flat list, so nothing downstream has to know about the grouping.
+  const groups = new Map<string, HTMLOptionElement[]>();
+  operations.forEach((operation, index) => {
+    const family = operationFamily(operation);
+    const list = groups.get(family) ?? [];
+    list.push(new Option(`${index + 1}. ${describeOperation(operation)} · ${visibleMovedCount(operation)} moved`, String(index)));
+    groups.set(family, list);
+  });
+  operationSelect.replaceChildren(...[...groups].map(([family, options]) => {
+    const group = document.createElement('optgroup');
+    group.label = family;
+    group.append(...options);
+    return group;
+  }));
   const firstMoving = operations.findIndex((operation, index) => index > 0 && visibleMovedCount(operation) > 0);
   setOperation(firstMoving >= 0 ? firstMoving : 0);
 }
