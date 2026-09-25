@@ -6,6 +6,7 @@ import {
   sphericalWedge, sphericalWedgeOutline, boxEdges, mathml, frac, mi,
   applyOperation, siteMapping, cartesianOperation, axisAngle, rotateAboutAxis, shadedSphere, sphere, latticePointGroup,
   operationIsometry, isometryPoint, isometryTarget, improperNormal, symmetryOrbits,
+  structureBounds, shortestDistance, isCubic, nearestNeighbours,
 } from '../build/index.js';
 
 const close = (a, b, tolerance = 1e-5) => assert.ok(Math.abs(a - b) < tolerance, `${a} ≈ ${b}`);
@@ -313,6 +314,10 @@ test('symmetryOrbits partitions the cell and does not recompute a mapping per si
   assert.deepEqual(orbits.map(orbit => orbit.join(',')).sort(), ['0', '1', '2,3,4']);
   // With only the identity every site is its own orbit.
   assert.equal(symmetryOrbits(perovskite, [group[0]], 1e-3).length, 5);
+  // A site the operation moves to an empty position has no image, which the mapping reports as -1;
+  // that is what the viewer's report calls "this operation does not preserve the structure".
+  const stray = { positions: [[.2, .2, .2]], species: ['Na'], lattice: cubicCell };
+  assert.deepEqual(siteMapping(stray, group[1], 1e-3), [-1]);
 
   // The regression this guards: siteMapping was recomputed inside the walk, once per (site,
   // operation), which made a 400-atom cell take about six seconds. It should be tens of ms.
@@ -382,3 +387,70 @@ test('isometryPoint interpolates from the identity to the map', () => {
   }
 });
 
+
+test('the helpers the viewer frames and sizes a scene with', () => {
+  // structureBounds takes in the atoms and the cell corners, so an empty-looking cell still frames.
+  const bounds = structureBounds(perovskite);
+  close(bounds.min[0], 0, 1e-9);
+  close(bounds.max[0], 3.905, 1e-9);
+  close(bounds.centre[0], 3.905 / 2, 1e-9);
+  close(bounds.extent, 3.905, 1e-9);
+  const lone = structureBounds({ positions: [[.2, .3, .4]], species: ['Na'], lattice: cubicCell });
+  for (const axis of [0, 1, 2]) { close(lone.min[axis], 0, 1e-9); close(lone.max[axis], 3.905, 1e-9); }
+  close(lone.extent, 3.905, 1e-9);
+  // A zero-size cell still reports a usable extent rather than 0.
+  assert.ok(structureBounds({ positions: [[0, 0, 0]], species: ['Na'], lattice: [[0, 0, 0], [0, 0, 0], [0, 0, 0]] }).extent > 0);
+
+  // shortestDistance is the nearest periodic contact, and falls back when there is no pair.
+  close(shortestDistance(perovskite.positions, perovskite.lattice), 3.905 / 2, 1e-6);
+  close(shortestDistance([[0, 0, 0]], cubicCell), 3.905 / 4, 1e-9);
+  close(shortestDistance([], cubicCell), 3.905 / 4, 1e-9);
+
+  // isCubic distinguishes the cubic cell from the tetragonal and hexagonal ones.
+  assert.equal(isCubic(cubicCell), true);
+  assert.equal(isCubic(cellFromParameters(3, 3, 5)), false);
+  assert.equal(isCubic(cellFromParameters(3, 3, 5, 90, 90, 120)), false);
+  // ...and its tolerance is relative, not absolute: 0.75% of 4 is cubic, 0.75% is not a 1e-4 fit.
+  assert.equal(isCubic(cellFromParameters(4, 4, 4.03)), true);
+  assert.equal(isCubic(cellFromParameters(4, 4, 4.03), 1e-4), false);
+});
+
+test('self-image bonds, the neighbour cap, and nearestNeighbours', () => {
+  // A site bonding to its own periodic image: one atom in a 2 Å cube with a 2.1 Å cutoff keeps the
+  // canonical half-space copies (+x, +y, +z) rather than both signs of each pair.
+  const cube = cellFromParameters(2, 2, 2);
+  const selfBonds = bonds([[0, 0, 0]], cube, 2.1, { self: true });
+  assert.deepEqual(selfBonds.map(bond => bond.image.join(',')).sort(), ['0,0,1', '0,1,0', '1,0,0']);
+  assert.ok(selfBonds.every(bond => bond.i === bond.j && bond.j === 0));
+  for (const bond of selfBonds) close(bond.length, 2, 1e-9);
+  assert.equal(bonds([[0, 0, 0]], cube, 2.1).length, 0, 'self-image bonds are opt-in');
+
+  // maxNeighbours keeps each atom's closest shells even when the cutoff reaches much further.
+  const diamond = latticeSites('diamond', { side: 5.43 });
+  const capped = bonds(diamond.positions, diamond.lattice, 8, { maxNeighbours: 4 });
+  assert.equal(capped.length, 16, 'diamond has four bonds per atom');
+  for (const bond of capped) close(bond.length, 5.43 * Math.sqrt(3) / 4, .02);
+  assert.ok(bonds(diamond.positions, diamond.lattice, 8).length > capped.length, 'an 8 Å cutoff reaches past the first shell');
+
+  // nearestNeighbours reports how far a point sits from the closest sites, nearest first, one entry
+  // per site using that site's nearest periodic image.
+  const centre = fractionalToCartesian([.5, .5, .5], perovskite.lattice);
+  const around = nearestNeighbours(perovskite.positions, perovskite.lattice, centre, 7, 2.1);
+  assert.equal(around.length, 4, 'the Ti site itself plus its three in-cell oxygens');
+  close(around[0].length, 0, 1e-9);
+  assert.deepEqual(around[0].image, [0, 0, 0]);
+  for (const neighbour of around.slice(1)) {
+    close(neighbour.length, 3.905 / 2, 1e-6);
+    assert.equal(perovskite.species[neighbour.index], 'O');
+  }
+  for (let index = 1; index < around.length; index++) assert.ok(around[index].length >= around[index - 1].length, 'nearest first');
+  assert.equal(nearestNeighbours(perovskite.positions, perovskite.lattice, centre, 7, 1).length, 1, 'a tight cutoff keeps only the site itself');
+  assert.equal(nearestNeighbours(perovskite.positions, perovskite.lattice, centre, 1, 2.1).length, 1, 'the count caps the list');
+  // A point just outside a cell face reaches into the next cell, and the reported image says which.
+  const across = nearestNeighbours(perovskite.positions, perovskite.lattice, fractionalToCartesian([1.05, .5, .5], perovskite.lattice), 4, 2.1);
+  assert.equal(across.length, 2);
+  assert.equal(perovskite.species[across[0].index], 'O');
+  assert.deepEqual(across[0].image, [1, 0, 0]);
+  close(across[0].length, 3.905 * .05, 1e-9);
+  assert.equal(perovskite.species[across[1].index], 'Ti');
+});

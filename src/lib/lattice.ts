@@ -206,7 +206,7 @@ export function nearestNeighbours(positions: Vec3[], lattice: Lattice, point: Ve
     const raw = [0, 1, 2].map(axis => positions[index][axis] - fractional[axis]);
     const shifts = raw.map(value => Math.round(value));
     const folded = raw.map((value, axis) => value - shifts[axis]) as Vec3;
-    const image = shifts.map(value => -value) as Vec3;
+    const image = shifts.map(value => -value + 0) as Vec3;   // + 0 normalises the -0 of a zero shift
     const length = Math.hypot(...fractionalToCartesian(folded, lattice));
     if (length <= cutoff) result.push({ index, length, image });
   }
