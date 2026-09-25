@@ -1,6 +1,6 @@
 # Shared state
 
-Last updated: 2026-09-25 by **deepcode** (crystal viewer: centred-lattice animation, element folding, camera-only stage with a reset, per-family moves, picker grouped by family, consistent counts and states; lattice isometry API, 100% line coverage, and a browser harness that audits all 48 operations). Prior: lattice/streamline/MathML library layer, crystal viewer rewrite, electromagnetism upgrade, interactive field example, showcase typesetting; color lane, Phase 6 docs, simulation cleanup, all-pairs n-body + physics lab, crystal docs; **astra** (perspective camera, Phase 5 seam, landing gallery, crystal viewer uploads). Update the date and author when you change this.
+Last updated: 2026-09-25 by **deepcode** (the basics tour: nineteen small demos, one library idea each, with a pixel-level browser check that audits every control; plus `box`/`cylinder` solids, a unified outward winding rule, an optional Euler `orientation` on `Visual`/`Group`, a page-health check for the whole showcase, a favicon, and an honestly retired legacy page). Prior: (crystal viewer: centred-lattice animation, element folding, camera-only stage with a reset, per-family moves, picker grouped by family, consistent counts and states; lattice isometry API, 100% line coverage, and a browser harness that audits all 48 operations). Prior: lattice/streamline/MathML library layer, crystal viewer rewrite, electromagnetism upgrade, interactive field example, showcase typesetting; color lane, Phase 6 docs, simulation cleanup, all-pairs n-body + physics lab, crystal docs; **astra** (perspective camera, Phase 5 seam, landing gallery, crystal viewer uploads). Update the date and author when you change this.
 
 ## Where things stand
 
@@ -12,10 +12,18 @@ Last updated: 2026-09-25 by **deepcode** (crystal viewer: centred-lattice animat
   point-group tolerance, phonopy-file persistence, drop anywhere, and the pixel-level animation
   checks). Earlier: `3054fd1`
   (library + pages), `5bb690a`, `5e28935`, `134ff03`, `edad9c1`, `f83ee5e`.
-- `npm run typecheck` → clean. `npm test` → **65/65** pass (~1.2 s; the sample-budget boundary
+- `npm run typecheck` → clean. `npm test` → **70/70** pass (~1.5 s; the sample-budget boundary
   test alone costs ~0.9 s). `npm run build` → `build/`.
-- Pages all serve 200 from `npm run dev` (http://localhost:5173): `/`, `/field.html`,
+- Pages all serve 200 from `npm run dev` (http://localhost:5173): `/`, `/basics.html`, `/field.html`,
   `/particles.html`, `/physics-lab.html`, `/symmetry.html`, `/electrostatics.html`, `/legacy.html`.
+  `scripts/check-pages.mjs` loads all eight over CDP and asserts each has a title, drew every canvas
+  it declares, shows no error state, and logs nothing — all eight pass, and it found two real
+  faults the first time it ran (below).
+- **The basics tour** (`basics.html`) is where a reader starts: nineteen demos, each isolating one
+  fundamental idea, one device and one render loop, `?samples=1`/`?dpr=1` for diagnostics,
+  `prefers-reduced-motion` respected. `scripts/check-basics.mjs` drives every control on every demo
+  against compositor screenshots measured back inside the page, and reports
+  `19 of 19 views drawing · 60 fps`.
 - Rendering verified in Chrome Beta 155 on the Vulkan path (`--headless=new`, CDP 9444, real AMD
   rdna-2 adapter): 61 fps on `symmetry.html` from 1x1x1 to a 1600-atom cell, no console/WebGPU
   errors. A 400-atom POSCAR loads in ~0.5 s and a 1600-atom one in ~1.1 s; changing operation is
@@ -37,6 +45,8 @@ Last updated: 2026-09-25 by **deepcode** (crystal viewer: centred-lattice animat
 |------|------------|
 | `src/lib/*.ts` | The library, re-exported by `src/index.ts` |
 | `src/index.ts` | Public entry point (exports math, geometry, colormap, plot, field, world, camera, view, timeline, simulation) |
+| `src/examples/basics.ts` + `basics.html` | The basics tour: nineteen demos, one idea each (frame, interpolation, transparent solids, primitives, groups, labels, colour, plot, depth, batching, camera, simulation, implicit surface, streamlines, story, diagram, path, normals, layers). Each is a self-contained factory returning its own `update`; the page shares one device, skips drawing for off-screen views, and isolates a throwing demo. |
+| `scripts/check-{links,pages,basics,depth}.mjs` | The four checks: static links, page health, the tour, and the renderer + crystal viewer |
 | `src/showcase/main.ts` + `index.html` (**astra**, do not edit) | Landing gallery: Fourier harmonics curve, palette/frequency surface, level-set shapes with a projection switch, lattice assembly timeline, plus inline-launching experiment embeds |
 | `src/examples/field.ts` + `field.html` | Focused single-panel isosurface example |
 | `src/examples/physics-lab.ts` + `physics-lab.html` | Five experiments: Kepler orbits via the CPU seam, all-pairs GPU gravity, double pendulum, Lorenz attractor, two-source interference |
@@ -50,6 +60,8 @@ Last updated: 2026-09-25 by **deepcode** (crystal viewer: centred-lattice animat
 
 ## Public API additions from this session
 
+- `src/lib/geometry.ts` (new in this pass): `box(min, max)` and `cylinder(radius, height, sides, topRadius, capTop, capBottom)` (a frustum or cone), and every closed solid is now wound **outward** — the divergence-theorem signed volume is positive, and a test asserts it for box, cylinder, cone, sphere, shaded sphere and torus.
+- `src/lib/math.ts` / `src/lib/world.ts` (new in this pass): `orientationMatrix(x, y, z)` and `applyMatrix(matrix, point)`, with an optional Euler `orientation` on `Visual` and `Group` (rotations apply x→y→z, then the node's own y-rotation, then scale in the node's frame). Passing no orientation is byte-identical to the old matrix, which a test pins.
 - `src/lib/plot.ts`: `niceStep`, `tickValues`, `formatTick`, `plotFrame`, `axes3d`, `boundsBox`
 - `src/lib/field.ts`: `isosurface(field, bounds, isovalue, resolution, options)`
 - `src/lib/crystal.ts`: `parsePOSCAR` (VASP 4/5, negative scale as target volume, Direct/Cartesian,
@@ -114,7 +126,11 @@ Last updated: 2026-09-25 by **deepcode** (crystal viewer: centred-lattice animat
 
 ## Open items / good next steps
 
-1. Tree is clean and committed; `npm test` is 61/61.
+1. Tree is clean and committed; `npm test` is 70/70, and all four checks pass.
+1a. **The tracked `dist/` is a fossil:** 22 files from an older layout, built from a version of
+   `src/main.ts` whose `editor`/`types` modules were never committed. Nothing loads it now, but it
+   shadows the old page and confuses a search. Deleting it is a call for its author; it is documented
+   here rather than removed.
 2. **astra:** Phase 5 remainder in `src/lib/simulation.ts` — fixed-step accumulation, pause,
    and single-step as explicit runtime policies. Unclaimed by deepcode.
 3. Spatial interaction kernels (neighbour search, Barnes-Hut, all-pairs) are explicitly **out of
@@ -127,6 +143,39 @@ Last updated: 2026-09-25 by **deepcode** (crystal viewer: centred-lattice animat
    bounds of the drawn box instead.
 
 ## Landed recently
+
+- **Basics tour (deepcode, 2026-09-25, third session).** The user asked to start from the basics: one
+  small demo per fundamental library feature, working on the showcase as a whole, and to keep adding
+  demos. Nineteen are live, each a self-contained factory: the coordinate frame; interpolation with a
+  seekable `Timeline`; solids with transparent sides; the geometry primitives; nested groups; typeset
+  maths riding a point; colour from data; a chart in 3D; depth and draw order; one mesh instanced many
+  times; a camera move; a hand-stepped simulation; an implicit surface at a level you move; streamlines
+  in a vector field; a story built from four cues; a vector diagram; a Bézier path with its control
+  polygon; surface normals from central differences; and layers switched with `visible`.
+  - **Two library gaps the demos exposed**, both fixed with tests: there was no `box` or `cylinder`
+    primitive (and `parametricSurface` was wound the opposite way from the spheres), and `rotation` was
+    a single y-angle, so nothing could tumble — hence the optional Euler `orientation`.
+  - **The check found the bugs worth having.** `check-basics.mjs` measures each stage's region from a
+    compositor screenshot, re-measured inside the page (a WebGPU canvas cannot be read after
+    presentation), and asserts that every control moves its own stage more than that stage drifts on
+    its own — which is how a *disconnected* control is caught. Two of its assertions were themselves
+    wrong first: an early version compared counts that never reached the assertion (vacuous), and a
+    spin test passed on drift alone until it was compared against the stage's own still drift.
+  - **Three real defects found while building, all kept:**
+    the first animation frame can carry a timestamp from *before* the loop started, so the frame delta
+    could be negative and `stepParticles` rejected it (delta is now clamped at zero); that throw froze
+    the whole page, so each demo's `update` is now isolated, reported once, and skipped; and the
+    browser had cached a stale bundle, hiding a fix — both browser checks now disable the cache.
+  - **Page-health pass.** `check-pages.mjs` found that `legacy.html` had always loaded a bundle
+    importing `dist/editor.js`, a module that was never committed (a black canvas and a console 404,
+    with no explanation) — the page now says what it is and points at the tour. It also found that no
+    page declared an icon, so every page logged a 404 for `favicon.ico`; there is now a small SVG mark
+    linked from all eight pages.
+  - **Check hygiene:** the browser checks opened a tab per run and never closed it — sixty leftover
+    pages were competing with the one under test and the tour had fallen to 36 fps. They now close
+    their tab and time out if Chrome never answers on the debugging port.
+  - Verified in Chrome Beta 155 (headless Vulkan, CDP 9444, AMD rdna-2): 60 fps with all nineteen
+    demos, ~100k triangles, no console errors, `npm test` 70/70, and `check-basics` passing in ~2 min.
 
 - **Crystal viewer pass (deepcode, 2026-09-25, second session).** The user's brief was "don't add
   tools, make what is there beautiful, and the operations are disgusting and sometimes wrong".
