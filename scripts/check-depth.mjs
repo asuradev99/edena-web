@@ -203,8 +203,16 @@ try {
   await new Promise(resolve=>setTimeout(resolve,2500));
   const shape=await call('Runtime.evaluate',{awaitPromise:true,returnByValue:true,expression:`(async()=>{
     const wait=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+    // A single strontium placed off every axis, so the measurement has one green atom and nothing else.
+    // The case reported wrong was the C4 about [001]: its strontium has to sweep a quarter circle. (In
+    // the perovskite it is the titanium that sits on that axis; the strontium is at a corner.)
+    const poscar=['Single Sr','1.0','4 0 0','0 4 0','0 0 4','Sr','1','Direct','0.12 0.22 0.34'].join(String.fromCharCode(10));
+    const dt=new DataTransfer();dt.items.add(new File([poscar],'sr.vasp'));
+    const upload=document.getElementById('poscar-file');upload.files=dt.files;upload.dispatchEvent(new Event('change'));
+    let guard=0;while(!/loaded/.test(document.getElementById('status').textContent)&&guard++<200)await wait(25);
+    await wait(700);
     const select=document.getElementById('operation');
-    const index=[...select.options].findIndex(option=>option.textContent.includes('180° ‖ [010]'));
+    const index=[...select.options].findIndex(option=>option.textContent.includes('C₄ · 90° ‖ [001]'));
     select.value=String(index);select.dispatchEvent(new Event('change'));
     await wait(250);
     const play=document.getElementById('play');if(play.textContent==='Ⅱ')play.click();
@@ -256,6 +264,13 @@ try {
   };
   const rotationPoints=(shape.result?.value?.samples??[]).filter(sample=>sample.x!==null&&sample.pixels>150);
   assert.ok(rotationPoints.length>=15,`the shape check must see the atom in every frame (${rotationPoints.length})`);
+  // The atom has to actually travel: an ellipse fits a stationary cluster too, so without this the
+  // check could pass while testing nothing — as it would if the target were a site on the axis.
+  const spanOf=(list)=>({
+    x:Math.max(...list.map(point=>point.x))-Math.min(...list.map(point=>point.x)),
+    y:Math.max(...list.map(point=>point.y))-Math.min(...list.map(point=>point.y))});
+  const travelled=spanOf(rotationPoints);
+  assert.ok(Math.max(travelled.x,travelled.y)>20,`the drawn animation must move the atom (${travelled.x.toFixed(1)} x ${travelled.y.toFixed(1)} px)`);
   const rotation=fitEllipse(rotationPoints);
   assert.ok(rotation.discriminant<0,'the drawn path must be an ellipse, not a line or a hyperbola');
   assert.ok(rotation.worst<=4,`the drawn animation must follow the projected circle (worst ${rotation.worst.toFixed(2)} px off)`);
@@ -327,6 +342,8 @@ try {
   };
   const splitPoints=collect(pixel.spin?.samples??[]);
   assert.ok(splitPoints.length>=15,`the roto-reflection check must see the atom in every frame (${splitPoints.length})`);
+  const halfSweep=spanOf(splitPoints.filter(point=>point.t<=0.5+1e-9));
+  assert.ok(Math.max(halfSweep.x,halfSweep.y)>5,`the first half of a roto-reflection must move the atom (${halfSweep.x.toFixed(1)} x ${halfSweep.y.toFixed(1)} px)`);
   const spun=fitEllipse(splitPoints.filter(point=>point.t<=0.5+1e-9));
   assert.ok(spun.discriminant<0,'the first half of a roto-reflection must turn about the axis');
   assert.ok(spun.worst<=4,`the first half must be a rotation arc (worst ${spun.worst.toFixed(2)} px off)`);
