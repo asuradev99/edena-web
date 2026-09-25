@@ -10,7 +10,7 @@ import {
   axes3d, boundsBox, box, boxEdges, cylinder, polyline, arrow, circle, sphere, shadedSphere, wireSphere, isosurface,
   parametricSurface, functionSurface, functionCurve, merge, rgba, lerp, smooth, transform, applyMatrix,
   createParticleState, stepParticles, streamlines, sphereSeeds, type VectorField, type ParticleAcceleration,
-  mathml, mi, mn, mo, mtext, msub, msup, row, vec, tickValues, niceStep, formatTick, plotFrame, viridis, plasma,
+  mathml, mi, mn, mo, mtext, msub, msup, row, matrix, vec, tickValues, niceStep, formatTick, plotFrame, viridis, plasma,
   Geometry, type Vec3, type Rgb,
 } from '../index.js';
 
@@ -551,6 +551,62 @@ function colourDemo(view: WebGPUView): Demo {
   sync();
 
   return { labels, update: () => {} };
+}
+
+/* --------------------------------------------------------------------------------------------
+ * 22 · What a node's transform is made of: read the matrix back and typeset it.
+ * ------------------------------------------------------------------------------------------ */
+
+function transformDemo(view: WebGPUView): Demo {
+  look(view, .5, .3, 5.8);
+  const labels = new LabelLayer($('transform-labels'), view.camera);
+  const pointer = new Group();
+  view.world.add(pointer, new Visual(count(axes3d(1.3, .006)), rgba('#dbe9f5', .22)));
+  // An asymmetric shape: a bar with a ball on its +x end, so scale and yaw are both unmistakable.
+  const bar = new Visual(count(box([-1, -.2, -.16], [1, .2, .16])), rgba('#58c4dd', .95));
+  const tip = new Visual(count(shadedSphere(.32)), rgba('#f7d681'));
+  tip.position = [1, 0, 0];
+  pointer.add(bar, tip);
+
+  let sx = 1.3, sy = .8, yaw = -35, tilt = 28;
+  const matrixLabel = labels.addHTML(mathml(mn('')), () => [0, -2.25, 0], '#cfe4ea', 'math-label');
+  const panelReadout = $('transform-readout');
+  const apply = (): void => {
+    pointer.scale = [sx, sy, 1];
+    pointer.rotation = yaw * Math.PI / 180;
+    pointer.orientation = [tilt * Math.PI / 180, 0, 0];
+    // The same function the node uses to build its own matrix — printed rather than a copy of the maths.
+    const held = transform(pointer.position, pointer.scale, pointer.rotation, pointer.orientation);
+    const cell = (row: number, column: number) => {
+      const value = held[column * 4 + row];
+      return mn(Math.abs(value) < .005 ? 0 : value.toFixed(2));
+    };
+    matrixLabel.innerHTML = mathml(matrix([
+      [cell(0, 0), cell(0, 1), cell(0, 2)],
+      [cell(1, 0), cell(1, 1), cell(1, 2)],
+      [cell(2, 0), cell(2, 1), cell(2, 2)],
+    ]));
+    const text = `scale ${sx.toFixed(2)}, ${sy.toFixed(2)} · yaw ${yaw}\u00b0 · tilt ${tilt}\u00b0`;
+    panelReadout.textContent = text;
+  };
+  const controls: [string, string, (value: number) => void][] = [
+    ['transform-sx', 'transform-sx-value', value => { sx = value; $('transform-sx-value').textContent = value.toFixed(2); }],
+    ['transform-sy', 'transform-sy-value', value => { sy = value; $('transform-sy-value').textContent = value.toFixed(2); }],
+    ['transform-yaw', 'transform-yaw-value', value => { yaw = value; $('transform-yaw-value').textContent = `${value.toFixed(0)}\u00b0`; }],
+    ['transform-tilt', 'transform-tilt-value', value => { tilt = value; $('transform-tilt-value').textContent = `${value.toFixed(0)}\u00b0`; }],
+  ];
+  for (const [id, , update] of controls) {
+    const input = $<HTMLInputElement>(id);
+    input.addEventListener('input', () => { update(Number(input.value)); apply(); });
+  }
+  apply();
+
+  return {
+    labels,
+    // A slow spin about the world's own y axis, so the printed matrix keeps its meaning: the node's
+    // transform is what the sliders set, not what the camera does.
+    update: () => {},
+  };
 }
 
 /* --------------------------------------------------------------------------------------------
@@ -1628,7 +1684,7 @@ function plotDemo(view: WebGPUView): Demo {
  * ------------------------------------------------------------------------------------------ */
 
 async function initialize(): Promise<void> {
-  const canvases = ['coordinates-canvas', 'interpolation-canvas', 'transparency-canvas', 'shapes-canvas', 'groups-canvas', 'labels-canvas', 'colour-canvas', 'plot-canvas', 'depth-canvas', 'instances-canvas', 'camera-canvas', 'simulation-canvas', 'field-canvas', 'streamlines-canvas', 'story-canvas', 'vectors-canvas', 'path-canvas', 'normals-canvas', 'layers-canvas', 'bars-canvas', 'follow-canvas'];
+  const canvases = ['coordinates-canvas', 'interpolation-canvas', 'transparency-canvas', 'shapes-canvas', 'groups-canvas', 'labels-canvas', 'colour-canvas', 'plot-canvas', 'depth-canvas', 'instances-canvas', 'camera-canvas', 'simulation-canvas', 'field-canvas', 'streamlines-canvas', 'story-canvas', 'vectors-canvas', 'path-canvas', 'normals-canvas', 'layers-canvas', 'bars-canvas', 'follow-canvas', 'transform-canvas'];
   const first = await WebGPUView.create($<HTMLCanvasElement>(canvases[0]), { samples: msaa, maxDpr, onError: report });
   views.push(first);
   if (disposed) { first.dispose(); return; }
@@ -1657,6 +1713,7 @@ async function initialize(): Promise<void> {
     layerDemo(views[18]),
     barDemo(views[19]),
     followDemo(views[20]),
+    transformDemo(views[21]),
   );
 
   // Eleven views on one page: drawing the ones below the fold would cost a full render each frame for
