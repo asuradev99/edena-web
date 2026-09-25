@@ -1,7 +1,7 @@
 // Run against a Chrome debugging session: node scripts/check-basics.mjs [port]
 //
 // Checks the basics tour the way a reader meets it:
-//   1. every one of the fourteen demos draws something, and each draws something distinct;
+//   1. every one of the fifteen demos draws something, and each draws something distinct;
 //   2. every control changes its own stage — projection, grid, marker height, opacity, spin, the mesh
 //      selector, the group's spread and opacity, and the helix's turn count — and leaves the others be;
 //   3. the two moving demos advance on their own, and the transport seeks;
@@ -101,7 +101,7 @@ try {
     return evaluate(`window.__measureRegion(${JSON.stringify(shot)}, ${JSON.stringify(rect)})`);
   };
 
-  const stageIds = ['coordinates', 'interpolation', 'transparency', 'shapes', 'groups', 'labels', 'colour', 'plot', 'depth', 'instances', 'camera', 'simulation', 'field', 'streamlines'];
+  const stageIds = ['coordinates', 'interpolation', 'transparency', 'shapes', 'groups', 'labels', 'colour', 'plot', 'depth', 'instances', 'camera', 'simulation', 'field', 'streamlines', 'story'];
   const startup = await evaluate(`({ stats: document.getElementById('stats').textContent, status: document.getElementById('status').hidden, labels: document.querySelectorAll('.labels span').length })`);
   assert.ok(startup.status, `the page reported an error: ${await evaluate('document.getElementById("status").textContent')}`);
   assert.match(startup.stats, /fps/);
@@ -144,13 +144,15 @@ try {
     ['field-level', .5, 'field'],
     ['streamlines-kind', 'dipole', 'streamlines'],
     ['streamlines-count', 40, 'streamlines'],
+    ['story-time', 4.5, 'story'],
   ];
   // Stop the demos that spin, so every control can be judged against a still picture. The spin buttons
   // themselves are checked afterwards, by measuring exactly this drift.
   await evaluate(`document.getElementById('transparency-spin').click(); document.getElementById('groups-spin').click(); document.getElementById('depth-spin').click(); document.getElementById('instances-spin').click(); document.getElementById('field-spin').click(); document.getElementById('streamlines-turn').click();`);
+  await evaluate(`{ const node = document.getElementById('story-play'); if (node.textContent === 'Pause') node.click(); }`);
   await wait(500);
   // Only these hold still on their own, so only they can prove that a control left them alone.
-  const still = new Set(['coordinates', 'shapes', 'groups', 'colour', 'plot', 'depth', 'instances', 'field', 'streamlines']);
+  const still = new Set(['coordinates', 'shapes', 'groups', 'colour', 'plot', 'depth', 'instances', 'field', 'streamlines', 'story']);
   for (const [control, value, stageId] of changes) {
     // The helix keeps moving, so stop it first: then the turn count is the only thing that changes.
     if (control === 'labels-turns' || control.startsWith('camera-') || control.startsWith('simulation-')) {
@@ -225,6 +227,19 @@ try {
   await evaluate(`window.__set('streamlines-speed', .7)`);
   await wait(300);
 
+  // The story's clock, chapter readout and play button are the same object: check they agree.
+  await evaluate(`window.__set('story-time', 0)`);
+  await wait(300);
+  assert.match(await evaluate(`document.getElementById('story-chapter').textContent`), /^1 · /, 'chapter one at t = 0');
+  await evaluate(`window.__set('story-time', 7)`);
+  await wait(300);
+  assert.match(await evaluate(`document.getElementById('story-chapter').textContent`), /^4 · /, 'chapter four by t = 7');
+  await evaluate(`document.getElementById('story-restart').click()`);
+  await wait(700);
+  const restarted = parseFloat(await evaluate(`document.getElementById('story-time-value').textContent`));
+  assert.ok(restarted > 0, `restart should replay from zero (t = ${restarted})`);
+  await evaluate(`{ const node = document.getElementById('story-play'); if (node.textContent === 'Pause') node.click(); }`);
+
   // 3. Motion: the helix label advances on its own, and the transport seeks and resumes.
   const liveTime = () => evaluate(`document.querySelectorAll('#labels-stage-labels span')[1]?.textContent ?? ''`);
   // The control sweep stopped the helix to measure the turn count, so set it going again.
@@ -246,11 +261,11 @@ try {
   const stats = await evaluate(`document.getElementById('stats').textContent`);
   const fps = Number(/· (\d+) fps/.exec(stats)?.[1] ?? 0);
   assert.ok(fps >= 50, `expected a healthy frame rate, saw ${stats}`);
-  assert.match(stats, /14 views/);
+  assert.match(stats, /15 views/);
   const problems = events.filter(event => event.method === 'Runtime.exceptionThrown' || (event.method === 'Runtime.consoleAPICalled' && event.params.type === 'error') || (event.method === 'Log.entryAdded' && event.params.entry.level === 'error'));
   assert.equal(problems.length, 0, `the page reported ${problems.length} problem(s): ${JSON.stringify(problems[0]?.params ?? {}).slice(0, 300)}`);
 
-  console.log('PASS: fourteen demos drawing distinct scenes, every control moving its own stage alone,');
+  console.log('PASS: fifteen demos drawing distinct scenes, every control moving its own stage alone,');
   console.log('      the helix and the timeline running, the transport seeking and resuming,', stats);
   console.log('     ', JSON.stringify(Object.fromEntries(stageIds.map(stageId => [stageId, Number(signatures[stageId].mean.toFixed(3))]))));
 } finally {

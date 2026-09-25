@@ -554,6 +554,88 @@ function colourDemo(view: WebGPUView): Demo {
 }
 
 /* --------------------------------------------------------------------------------------------
+ * 15 · Building a scene in steps: one timeline, four cues, and a scrubber.
+ * ------------------------------------------------------------------------------------------ */
+
+function storyDemo(view: WebGPUView): Demo {
+  look(view, .62, .3, 8.4);
+  const labels = new LabelLayer($('story-labels'), view.camera);
+  const frame = new Group(), bonds = new Group(), atoms = new Group();
+  view.world.add(frame, bonds, atoms);
+
+  // A small lattice: eight corners, twelve edges. The bonds and the atoms are whole groups, so a cue
+  // can fade or scale them without touching a single child.
+  const corners: Vec3[] = [];
+  for (const x of [-1, 1]) for (const y of [-1, 1]) for (const z of [-1, 1]) corners.push([x, y, z]);
+  const edges: Geometry[] = [];
+  for (let i = 0; i < corners.length; i++) for (let j = i + 1; j < corners.length; j++) {
+    const distance = Math.hypot(corners[i][0] - corners[j][0], corners[i][1] - corners[j][1], corners[i][2] - corners[j][2]);
+    if (distance < 2.1) edges.push(polyline([corners[i], corners[j]], .03, 6));
+  }
+  frame.add(new Visual(count(axes3d(1.5, .006)), rgba('#dbe9f5', .5)));
+  bonds.add(new Visual(count(merge(...edges)), rgba('#9ad0ff', .9)));
+  const atomMesh = shadedSphere(.17);
+  const atoms2 = corners.map((corner, index) => {
+    const visual = new Visual(atomMesh, rgba(index % 2 ? '#f7d681' : '#83c167'));
+    visual.position = corner;
+    visual.reveal = 0;
+    atoms.add(visual);
+    return visual;
+  });
+
+  const cubeLabel = labels.addHTML(mathml(mtext('a cubic cell · 8 sites · 12 bonds')), () => [0, -1.7, 0], '#9db0c2', 'math-label');
+  cubeLabel.style.opacity = '0';
+
+  const chapters = [
+    { at: 0, text: '1 · the frame appears' },
+    { at: 1.5, text: '2 · the bonds scale out' },
+    { at: 3.6, text: '3 · the atoms arrive' },
+    { at: 6, text: '4 · the labels name it' },
+  ];
+  const chapterReadout = $('story-chapter');
+  const timeInput = $<HTMLInputElement>('story-time');
+  const playButton = $<HTMLButtonElement>('story-play');
+  const timeline = new Timeline(8);
+  timeline.add({ start: 0, duration: 1.5, update: p => { frame.opacity = p; } });
+  timeline.add({ start: 1.5, duration: 2.5, update: p => { bonds.scale = [p, p, p]; bonds.opacity = p; } });
+  // Reveal is per-visual, so the atoms are faded one at a time as well as scaled as a group.
+  timeline.add({ start: 3.6, duration: 2.4, update: p => { atoms.scale = [p, p, p]; for (const atom of atoms2) atom.reveal = p; } });
+  timeline.add({ start: 6, duration: 1.5, update: p => { cubeLabel.style.opacity = String(p); } });
+
+  let playing = !reducedMotion, shown = '';
+  const button = (): void => {
+    playButton.textContent = playing ? 'Pause' : 'Play';
+    playButton.setAttribute('aria-pressed', String(playing));
+  };
+  const readout = (): void => {
+    const chapter = chapters.filter(entry => timeline.time >= entry.at).pop() ?? chapters[0];
+    if (chapter.text !== shown) { shown = chapter.text; chapterReadout.textContent = chapter.text; }
+    timeInput.value = String(timeline.time);
+    $('story-time-value').textContent = `${timeline.time.toFixed(1)} s`;
+  };
+  playButton.addEventListener('click', () => { playing ? timeline.pause() : timeline.play(); playing = !playing; button(); });
+  timeInput.addEventListener('input', () => { playing = false; timeline.pause(); timeline.seek(Number(timeInput.value)); button(); readout(); });
+  $<HTMLButtonElement>('story-restart').addEventListener('click', () => { timeline.seek(0); playing = true; timeline.play(); button(); readout(); });
+  // Land on the finished picture rather than an empty stage: the panel should read at a glance, and
+  // pressing play (or Start over) replays the build from zero.
+  timeline.seek(timeline.duration);
+  button();
+  readout();
+
+  return {
+    labels,
+    update: delta => {
+      // Playing advances the clock; scrubbing seeks it. Either way the same readout follows, and the
+      // finished frame simply holds, because every cue is a function of absolute time.
+      if (!playing) return;
+      timeline.tick(delta);
+      readout();
+      if (timeline.time >= timeline.duration) { playing = false; button(); }
+    },
+  };
+}
+
+/* --------------------------------------------------------------------------------------------
  * 14 · Streamlines in a vector field: integrate a direction field and flow markers along it.
  * ------------------------------------------------------------------------------------------ */
 
@@ -1068,7 +1150,7 @@ function plotDemo(view: WebGPUView): Demo {
  * ------------------------------------------------------------------------------------------ */
 
 async function initialize(): Promise<void> {
-  const canvases = ['coordinates-canvas', 'interpolation-canvas', 'transparency-canvas', 'shapes-canvas', 'groups-canvas', 'labels-canvas', 'colour-canvas', 'plot-canvas', 'depth-canvas', 'instances-canvas', 'camera-canvas', 'simulation-canvas', 'field-canvas', 'streamlines-canvas'];
+  const canvases = ['coordinates-canvas', 'interpolation-canvas', 'transparency-canvas', 'shapes-canvas', 'groups-canvas', 'labels-canvas', 'colour-canvas', 'plot-canvas', 'depth-canvas', 'instances-canvas', 'camera-canvas', 'simulation-canvas', 'field-canvas', 'streamlines-canvas', 'story-canvas'];
   const first = await WebGPUView.create($<HTMLCanvasElement>(canvases[0]), { samples: msaa, maxDpr, onError: report });
   views.push(first);
   if (disposed) { first.dispose(); return; }
@@ -1090,6 +1172,7 @@ async function initialize(): Promise<void> {
     simulationDemo(views[11]),
     fieldDemo(views[12]),
     streamlineDemo(views[13]),
+    storyDemo(views[14]),
   );
 
   // Eleven views on one page: drawing the ones below the fold would cost a full render each frame for
