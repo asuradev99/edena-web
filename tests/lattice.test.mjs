@@ -225,6 +225,7 @@ test('operationIsometry reaches the operation itself at t = 1', () => {
 });
 
 test('a cubic cell needs no correction: every site simply travels its arc', () => {
+  assert.equal(drawnSites.length, 5, 'the loops below must not be vacuous');
   for (const operation of CUBIC_POINT_GROUP) {
     const isometry = operationIsometry(cubicCell, operation);
     for (const point of drawnSites) {
@@ -242,6 +243,7 @@ test('a cubic cell needs no correction: every site simply travels its arc', () =
 test('every point-group operation maps the drawn cell onto equivalent sites', () => {
   // Compare around the circle, so 0.9999999 and 0 are the same fractional coordinate.
   const same = (a, b) => Math.abs((((a - b + .5) % 1) + 1) % 1 - .5) < 1e-6;
+  assert.equal(drawnSites.length, 5, 'the loop below must not be vacuous');
   for (const operation of CUBIC_POINT_GROUP) {
     const isometry = operationIsometry(cubicCell, operation);
     for (const [index, point] of drawnSites.entries()) {
