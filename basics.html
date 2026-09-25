@@ -1,12 +1,19 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="theme-color" content="#090e16">
-<meta name="description" content="The twenty-four pieces Edena is built from: the 3D coordinate system, interpolation, transparent solids, geometry primitives, nested groups, projected labels, colour from data, a chart in 3D, depth, many copies of one mesh, a camera move, a hand-stepped simulation, an implicit surface, streamlines through a field, a story told in steps, a vector diagram, a path to travel along, the normals of a surface, layers you can switch off, a chart built from data, a camera that follows, the transform behind a node, a measured distance, and colour as a second dimension.">
+<meta name="description" content="The twenty-five pieces Edena is built from: the 3D coordinate system, interpolation, transparent solids, geometry primitives, nested groups, projected labels, colour from data, a chart in 3D, depth, many copies of one mesh, a camera move, a hand-stepped simulation, an implicit surface, streamlines through a field, a story told in steps, a vector diagram, a path to travel along, the normals of a surface, layers you can switch off, a chart built from data, a camera that follows, the transform behind a node, a measured distance, colour as a second dimension, and an animated derivation beside the picture it explains.">
 <title>Edena · basics</title>
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
+<!-- The body face and the maths face the stylesheet already asks for. Inter is the UI text; STIX Two
+     Text is a journal maths face, and anything it lacks (radicals, big operators) falls through to
+     the system maths fonts one glyph at a time. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=STIX+Two+Text:ital,wght@0,400;0,600;1,400;1,600&display=swap" rel="stylesheet">
 <style>
   *{box-sizing:border-box}
-  :root{color-scheme:dark;--ink:#e7edf5;--panel:#101925;--line:#2a3646;--muted:#9db0c2;--accent:#80d4df;--gold:#f1d087}
+  :root{color-scheme:dark;--ink:#e7edf5;--panel:#101925;--line:#2a3646;--muted:#9db0c2;--accent:#80d4df;--gold:#f1d087;
+    --math-font:"STIX Two Text","STIXGeneral","Cambria Math","Latin Modern Math","DejaVu Serif",serif}
   body{margin:0;background:radial-gradient(ellipse at 12% 0%,#172c39 0,transparent 42%),#090e16;color:var(--ink);font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;-webkit-font-smoothing:antialiased}
   a{color:inherit;text-decoration:none}a:hover{color:var(--accent)}
   button{font:inherit}
@@ -21,6 +28,9 @@
   h1{font-family:Georgia,serif;font-weight:400;font-size:clamp(34px,4.4vw,56px);line-height:1.14;letter-spacing:-2px;margin:16px 0 20px}
   .lede{font-size:15px;line-height:1.9;color:#a1b2c3;margin:0}
   .lede code{font-family:ui-monospace,monospace;font-size:13px;color:#cfe4ea}
+  /* Inline maths in the panel prose: same face as the labels, sized down to the paragraph. */
+  .controls math{font-family:var(--math-font);font-size:15px;font-style:normal;color:#e4eef8;vertical-align:-.12em}
+  .controls math .quietpart{color:#9db0c2}
   .toc{display:flex;flex-wrap:wrap;gap:10px;margin:26px 0 6px;padding:0;list-style:none}
   .toc a{background:#152331;border:1px solid #304354;border-radius:24px;padding:9px 15px;font-size:12px;display:inline-block}
   .toc a:hover{background:#223b49;color:#b7f2f5}
@@ -32,14 +42,33 @@
   .panel-head h2{font-family:Georgia,serif;font-weight:400;font-size:22px;letter-spacing:-.4px;margin:0;color:#f0f4fa}
   .panel-head p{margin:6px 0 0;font:11px ui-monospace,monospace;color:#9cafc1}
   .panel-head .tag{margin-left:auto;font:9px ui-monospace,monospace;letter-spacing:.16em;color:#93d4dc;border:1px solid #42606b;border-radius:20px;padding:5px 10px;white-space:nowrap}
-  .stage{position:relative;background:#04080e;aspect-ratio:16/10}
+  .stage{position:relative;background:#04080e;aspect-ratio:16/10;container-type:inline-size}
   .stage canvas{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none}
-  .labels{position:absolute;inset:0;pointer-events:none;font-family:Georgia,serif;font-size:13px;text-shadow:0 1px 7px #000,0 0 3px #000}
+  /* Label size follows the stage, not the page: a phone-sized panel has to fit the same ticks. */
+  .labels{position:absolute;inset:0;pointer-events:none;font-family:var(--math-font);
+    font-size:clamp(8.5px,1.5cqw,13.5px);line-height:1.35;text-shadow:0 1px 8px #000,0 0 3px #000}
   .labels span{white-space:nowrap}
-  .labels math{font-family:"STIX Two Math","STIXGeneral","Cambria Math","DejaVu Serif",serif;font-style:normal}
-  .labels .math-label{font-style:normal}
-  .labels .axis-name{font-size:16px;font-weight:600;letter-spacing:.02em}
+  .labels math{font-family:var(--math-font);font-style:normal;font-size:1.02em}
+  .labels .math-label{font-style:normal;letter-spacing:.01em}
+  .labels .axis-name{font-size:1.2em;font-weight:600;letter-spacing:.02em}
+  /* Numbers spelled out in a label: grouped, tabular, and with a real minus. */
+  .labels .value{font-variant-numeric:tabular-nums}
+  /* Text that is doing work in the picture rather than labelling it. */
+  .labels .callout{color:var(--gold)}
+  .labels .quiet{color:#93a6b8}
   .hint{position:absolute;left:14px;bottom:10px;font-size:10.5px;color:#7d90a6;pointer-events:none}
+  /* An animated derivation laid over a picture, with its own small caption under it. */
+  .overlay{position:absolute;left:16px;top:14px;max-width:min(62%,540px);pointer-events:none;
+    text-shadow:0 1px 9px #000,0 0 4px #000}
+  .overlay .dvn{font-size:17px;gap:.4em}
+  .overlay .dvn-line{gap:.7em}
+  .overlay .caption{margin-top:8px;font-size:11px;color:#8fa2b5;letter-spacing:.01em;min-height:1.2em}
+  /* Narrow: the derivation sits under the picture, on its own plate, instead of over it. */
+  @media(max-width:720px){
+    .stage{aspect-ratio:4/3}
+    .overlay{left:8px;right:8px;bottom:8px;top:auto;max-width:none;background:#080d15e6;border:1px solid #253140;border-radius:12px;padding:8px 10px}
+    .overlay .dvn{font-size:13px}
+  }
   .controls{padding:18px 22px;color:#adbdcc;font-size:12.5px;line-height:1.8}
   .controls label{display:inline-flex;align-items:center;gap:10px;margin:0 18px 8px 0}
   .controls input[type=range]{accent-color:#79d3dd;max-width:170px}
@@ -64,7 +93,7 @@
   <main>
     <div class="intro">
       <span class="eyebrow">START HERE · ONE IDEA PER DEMO</span>
-      <h1>The twenty-four pieces the rest is built from.</h1>
+      <h1>The twenty-five pieces the rest is built from.</h1>
       <p class="lede">Every other page in this showcase is a combination of a few small, separable ideas: a world with a camera, geometry made of triangles, transforms and interpolation, transparency, and text projected onto the scene. Each demo below isolates one of them — with the API it uses written underneath the title — so you can read it, then reuse it.</p>
     </div>
     <ul class="toc">
@@ -92,6 +121,7 @@
       <li><a href="#transform">22 · What a transform is made of</a></li>
       <li><a href="#measure">23 · Measuring a distance and an angle</a></li>
       <li><a href="#contrast">24 · Colour as a second dimension</a></li>
+      <li><a href="#secant">25 · Why the power rule works</a></li>
     </ul>
 
     <div class="grid">
@@ -170,11 +200,13 @@
       </section>
 
       <section class="panel" id="plot" aria-label="A chart in three dimensions">
-        <div class="panel-head"><span class="index">08</span><div><h2>A chart in 3D</h2><p>plotFrame · functionCurve · niceStep · tickValues · formatTick</p></div><span class="tag">PLOT</span></div>
-        <div class="stage"><canvas id="plot-canvas" aria-label="A function plot with axes, ticks, a grid and edge-aligned tick labels, drawn with the same camera as the 3D scenes"></canvas><div class="labels" id="plot-labels"></div></div>
+        <div class="panel-head"><span class="index">08</span><div><h2>A chart in 3D, with a probe</h2><p>plotFrame · areaUnder · lineThrough · tickMath · drag to scrub</p></div><span class="tag">PLOT</span></div>
+        <div class="stage"><canvas id="plot-canvas" aria-label="A function plot with minor ticks, axis titles, a shaded area and a probe that can be dragged along the curve"></canvas><div class="labels" id="plot-labels"></div><div class="hint">drag the picture to move the probe</div></div>
         <div class="controls">
           <label>Function <select id="plot-function"><option value="sine" selected>sin(x)</option><option value="square">square wave</option><option value="damped">damped sine</option><option value="gaussian">Gaussian</option></select></label>
-          <p>A chart is a 3D scene too, so it orbits, zooms and labels with exactly the same machinery as everything else. <code>plotFrame</code> returns grid, tick and axis geometry plus the anchors to label them, picking round tick steps with <code>niceStep</code> and formatting them with <code>formatTick</code>.</p>
+          <label>Probe <input id="plot-probe" type="range" min="-4.4" max="4.4" step="0.02" value="1.2"> <output id="plot-probe-value">1.20</output></label>
+          <label>Shade the area <input id="plot-area" type="checkbox" checked></label>
+          <p>A chart is a 3D scene too, so it orbits, zooms and labels with exactly the same machinery as everything else. <code>plotFrame</code> returns the geometry — axes, major and minor ticks, gridlines, the shaded region under the curve — plus anchors that carry both plain text and MathML, which is why the ticks get a real minus sign and the readout lines its digits up.</p>
         </div>
       </section>
 
@@ -370,13 +402,32 @@
           <p>A second quantity rides on the surface as colour: <code>colorMappedSurface</code> samples the field once, maps each value through a ramp, and writes the result per vertex. Narrow the range and the ends clip — which is how a colour map emphasises a band, and why the range is worth stating rather than leaving implicit.</p>
         </div>
       </section>
+
+      <section class="panel wide" id="secant" aria-label="Why the power rule works">
+        <div class="panel-head"><span class="index">25</span><div><h2>Why the power rule works</h2><p>Derivation · bracket · cancel · recolour · areaUnder · secantSlope · drag</p></div><span class="tag">DERIVATION</span></div>
+        <div class="stage">
+          <canvas id="secant-canvas" aria-label="The parabola y = x squared with a chord from A to B, the tangent at A, and the area between them"></canvas>
+          <div class="overlay" id="secant-derivation"></div>
+          <div class="labels" id="secant-labels"></div>
+          <div class="hint">drag the moving point, or scrub the steps</div>
+        </div>
+        <div class="controls">
+          <label><button id="secant-play" aria-pressed="false">Play</button></label>
+          <label><button id="secant-step">Step</button></label>
+          <label><button id="secant-restart">Start over</button></label>
+          <label>Position <input id="secant-position" type="range" min="0" max="13" step="1" value="0"> <output id="secant-position-value">0 / 13</output></label>
+          <label>h <input id="secant-h" type="range" min="0.05" max="1.6" step="0.01" value="1.3"> <output id="secant-h-value">1.30</output></label>
+          <label>x <input id="secant-x" type="range" min="-2.2" max="2.2" step="0.02" value="1.15"> <output id="secant-x-value">1.15</output></label>
+          <p>The algebra is the explanation and the picture is the evidence. Play the derivation and the chord shrinks onto the tangent as the beats demand it — the squares cross out, one <code>h</code> survives each term, and the last of them vanishes with the limit. Both slopes are printed, so you can watch the gap close. Step through it a beat at a time, scrub the position, drag the point B, or grab the picture and orbit it: the derivation and the plot are two views of one state.</p>
+        </div>
+      </section>
     </div>
 
     <p class="stats" id="stats">Measuring frame time…</p>
     <p class="status" id="status" role="alert" hidden></p>
   </main>
   <footer>
-    <span>Edena TypeScript visualization library · one device, twenty-four views</span>
+    <span>Edena TypeScript visualization library · one device, twenty-five views</span>
     <span><a href="index.html">playground ↗</a> · <a href="legacy.html">archive ↗</a></span>
   </footer>
   <script type="module" src="build/examples/basics.js"></script>

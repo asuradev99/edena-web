@@ -7,7 +7,12 @@
   <meta name="description" content="An interactive WebGPU math and physics playground: Fourier waves, colored surfaces, Möbius strips, implicit shapes, lattice assembly, and GPU particles.">
   <title>Edena · mathematical visualization with WebGPU</title>
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
-  <style>
+  <!-- The maths face these pages already ask for: STIX Two Text for letters and operators, with the
+     system maths fonts covering the radicals and big operators it does not carry. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=STIX+Two+Text:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
+<style>
     *{box-sizing:border-box}:root{color-scheme:dark;--blue:#58c4dd;--yellow:#ffff00;--green:#83c167;--muted:#85858e;--serif:'STIX Two Text','Cambria','Georgia',serif}
     body{margin:0;background:#080809;color:#ededf0;font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;-webkit-font-smoothing:antialiased}
     a{color:inherit;text-decoration:none}a:hover{color:var(--blue)}button{font:inherit}
@@ -31,9 +36,9 @@
     .stage{position:relative;aspect-ratio:16/9;container-type:inline-size;background:#000}
     .stage canvas{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none}
     .labels{position:absolute;inset:0;pointer-events:none;font-family:var(--serif);font-style:italic;font-size:clamp(10px,1.6cqw,18px);text-shadow:0 1px 7px #000,0 0 3px #000}
-    .labels math{font-family:"STIX Two Math","STIXGeneral","Cambria Math","DejaVu Serif",serif;font-style:normal}
+    .labels math{font-family:"STIX Two Text","STIX Two Math","STIXGeneral","Cambria Math","DejaVu Serif",serif;font-style:normal}
     .labels .math-label{font-style:normal}
-    .equation math,#curve-equation math{font-family:"STIX Two Math","STIXGeneral","Cambria Math","DejaVu Serif",serif}
+    .equation math,#curve-equation math{font-family:"STIX Two Text","STIX Two Math","STIXGeneral","Cambria Math","DejaVu Serif",serif}
     .transport{display:flex;align-items:center;gap:18px;flex-wrap:wrap;margin-top:22px}
     #pause{border:1px solid #2b2b31;background:#111114;color:#d8d8de;border-radius:3px;padding:9px 16px;font-size:12px;cursor:pointer}
     #pause:hover{border-color:#3b3b43}.stats{font-family:ui-monospace,monospace;font-size:11.5px;color:#8f8f99}
@@ -49,10 +54,10 @@
     <div class="intro">
       <span class="eyebrow">LIVE WEBGPU · ONE LIBRARY</span>
       <h1>A playground for mathematical motion.</h1>
-      <p class="lede">New here? <a href="basics.html">Basics</a> takes the library apart into twenty-four small demos — the coordinate frame, interpolation, transparent solids, geometry, nested groups, projected labels, colour from data, a chart in 3D, depth, one mesh many times over, a camera move, a hand-stepped simulation, a shape cut from a field, streamlines through a vector field, a scene built in steps, a vector diagram, a path to travel along, surface normals, switchable layers, a 3D bar chart, a following camera, the transform stack and measurement labels and a colour map — one idea each. Below, those pieces are combined: build waves from harmonics, explore colored surfaces and implicit shapes, and assemble a lattice with a reversible animation. Four live views share one GPU device. Drag the 3D panels to orbit, scroll to zoom, then open the physics experiments below.</p>
+      <p class="lede">New here? <a href="basics.html">Basics</a> takes the library apart into twenty-five small demos — the coordinate frame, interpolation, transparent solids, geometry, nested groups, projected labels, colour from data, a chart in 3D, depth, one mesh many times over, a camera move, a hand-stepped simulation, a shape cut from a field, streamlines through a vector field, a scene built in steps, a vector diagram, a path to travel along, surface normals, switchable layers, a 3D bar chart, a following camera, the transform stack and measurement labels a colour map and an animated derivation — one idea each. Below, those pieces are combined: build waves from harmonics, explore colored surfaces and implicit shapes, and assemble a lattice with a reversible animation. Four live views share one GPU device. Drag the 3D panels to orbit, scroll to zoom, then open the physics experiments below.</p>
     </div>
     <nav class="transport" aria-label="Explore examples" style="margin:0 0 24px;line-height:1.8">
-      <a href="basics.html">Basics: twenty-four little demos ↗</a>
+      <a href="basics.html">Basics: twenty-five little demos ↗</a>
       <a href="particles.html">50K GPU particles · experimental ↗</a>
       <a href="physics-lab.html">Physics laboratory ↗</a>
       <a href="symmetry.html">Crystal symmetry ↗</a>
@@ -82,7 +87,7 @@
     <section class="experiments" aria-label="Physics and animation experiments">
       <h2>From equations to experiments.</h2>
       <p>Open an experiment here to run it live. Each has its own controls and can also open in a dedicated tab.</p>
-      <article class="panel"><div class="panel-head"><h2>Start from the basics</h2><a href="basics.html">Open full screen ↗</a></div><div class="controls"><p>Twenty-four small demos, one library idea each: the 3D coordinate system and its labels, interpolation with a seekable timeline, solids with transparent sides, the geometry primitives, nested groups, text projected onto the scene, colour taken from data, a chart drawn in 3D, how depth and draw order make transparency work, how a hundred cubes cost two draw calls, how a camera move is three numbers, how a simulation steps without the GPU, how a surface is cut out of a scalar field, how a streamline follows a vector field, how one timeline builds a scene in steps, how two arrows add up, how a marker travels a Bézier path, how a surface faces, how layers switch, how data becomes a chart, how a camera follows a moving point, what a node's transform is made of, how a distance is measured and labelled, and how colour carries a second quantity. Every other page here is those pieces combined.</p><button data-demo="basics.html">Run the basics</button></div></article>
+      <article class="panel"><div class="panel-head"><h2>Start from the basics</h2><a href="basics.html">Open full screen ↗</a></div><div class="controls"><p>Twenty-five small demos, one library idea each: the 3D coordinate system and its labels, interpolation with a seekable timeline, solids with transparent sides, the geometry primitives, nested groups, text projected onto the scene, colour taken from data, a chart drawn in 3D, how depth and draw order make transparency work, how a hundred cubes cost two draw calls, how a camera move is three numbers, how a simulation steps without the GPU, how a surface is cut out of a scalar field, how a streamline follows a vector field, how one timeline builds a scene in steps, how two arrows add up, how a marker travels a Bézier path, how a surface faces, how layers switch, how data becomes a chart, how a camera follows a moving point, what a node's transform is made of, how a distance is measured and labelled, how colour carries a second quantity, and how a derivation can be animated term by term. Every other page here is those pieces combined.</p><button data-demo="basics.html">Run the basics</button></div></article>
       <article class="panel"><div class="panel-head"><h2>Crystal symmetry: move it, match it</h2><a href="symmetry.html">Open full screen ↗</a></div><div class="controls"><p>Rotate a cubic cell about an axis or body diagonal, reflect it in a mirror plane, or invert it through its center. Scrub each transformation and watch equivalent lattice sites coincide.</p><button data-demo="symmetry.html">Explore crystal symmetry</button></div></article>
       <article class="panel"><div class="panel-head"><h2>The physics laboratory</h2><a href="physics-lab.html">Open full screen ↗</a></div><div class="controls"><p>Explore five live experiments built from the library’s geometry, color maps, CPU and GPU simulation, and animation APIs.</p><button data-demo="physics-lab.html">Run physics laboratory</button></div></article>
       <article class="panel"><div class="panel-head"><h2>50,000 particles in a force field</h2><a href="particles.html">Open full screen ↗</a></div><div class="controls"><p>GPU integration, ping-pong buffers, instanced sprites, reproducible initialization, and timing. The default force is a harmonic oscillator: a = −kx. This is a particle-throughput baseline.</p><button data-demo="particles.html">Run particle experiment</button></div></article>

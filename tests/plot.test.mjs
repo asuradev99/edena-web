@@ -187,10 +187,11 @@ test('the plot frame gains minor marks that stay inside their spine and titles o
   }
   // Titles sit past the ends of the axes, so they never collide with a tick label.
   assert.deepEqual(frame.titles.map(title => title.text), ['x', 'f(x)']);
-  for (const title of frame.titles) {
-    const outside = title.position[0] > 3.001 || title.position[1] > 4.001;
-    assert.ok(outside, 'a title should sit beyond the plot box');
-  }
+  // The x title sits under the right end of its axis; the y title sits above the top of its own, clear
+  // of the tick labels, which are stacked to the left of the axis.
+  const xTitle = frame.titles.find(title => title.text === 'x'), yTitle = frame.titles.find(title => title.text === 'f(x)');
+  assert.ok(xTitle.position[0] >= 3 && xTitle.position[1] < 0, 'the x title belongs under the right end');
+  assert.ok(yTitle.position[1] > 4 && Math.abs(yTitle.position[0]) < 1e-9, 'the y title belongs above the axis top');
   assert.equal(plotFrame([-1, 1], [-1, 1], { minor: false }).minor.vertices.length, 0, 'minor marks can be switched off');
   assert.throws(() => plotFrame([-1, 1], [-1, 1], { minor: 1 }), /at least 2/);
 });

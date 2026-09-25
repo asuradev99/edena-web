@@ -59,7 +59,10 @@ export type PlotFrameOptions = {
   grid?: boolean;
   /** Divisions between major ticks; `false` turns them off. Five reads well on decimal steps. */
   minor?: number | false;
-  /** Labels set past the end of each axis, e.g. `x` and `f(x)`. */
+  /**
+   * Labels set past the end of each axis. A plain string is set upright; a MathML fragment (anything
+   * starting with `<`) is used as-is, so `mi('x')` gives the italic axis name a reader expects.
+   */
   xTitle?: string;
   yTitle?: string;
 };
@@ -125,8 +128,17 @@ export function plotFrame(x: [number, number], y: [number, number], options: Plo
       .map(v => ({ text: formatTick(v, yStep), math: tickMath(v, yStep), position: [originX - tickSize * 1.9, v, 0] as Vec3 })),
   ];
   const titles: Anchor[] = [];
-  if (xTitle) titles.push({ text: xTitle, position: [x[1] + tickSize * 1.6, originY - tickSize * 1.9, 0] });
-  if (yTitle) titles.push({ text: yTitle, position: [originX - tickSize * 1.9, y[1] + tickSize * 1.5, 0] });
+  const title = (value: string, position: Vec3): Anchor => ({
+    text: value.replace(/<[^>]+>/g, ''),
+    math: value.startsWith('<') ? value : `<mtext>${value}</mtext>`,
+    position,
+  });
+  // A title sits clear of the tick labels: the x title below the right end of the axis, the y title
+  // to the left of its top, which is where a reader looks for them.
+  if (xTitle) titles.push(title(xTitle, [x[1], originY - tickSize * 4.2, 0]));
+  // Above the arrow tip: the tick labels are to the left of the axis, so anything at the top of the
+  // axis column would collide with them.
+  if (yTitle) titles.push(title(yTitle, [originX, y[1] + tickSize * 5.2, 0]));
   return {
     axes, ticks, grid: grid2d, labels, titles,
     minor: merge(...minorMarks),

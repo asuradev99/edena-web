@@ -33,7 +33,8 @@ export class Group {
     return this;
   }
   private contains(node:Group):boolean { return this.children.some(c=>c===node||(c instanceof Group&&c.contains(node))); }
-  remove(node:Visual|Group):void { const index=this.children.indexOf(node); if(index>=0)this.children.splice(index,1); }
+  /** Remove one or more nodes; nodes that are not children are ignored. */
+  remove(...nodes:(Visual|Group)[]):void { for(const node of nodes){const index=this.children.indexOf(node); if(index>=0)this.children.splice(index,1);} }
   clear():void { this.children.length=0; }
   *flatten(parent:Float32Array=identity(), opacity=1):Generator<{node:Visual; matrix:Float32Array; opacity:number}> {
     if(!this.visible) return;

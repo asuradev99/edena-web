@@ -1,6 +1,6 @@
 # Shared state
 
-Last updated: 2026-09-25 by **deepcode** (the basics tour: twenty-four small demos, one library idea each, with a pixel-level browser check that audits every control; plus `box`/`cylinder` solids, a unified outward winding rule, an optional Euler `orientation` on `Visual`/`Group`, a page-health check for the whole showcase, a favicon, and an honestly retired legacy page). Prior: (crystal viewer: centred-lattice animation, element folding, camera-only stage with a reset, per-family moves, picker grouped by family, consistent counts and states; lattice isometry API, 100% line coverage, and a browser harness that audits all 48 operations). Prior: lattice/streamline/MathML library layer, crystal viewer rewrite, electromagnetism upgrade, interactive field example, showcase typesetting; color lane, Phase 6 docs, simulation cleanup, all-pairs n-body + physics lab, crystal docs; **astra** (perspective camera, Phase 5 seam, landing gallery, crystal viewer uploads). Update the date and author when you change this.
+Last updated: 2026-09-25 by **deepcode** (the basics tour: twenty-five small demos, one library idea each, with a pixel-level browser check that audits every control; plus `box`/`cylinder` solids, a unified outward winding rule, an optional Euler `orientation` on `Visual`/`Group`, a page-health check for the whole showcase, a favicon, and an honestly retired legacy page). Prior: (crystal viewer: centred-lattice animation, element folding, camera-only stage with a reset, per-family moves, picker grouped by family, consistent counts and states; lattice isometry API, 100% line coverage, and a browser harness that audits all 48 operations). Prior: lattice/streamline/MathML library layer, crystal viewer rewrite, electromagnetism upgrade, interactive field example, showcase typesetting; color lane, Phase 6 docs, simulation cleanup, all-pairs n-body + physics lab, crystal docs; **astra** (perspective camera, Phase 5 seam, landing gallery, crystal viewer uploads). Update the date and author when you change this.
 
 ## Where things stand
 
@@ -19,11 +19,11 @@ Last updated: 2026-09-25 by **deepcode** (the basics tour: twenty-four small dem
   `scripts/check-pages.mjs` loads all eight over CDP and asserts each has a title, drew every canvas
   it declares, shows no error state, and logs nothing — all eight pass, and it found two real
   faults the first time it ran (below).
-- **The basics tour** (`basics.html`) is where a reader starts: twenty-four demos, each isolating one
+- **The basics tour** (`basics.html`) is where a reader starts: twenty-five demos, each isolating one
   fundamental idea, one device and one render loop, `?samples=1`/`?dpr=1` for diagnostics,
   `prefers-reduced-motion` respected. `scripts/check-basics.mjs` drives every control on every demo
   against compositor screenshots measured back inside the page, and reports
-  `24 of 24 canvases drawing · 60 fps`.
+  `25 of 25 canvases drawing · 60 fps`.
 - Rendering verified in Chrome Beta 155 on the Vulkan path (`--headless=new`, CDP 9444, real AMD
   rdna-2 adapter): 61 fps on `symmetry.html` from 1x1x1 to a 1600-atom cell, no console/WebGPU
   errors. A 400-atom POSCAR loads in ~0.5 s and a 1600-atom one in ~1.1 s; changing operation is
@@ -113,6 +113,37 @@ Last updated: 2026-09-25 by **deepcode** (the basics tour: twenty-four small dem
 - The showcase's readout shows `GPU (<architecture>) · msaa×N · dpr≤N`; if it says
   `software GPU`, frame rate will be poor — that is the backend, not the code.
 
+## Landed recently · maths that moves
+
+The latest pass is about the *text*: typesetting it properly, animating it the way a good explanation
+does, and letting the reader grab the picture.
+
+- **Typography.** Every maths page now loads STIX Two Text and puts it first in the stack, with the
+  system maths fonts behind it for the glyphs it lacks. Tick labels are built from `tickMath`, so a
+  minus is U+2212 and an exponent is an exponent, and `plotFrame` anchors carry MathML as well as
+  plain text.
+- **`Derivation`.** A new library widget: lines of addressable tokens with *beats* between them, where
+  a beat grows a bracket around a group, highlights it, recolours it, or strikes it through as it
+  cancels. Tokens are separate `<math>` elements inside spans, because MathML Core has no cancellation
+  element and Chrome ignores `menclose` outright. `checkStep` rejects a script whose marks point at
+  tokens that do not exist, which caught a real authoring mistake on the first run.
+- **Picking.** `OrbitCamera.ray` plus `rayPlane`/`rayDistance`/`screenDistance` and `attachHandles`: a
+  drag layer that locks the camera for the duration of a grab. Four demos use it — the Bézier control
+  points, the grid marker, the measurement's point B, and the probe on the plot.
+- **Demo 25 · Why the power rule works.** A five-line derivation with nine beats beside a live picture:
+  as the beats demand it, the chord closes on the tangent and the two printed slopes converge, ending at
+  a gap of 0.08. The derivation is DOM, the plot is a canvas, and one position drives both.
+- **Plotting.** `plotFrame` gained minor ticks and gridlines that subdivide the major step exactly,
+  axis titles that stay clear of the tick labels, and `areaUnder`/`lineThrough`/`secantSlope`. Views
+  gained `onResize`, so a demo can re-fit its camera when a panel changes shape — the plot demo now
+  frames its domain orthographically and adapts to a phone.
+- Verification: `npm test` 83 (the derivation model and the picking round trip are unit-tested),
+  `check-basics` 25 demos with real CDP drags and a neighbour as the control for each, `check-pages`,
+  `check-links`, `check-depth` all green. The pairwise "no two demos look alike" test now compares the
+  *shape* of the lit pixels rather than their average brightness — two dark line drawings were close
+  enough to fail it once the measurement figure grew its labels — and it was falsified by duplicating
+  a stage id.
+
 ## In flight (claimed)
 
 - **deepcode** — just landed the crystal viewer pass and the lattice isometry layer; tree is clean and
@@ -146,7 +177,7 @@ Last updated: 2026-09-25 by **deepcode** (the basics tour: twenty-four small dem
 
 - **Basics tour (deepcode, 2026-09-25, third session).** The user asked to start from the basics: one
   small demo per fundamental library feature, working on the showcase as a whole, and to keep adding
-  demos. Twenty-four are live, each a self-contained factory: the coordinate frame; interpolation with a
+  demos. Twenty-five are live, each a self-contained factory: the coordinate frame; interpolation with a
   seekable `Timeline`; solids with transparent sides; the geometry primitives; nested groups; typeset
   maths riding a point; colour from data; a chart in 3D; depth and draw order; one mesh instanced many
   times; a camera move; a hand-stepped simulation; an implicit surface at a level you move; streamlines

@@ -15,7 +15,7 @@ Open [http://localhost:5173/](http://localhost:5173/). The landing page is an in
 
 Dedicated demos:
 
-- [Basics](basics.html): start here. Twenty-four small demos, one library idea each — the 3D coordinate
+- [Basics](basics.html): start here. Twenty-five small demos, one library idea each — the 3D coordinate
   system and its projected labels, interpolation with a seekable `Timeline`, solids with transparent
   sides, the geometry primitives and `merge`, groups with nested transforms, typeset maths riding a
   moving point, colour taken from data, a chart drawn in 3D, and depth and draw order. Each panel names the API it uses.
@@ -41,7 +41,7 @@ view.world.add(new Visual(axes3d(1.9, .012), rgba('#dbe9f5', .9)));
 second.world.add(new Visual(box([-1, -1, -1], [1, 1, 1]), rgba('#58c4dd', .18)));
 ```
 
-The twenty-four ideas, in the order the page presents them:
+The twenty-five ideas, in the order the page presents them:
 
 | # | Idea | What it shows |
 | --- | --- | --- |
@@ -69,6 +69,7 @@ The twenty-four ideas, in the order the page presents them:
 | 22 | Transform | a node's own matrix read back and typeset, as its scale, yaw and tilt change |
 | 23 | Measure | a dimension line, its legs, an angle arc and three labels, all recomputed from the same two points |
 | 24 | Colour map | `colorMappedSurface` sampling a field once, with the range it maps printed and clampable |
+| 25 | Derivation | `Derivation`: brackets that grow around a group, terms struck through as they cancel, colour changes and notes, beat by beat, beside a plot that follows the algebra |
 | 16 | Diagram | `arrow` plus `polyline` construction lines, named with the `vec` accent, and a readout that restates the sum |
 | 17 | Path | a cubic Bézier sampled into a tube with its control polygon, and a marker whose raw and eased parameters are both printed |
 | 18 | Normals | a height field sampled on a grid, with `(−f_x, 1, −f_y)` from central differences drawn as a comb of arrows |
@@ -127,18 +128,20 @@ The public entry point exports:
 | Area | Main tools |
 | --- | --- |
 | Geometry | `polyline`, `arrow`, `circle`, `sphere`, `shadedSphere`, `wireSphere`, `box`/`boxEdges`, `cylinder` (frustum, cone), `parametricSurface`, `functionCurve`, `functionSurface`, `merge` — closed solids wound outward, so a signed volume is positive |
-| Plotting | `plotFrame`, `axes3d`, `boundsBox`, `niceStep`, `tickValues`, `formatTick` |
+| Plotting | `plotFrame` (major and minor ticks, gridlines, axis titles, and anchors carrying plain text *and* MathML), `areaUnder`, `lineThrough`, `secantSlope`, `axes3d`, `boundsBox`, `niceStep`, `tickValues`, `tickMath`, `formatTick` |
 | Fields | `isosurface` for CPU marching-tetrahedra extraction |
 | Color | `ramp`, `viridis`, `plasma`, `colorMappedSurface` |
-| Scene graph | `Visual`, `Group`, `World`, visibility, opacity, transforms (`position`, `scale`, `rotation` about +y, and an optional Euler `orientation`), reveal progress, `orientationMatrix`/`applyMatrix` for the same maths outside the graph |
-| Camera/view | Orbit controls, orthographic or perspective projection, MSAA, alpha mode, DPR cap, projected `LabelLayer` text |
+| Scene graph | `Visual`, `Group`, `World`, visibility, opacity, `remove(...nodes)`, transforms (`position`, `scale`, `rotation` about +y, and an optional Euler `orientation`), reveal progress, `orientationMatrix`/`applyMatrix` for the same maths outside the graph |
+| Camera/view | Orbit controls, orthographic or perspective projection, MSAA, alpha mode, DPR cap, projected `LabelLayer` text (left/centre/right anchored), and `onResize` so a demo can re-fit its camera |
 | Animation | Absolute-time `Timeline` and `tween` helpers |
 | CPU simulation | `createParticleState`, `stepParticles`, `ParticleSimulation` |
 | GPU simulation | `GpuParticleSimulation` with ping-pong storage buffers, compute integration, instanced rendering, timestamp timing, reset, and checksums |
 | Crystal data | `parsePOSCAR`, `parsePhonopySymmetry` |
 | Crystal geometry | `cellFromParameters`, `fractionalToCartesian`/`cartesianToFractional`, `supercell`, `latticeSites`, `bonds`, `nearestNeighbours`, `millerPlane`, `latticePointGroup`, `mapsOntoSelf`, `siteMapping`, `symmetryOrbits`, `operationIsometry`/`isometryPoint`/`isometryTarget` |
 | Elements | `ELEMENTS`, `appearanceFor` (CPK-brightened colors and covalent radii) |
-| Math text | `mathml`, `mi`, `mn`, `mo`, `frac`, `msub`, `msup`, `matrix`, … and `LabelLayer.addHTML` to typeset them over the canvas |
+| Math text | `mathml`, `mi`, `mn`, `mo`, `frac`, `mroot`, `sqrt`, `msub`, `msup`, `matrix`, `cases`, `abs`, `norm`, `vec`, `hat`, `prime`, `limit`, `summation`, `product`, `integral`, `evaluated`, `tint`, `stacked`, `number` (real minus signs, grouped digits, exponents), plus `MATH_FONT_STACK`/`MATH_CSS` and `LabelLayer.addHTML` to typeset over the canvas |
+| Derivations | `Derivation`, an animated derivation of addressable tokens and *beats*: brackets that grow around a group, terms struck through as they cancel, colour changes, highlights and notes, playable or scrubbable. `stepCount`, `lineOffsets`, `locate` and `checkStep` are the pure model underneath |
+| Pointer picking | `OrbitCamera.ray`, `rayPlane`, `rayDistance`, `screenDistance` and `attachHandles`, a drag layer that locks the camera while a handle is held |
 
 ### Plotting and fields
 
@@ -149,6 +152,49 @@ const frame = plotFrame([-3, 3], [-1, 1], { grid: true });
 const surface = colorMappedSurface((x, y) => Math.sin(x) * Math.cos(y), [-3, 3], [-3, 3], viridis, [48, 48]);
 const blob = isosurface((x, y, z) => 0.6 - Math.hypot(x, y, z), { min: [-1, -1, -1], max: [1, 1, 1] }, 0, 48);
 ```
+
+### Typeset derivations
+
+```ts
+import { Derivation, mathml, mi, mn, mo, msup } from 'edena-web';
+
+const derivation = new Derivation(document.getElementById('steps'), { interval: 1500 });
+derivation.set([
+  {
+    tokens: [
+      { id: 'lhs', math: row(msup(mi('f'), mo('′')), mi('x')) },
+      { id: 'square', math: msup(mi('x'), mn('2')), colour: '#8fd0ff' },
+      { id: 'plain', math: msup(mi('x'), mn('2')), colour: '#f7d681' },
+    ],
+    beats: [
+      { marks: [{ kind: 'highlight', ids: ['square', 'plain'] }], note: mtext('two squares') },
+      { marks: [{ kind: 'cancel', ids: ['plain'] }], note: mtext('and they cancel') },
+    ],
+  },
+]);
+derivation.play();
+```
+
+Tokens are separate `<math>` elements inside spans, not one expression, because MathML Core has no
+cancellation element and no way to address a subexpression — Chrome ignores `menclose` outright. Every
+mark is therefore a class change on an addressable element: brackets grow with a CSS transform,
+cancellations draw a measured strike across the tokens they cover, colour changes transition, and the
+whole thing survives a font swap. `checkStep` rejects a script whose marks point at tokens that do not
+exist or whose bracket covers a gap, which is the mistake that is easiest to make.
+
+### Dragging on the canvas
+
+```ts
+import { attachHandles } from 'edena-web';
+
+const detach = attachHandles(canvas, view.camera, () => [
+  { at: () => marker, radius: 30, plane: { normal: [0, 1, 0] }, cursor: 'grab', to: point => { marker = point; } },
+]);
+```
+
+`at()` is read every frame, so a handle can ride a moving scene. `plane: 'view'` slides a handle in the
+plane facing the reader; an explicit normal pins it, e.g. to a floor. Grabbing a handle sets
+`camera.locked`, so orbiting and dragging never fight over the same gesture.
 
 ### Animation
 
@@ -238,7 +284,7 @@ rather than trusting the code that drew it:
 ```sh
 node scripts/check-links.mjs           # every page's links, scripts and route to the tour — no browser
 node scripts/check-pages.mjs [port]    # every page loads, draws every canvas, and stays quiet
-node scripts/check-basics.mjs [port]   # the basics tour: twenty-four demos, every control, every assertion
+node scripts/check-basics.mjs [port]   # the basics tour: twenty-five demos, every control, every assertion
 node scripts/check-depth.mjs [port]    # renderer depth and the crystal viewer, pixel by pixel
 ```
 

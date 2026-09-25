@@ -82,6 +82,12 @@ export class WebGPUView {
   private dpr=0;
   private cleanup:()=>void;
   private observer:ResizeObserver;
+  /**
+   * Called when the canvas changes size, with the new size in CSS pixels, so a demo can re-fit its
+   * camera. A plot that frames its domain at one aspect ratio clips at another, and the panels here
+   * are responsive.
+   */
+  onResize?:(width:number,height:number)=>void;
   private uniforms=new Float32Array(20);
   private constructor(readonly canvas:HTMLCanvasElement,readonly device:GPUDevice,private ownsDevice:boolean,onError:(message:string)=>void,interactive:boolean,private maxDpr:number,private samples:number,private alphaMode:GPUCanvasAlphaMode) {
     const context=canvas.getContext('webgpu'); if(!context)throw new Error('Could not create WebGPU canvas');
@@ -118,7 +124,7 @@ export class WebGPUView {
     this.translucentColored=device.createRenderPipeline({...colored,depthStencil:transparentDepth});
     this.cleanup=interactive?this.camera.attach(canvas):()=>{};
     // ResizeObserver marks the view dirty; render() only reads canvas size when it actually changed.
-    this.observer=new ResizeObserver(()=>{this.pendingResize=true;});this.observer.observe(canvas);
+    this.observer=new ResizeObserver(()=>{this.pendingResize=true;this.onResize?.(canvas.clientWidth,canvas.clientHeight);});this.observer.observe(canvas);
     this.resize();
     void device.lost.then(info=>{if(!this.stopped){this.stopped=true;onError(`GPU device lost: ${info.message || info.reason}. Reload to reconnect.`);}});
   }
@@ -227,23 +233,30 @@ export class WebGPUView {
   }
 }
 
+/**
+ * Which way a label grows from its anchor: `center` (the default) is right for a marker, while
+ * `left`/`right` suit a block of text that would otherwise spill past the edge of the picture.
+ */
+export type LabelAnchor = 'center' | 'left' | 'right';
+
 /** Accessible plain-text labels anchored to camera-projected world positions. */
 export class LabelLayer {
   private labels:{element:HTMLSpanElement;point:()=>Vec3}[]=[];
   constructor(private host:HTMLElement,private camera:OrbitCamera) {}
-  add(text:string,point:()=>Vec3,color='#ffffff'):HTMLSpanElement {
-    const element=this.create(point,color);element.textContent=text;return element;
+  add(text:string,point:()=>Vec3,color='#ffffff',anchor:LabelAnchor='center'):HTMLSpanElement {
+    const element=this.create(point,color,anchor);element.textContent=text;return element;
   }
   /**
    * Label whose content is HTML, so it can carry MathML (see `mathtext.ts`) or a small
    * inline layout. The page styles the host and can target the optional class.
    */
-  addHTML(html:string,point:()=>Vec3,color='#ffffff',className=''):HTMLSpanElement {
-    const element=this.create(point,color);element.innerHTML=html;if(className)element.className=className;return element;
+  addHTML(html:string,point:()=>Vec3,color='#ffffff',className='',anchor:LabelAnchor='center'):HTMLSpanElement {
+    const element=this.create(point,color,anchor);element.innerHTML=html;if(className)element.className=className;return element;
   }
-  private create(point:()=>Vec3,color:string):HTMLSpanElement {
+  private create(point:()=>Vec3,color:string,anchor:LabelAnchor='center'):HTMLSpanElement {
     const element=document.createElement('span');
-    Object.assign(element.style,{position:'absolute',color,pointerEvents:'none',transform:'translate(-50%, -50%)',whiteSpace:'nowrap'});
+    const shift=anchor==='left'?'translate(0, -50%)':anchor==='right'?'translate(-100%, -50%)':'translate(-50%, -50%)';
+    Object.assign(element.style,{position:'absolute',color,pointerEvents:'none',transform:shift,whiteSpace:'nowrap'});
     this.host.append(element);this.labels.push({element,point});return element;
   }
   // Read layout once and evaluate the camera once, then only write styles: no per-label reflow.

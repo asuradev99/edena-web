@@ -10,7 +10,9 @@ import {
   axes3d, boundsBox, box, boxEdges, cylinder, polyline, arrow, circle, sphere, shadedSphere, wireSphere, isosurface,
   parametricSurface, functionSurface, functionCurve, colorMappedSurface, ramp, merge, rgba, lerp, smooth, transform, applyMatrix,
   createParticleState, stepParticles, streamlines, sphereSeeds, type VectorField, type ParticleAcceleration,
-  mathml, mi, mn, mo, mtext, msub, msup, row, matrix, vec, tickValues, niceStep, formatTick, plotFrame, viridis, plasma,
+  type M, type DerivationStep, type DerivationPosition,
+  mathml, mi, mn, mo, mtext, msub, msup, row, matrix, vec, space, number, paren, tickValues, niceStep, formatTick, plotFrame,
+  areaUnder, lineThrough, attachHandles, Derivation, frac, limit, viridis, plasma,
   Geometry, type Vec3, type Rgb,
 } from '../index.js';
 
@@ -48,6 +50,14 @@ function report(message: string): void {
 }
 
 /** Perspective camera, in the vocabulary the demos below use. */
+/** Hide every other label of a dense row when the stage is too narrow to hold them all. */
+const thin = (nodes: HTMLElement[], cramped: boolean): void => {
+  nodes.forEach((node, index) => { node.style.display = cramped && index % 2 === 1 ? 'none' : ''; });
+};
+
+/** The canvas a demo draws into; `attachHandles` needs the element, not the view. */
+const canvasOf = (id: string): HTMLCanvasElement => $<HTMLCanvasElement>(id);
+
 function look(view: WebGPUView, yaw: number, pitch: number, distance: number): void {
   view.camera.projection = 'perspective';
   view.camera.yaw = yaw;
@@ -114,13 +124,16 @@ function coordinateDemo(view: WebGPUView): Demo {
   let height = Number($<HTMLInputElement>('coordinates-height').value);
   const marker = new Visual(count(shadedSphere(.14)), rgba('#f7d681'));
   const drop = new Visual(polyline([[0, 0, 0], [0, 0, 0]], .006), rgba('#f7d681', .4));
-  const place = (y: number): void => {
-    marker.position = [1, y, .5];
-    drop.geometry = polyline([[1, y, .5], [1, -1, .5]], .006);
+  // The marker's own x and z, which the reader drags around the floor; y stays on the slider.
+  let px = 1, pz = .5;
+  const readout = labels.addHTML('', () => [px, height + .42, pz], '#f7d681', 'math-label');
+  const place = (): void => {
+    marker.position = [px, height, pz];
+    drop.geometry = polyline([[px, height, pz], [px, -1, pz]], .006);
+    // The label is rewritten, not just moved: it states the coordinates the marker is at.
+    readout.innerHTML = mathml(row(mi('P'), mo('='), paren(row(number(px, 2), mo(','), space('.3em'), number(height, 2), mo(','), space('.3em'), number(pz, 2)))));
   };
-  place(height);
-  // One label, clear of the marker it describes.
-  labels.addHTML(mathml(row(mi('P'), mo('='), mo('('), mn('1.00'), mo(','), mn(height.toFixed(2)), mo(','), mn('0.50'), mo(')'))), () => [1.42, marker.position[1] + .42, .5], '#f7d681', 'math-label');
+  place();
 
   // Axis names, in the colour the panel headings use, sitting just past each arrow.
   const names: [string, Vec3, string][] = [
@@ -143,8 +156,21 @@ function coordinateDemo(view: WebGPUView): Demo {
   $<HTMLInputElement>('coordinates-height').addEventListener('input', event => {
     height = Number((event.target as HTMLInputElement).value);
     $('coordinates-height-value').textContent = `y = ${height.toFixed(2)}`;
-    place(height);
+    place();
   });
+
+  // Dragging moves the marker in the floor plane, at whatever height the slider has put it in: the
+  // point is the thing the picture is about, so it should be the thing the cursor can hold. The
+  // label a reader naturally aims at is a handle too, anchored where it actually sits.
+  const moveTo = (point: Vec3): void => {
+    px = Math.max(-extent, Math.min(extent, point[0]));
+    pz = Math.max(-extent, Math.min(extent, point[2]));
+    place();
+  };
+  attachHandles(canvasOf('coordinates-canvas'), view.camera, () => [
+    { id: 'marker', at: () => [px, height, pz], radius: 30, plane: { normal: [0, 1, 0] }, cursor: 'grab', to: moveTo },
+    { id: 'marker-label', at: () => [px, height + .42, pz], radius: 26, plane: { normal: [0, 1, 0] }, cursor: 'grab', to: moveTo },
+  ]);
 
   return { labels, update: () => {} };
 }
@@ -686,6 +712,8 @@ function measureDemo(view: WebGPUView): Demo {
     dimension.innerHTML = mathml(mtext(`|AB| = ${distance.toFixed(2)} · \u0394x = ${dx.toFixed(2)} · \u0394y = ${dy.toFixed(2)} \u00b7 \u03b8 = ${angle.toFixed(1)}\u00b0`));
     panelReadout.textContent = `|AB| = ${distance.toFixed(2)} · \u03b8 = ${angle.toFixed(1)}\u00b0`;
     attached.push(
+      labels.addHTML(mathml(mtext('A')), () => [pointA[0] - .1, pointA[1] - .42, 0], '#58c4dd', 'math-label'),
+      labels.addHTML(mathml(mtext('B')), () => [pointB[0], pointB[1] + .42, 0], '#f7d681', 'math-label'),
       labels.addHTML(mathml(mtext(`|AB| = ${distance.toFixed(2)}`)), () => [(pointA[0] + pointB[0]) / 2, (pointA[1] + pointB[1]) / 2 + .28, 0], '#f7d681', 'math-label'),
       labels.addHTML(mathml(row(mo('\u03b8'), mo('='), mn(`${angle.toFixed(0)}\u00b0`))), () => [pointA[0] + 1.35, pointA[1] + .35, 0], '#9db0c2', 'math-label'),
     );
@@ -702,6 +730,24 @@ function measureDemo(view: WebGPUView): Demo {
   turnButton.addEventListener('click', () => { spinning = !spinning; button(); });
   build();
   button();
+
+  // B is the measurement: drag it and the distance, the angle and all three labels follow.
+  attachHandles(canvasOf('measure-canvas'), view.camera, () => [{
+    id: 'b',
+    at: () => [across, up, 0],
+    radius: 28,
+    plane: { normal: [0, 0, 1] },
+    cursor: 'move',
+    to: point => {
+      across = Math.max(1, Math.min(4.4, point[0]));
+      up = Math.max(-1.6, Math.min(2.6, point[1]));
+      $<HTMLInputElement>('measure-x').value = String(across);
+      $<HTMLInputElement>('measure-y').value = String(up);
+      $('measure-x-value').textContent = across.toFixed(2);
+      $('measure-y-value').textContent = up.toFixed(2);
+      build();
+    },
+  }]);
 
   return {
     labels,
@@ -1107,58 +1153,81 @@ function pathDemo(view: WebGPUView): Demo {
     loop: [[-2.6, 0, 0], [3.4, 2.2, 1.6], [-3.4, 2.2, -1.6], [2.6, 0, 0]],
   };
   let kind = 'arc', along = 0, playing = !reducedMotion;
-  let eased: Vec3 = [0, 0, 0];
-
-  const markerMesh = shadedSphere(.22);
-  const dot = new Visual(markerMesh, rgba('#f7d681'));
-  const readout = labels.addHTML(mathml(mn('')), () => [0, -3.05, 0], '#9db0c2', 'math-label');
-  const panelReadout = $('path-readout');
-
-  const build = (): void => {
-    const points = presets[kind];
-    world.clear();
-    const samples: Vec3[] = Array.from({ length: 121 }, (_, index) => bezier(points, index / 120));
-    world.add(new Visual(count(polyline(samples, .028, 8)), rgba('#58c4dd', .95)));
-    // The control polygon and the control points: the construction behind the curve.
-    world.add(new Visual(count(merge(...[0, 1, 2].map(index => polyline([points[index], points[index + 1]], .008)))), rgba('#9db0c2', .4)));
-    points.forEach((point, index) => {
-      const handle = new Visual(count(shadedSphere(.09)), rgba('#ff9ec4', .95));
-      handle.position = point;
-      world.add(handle);
-    });
-    for (let index = 0; index < 4; index++) {
-      labels.addHTML(mathml(msub(mi('P'), mn(index))), () => {
-        const point = points[index];
-        return [point[0], point[1] + .28, point[2]] as Vec3;
-      }, '#ff9ec4', 'math-label');
-    }
-    world.add(dot);
+  // One array, mutated in place: the labels below hold on to it, and dragging writes into it.
+  const points: Vec3[] = presets.arc.map(point => [...point] as Vec3);
+  const load = (name: string): void => {
+    presets[name].forEach((point, index) => { points[index][0] = point[0]; points[index][1] = point[1]; points[index][2] = point[2]; });
   };
 
-  const kindSelect = $<HTMLSelectElement>('path-kind');
-  const timeInput = $<HTMLInputElement>('path-time');
-  const playButton = $<HTMLButtonElement>('path-play');
+  const dot = new Visual(shadedSphere(.22), rgba('#f7d681'));
+  const readout = labels.addHTML(mathml(mn('')), () => [0, -3.05, 0], '#9db0c2', 'math-label');
+  const panelReadout = $('path-readout');
+  let curve = new Visual(new Geometry([]), rgba('#58c4dd', .95));
+  let polygon = new Visual(new Geometry([]), rgba('#9db0c2', .4));
+  const handles = [0, 1, 2, 3].map(() => new Visual(count(shadedSphere(.1)), rgba('#ff9ec4', .95)));
+  world.add(curve, polygon, ...handles, dot);
+  for (let index = 0; index < 4; index++) {
+    labels.addHTML(mathml(msub(mi('P'), mn(index))), () => [points[index][0], points[index][1] + .24, points[index][2]], '#ff9ec4', 'math-label');
+  }
+
+  /** Redraw the curve, the control polygon and the handles from the current four points. */
+  const redraw = (): void => {
+    const samples: Vec3[] = Array.from({ length: 121 }, (_, index) => bezier(points, index / 120));
+    const nextCurve = new Visual(count(polyline(samples, .028, 8)), rgba('#58c4dd', .95));
+    const nextPolygon = new Visual(count(merge(...[0, 1, 2].map(index => polyline([points[index], points[index + 1]], .008)))), rgba('#9db0c2', .4));
+    world.remove(curve, polygon);
+    nextPolygon.reveal = .999;
+    world.add(nextCurve, nextPolygon);
+    curve = nextCurve;
+    polygon = nextPolygon;
+    handles.forEach((handle, index) => { handle.position = [...points[index]]; });
+  };
   const place = (): void => {
     // `smooth` slows both ends: the same parameter, read twice, is the whole lesson.
     const easedParameter = smooth(along);
-    eased = bezier(presets[kind], easedParameter);
-    dot.position = [...eased];
-    timeInput.value = String(along);
+    dot.position = [...bezier(points, easedParameter)];
+    $<HTMLInputElement>('path-time').value = String(along);
     $('path-time-value').textContent = `${Math.round(along * 100)}%`;
     const text = `t = ${along.toFixed(2)} · eased ${easedParameter.toFixed(2)}`;
     readout.innerHTML = mathml(mtext(text));
     panelReadout.textContent = text;
   };
+
+  const playButton = $<HTMLButtonElement>('path-play');
   const button = (): void => {
     playButton.textContent = playing ? 'Pause' : 'Play';
     playButton.setAttribute('aria-pressed', String(playing));
   };
-  kindSelect.addEventListener('change', () => { kind = kindSelect.value; build(); place(); });
+  $<HTMLSelectElement>('path-kind').addEventListener('change', event => {
+    kind = (event.target as HTMLSelectElement).value;
+    load(kind);
+    redraw();
+    place();
+  });
   playButton.addEventListener('click', () => { playing = !playing; button(); });
-  timeInput.addEventListener('input', () => { playing = false; along = Number(timeInput.value); button(); place(); });
-  build();
+  $<HTMLInputElement>('path-time').addEventListener('input', event => {
+    playing = false; along = Number((event.target as HTMLInputElement).value); button(); place();
+  });
+  redraw();
   button();
   place();
+
+  // The control points are the diagram, so they are the things to grab. Pausing on a grab keeps the
+  // point under the cursor while the reader works.
+  const grab = attachHandles(canvasOf('path-canvas'), view.camera, () => points.map((point, index) => ({
+    id: `P${index}`,
+    at: () => points[index],
+    // Generous: the four handles are small spheres, and the label sits just above each one.
+    radius: 34,
+    cursor: 'grab',
+    to: (moved: Vec3) => {
+      points[index][0] = moved[0]; points[index][1] = moved[1]; points[index][2] = moved[2];
+      redraw();
+      place();
+    },
+  })), {
+    onGrab: handle => { if (handle) { playing = false; button(); } },
+  });
 
   return {
     labels,
@@ -1799,16 +1868,37 @@ function depthDemo(view: WebGPUView): Demo {
  * ------------------------------------------------------------------------------------------ */
 
 function plotDemo(view: WebGPUView): Demo {
-  // Dead on the xy plane: a chart is a 3D scene, but it reads best from straight ahead.
-  look(view, 0, 0, 5.8);
   const labels = new LabelLayer($('plot-labels'), view.camera);
-  const chart = plotFrame([-4.4, 4.4], [-1.6, 1.6], { xTicks: 8, yTicks: 4 });
+  const domain: [number, number] = [-4.4, 4.4];
+  const yRange: [number, number] = [-1.6, 1.6];
+  /**
+   * Straight ahead, orthographically, framed on the domain. A perspective camera would foreshorten
+   * the axes and let the curve run past the edge; this shows exactly the x range the chart covers,
+   * at whatever aspect the panel happens to be.
+   */
+  const fit = (): void => {
+    const canvas = canvasOf('plot-canvas');
+    const aspect = canvas.clientWidth / Math.max(1, canvas.clientHeight);
+    view.camera.projection = 'orthographic';
+    view.camera.yaw = 0;
+    view.camera.pitch = 0;
+    view.camera.target = [0, 0, 0];
+    view.camera.height = Math.max(yRange[1] - yRange[0] + 3.4, (domain[1] - domain[0] + .9) / aspect);
+    thin(tickNodes, canvas.clientWidth < 560);
+  };
+  const chart = plotFrame(domain, yRange, {
+    xTicks: 8, yTicks: 4, minor: 5,
+    xTitle: mi('x'), yTitle: row(mi('f'), mo('('), mi('x'), mo(')')),
+  });
   view.world.add(
+    new Visual(count(chart.minorGrid), rgba('#e8f0f6', .05)),
     new Visual(count(chart.grid), rgba('#e8f0f6', .1)),
-    new Visual(count(chart.ticks), rgba('#e8f0f6', .38)),
-    new Visual(count(chart.axes), rgba('#e8f0f6', .75)),
+    new Visual(count(chart.minor), rgba('#e8f0f6', .28)),
+    new Visual(count(chart.ticks), rgba('#e8f0f6', .42)),
+    new Visual(count(chart.axes), rgba('#e8f0f6', .78)),
   );
-  for (const anchor of chart.labels) labels.addHTML(mathml(mtext(anchor.text)), () => anchor.position, '#8f9aad', 'math-label');
+  const tickNodes = chart.labels.map(anchor => labels.addHTML(mathml(anchor.math ?? mtext(anchor.text)), () => anchor.position, '#93a6b8', 'math-label'));
+  for (const anchor of chart.titles) labels.addHTML(mathml(anchor.math ?? mtext(anchor.text)), () => anchor.position, '#cfe4ea', 'math-label', 'center');
 
   const functions: Record<string, (x: number) => number> = {
     sine: x => Math.sin(x),
@@ -1816,26 +1906,357 @@ function plotDemo(view: WebGPUView): Demo {
     damped: x => 1.15 * Math.exp(-x * x / 9) * Math.sin(3 * x),
     gaussian: x => 1.25 * Math.exp(-x * x / 2.6),
   };
-  const equations: Record<string, string> = {
+  /** The same function written out, and its derivative, both typeset. */
+  const formulas: Record<string, M> = {
     sine: row(mi('f'), mo('('), mi('x'), mo(')'), mo('='), mi('sin'), mo('('), mi('x'), mo(')')),
     square: row(mi('f'), mo('('), mi('x'), mo(')'), mo('='), mn('0.9'), mi('sign'), mo('('), mi('sin'), mo('('), mn('2'), mi('x'), mo(')'), mo(')')),
     damped: row(mi('f'), mo('('), mi('x'), mo(')'), mo('='), msup(mi('e'), row(mo('−'), msup(mi('x'), mn('2')), mo('⁄'), mn('9'))), mi('sin'), mo('('), mn('3'), mi('x'), mo(')')),
     gaussian: row(mi('f'), mo('('), mi('x'), mo(')'), mo('='), msup(mi('e'), row(mo('−'), msup(mi('x'), mn('2')), mo('⁄'), mn('2.6')))),
   };
-  let curve = new Visual(count(functionCurve(functions.sine, [-4.4, 4.4], 640, .022)), rgba('#ffff00'));
-  view.world.add(curve);
-  const equation = labels.addHTML(mathml(equations.sine), () => [-4.35, 1.78, 0], '#e9f2fa', 'math-label');
+  let kind = 'sine', probe = 1.2, shaded = true;
+  let curve = new Visual(count(functionCurve(functions[kind], domain, 640, .022)), rgba('#ffff00'));
+  let area = new Visual(count(areaUnder(functions[kind], domain, { baseline: 0 })), rgba('#ffff00', .12));
+  let tangent = new Visual(count(lineThrough([probe, functions[kind](probe), 0], 0, domain, .012)), rgba('#80d4df', .9));
+  const probeDot = new Visual(count(shadedSphere(.085)), rgba('#80d4df'));
+  let probeStem = new Visual(count(polyline([[probe, 0, 0], [probe, functions[kind](probe), 0]], .006)), rgba('#80d4df', .5));
+  view.world.add(area, curve, tangent, probeStem, probeDot);
+
+  // Left-anchored at the far left, right-anchored at the far right: both grow inwards, so neither
+  // can spill off the edge however long the numbers get.
+  const equation = labels.addHTML(mathml(formulas[kind]), () => [domain[0] + .12, 2.05, 0], '#e9f2fa', 'math-label', 'left');
+  const readout = labels.addHTML('', () => [domain[1] - .12, 1.55, 0], '#cfe4ea', 'math-label', 'right');
+
+  /** A numeric derivative, so the tangent line and the printed slope cannot disagree. */
+  const slopeOf = (fn: (x: number) => number, x: number): number => {
+    const h = 1e-4;
+    return (fn(x + h) - fn(x - h)) / (2 * h);
+  };
+  const place = (): void => {
+    const fn = functions[kind];
+    const value = fn(probe), slope = slopeOf(fn, probe);
+    probeDot.position = [probe, value, 0];
+    view.world.remove(probeStem, tangent);
+    const nextStem = new Visual(count(polyline([[probe, 0, 0], [probe, value, 0]], .006)), rgba('#80d4df', .5));
+    const runLength = 1.5;
+    const nextTangent = new Visual(count(lineThrough([probe, value, 0], slope, [probe - runLength, probe + runLength], .012)), rgba('#80d4df', .9));
+    view.world.add(nextStem, nextTangent);
+    probeStem = nextStem; tangent = nextTangent;
+    // The readout is typeset, so the numbers line up and the minus sign is a minus sign.
+    readout.innerHTML = mathml(row(
+      mi('x'), mo('='), number(probe, 2), space('1em'),
+      mi('f'), mo('('), mi('x'), mo(')'), mo('='), number(value, 2), space('1em'),
+      msup(mi('f'), mo('′')), mo('('), mi('x'), mo(')'), mo('='), number(slope, 2),
+    ));
+    $('plot-probe-value').textContent = probe.toFixed(2);
+  };
+  place();
 
   $<HTMLSelectElement>('plot-function').addEventListener('change', event => {
-    const kind = (event.target as HTMLSelectElement).value;
-    const next = new Visual(count(functionCurve(functions[kind], [-4.4, 4.4], 640, .022)), rgba('#ffff00'));
-    view.world.remove(curve);
-    view.world.add(next);
-    curve = next;
-    equation.innerHTML = mathml(equations[kind]);
+    kind = (event.target as HTMLSelectElement).value;
+    const nextCurve = new Visual(count(functionCurve(functions[kind], domain, 640, .022)), rgba('#ffff00'));
+    const nextArea = new Visual(count(areaUnder(functions[kind], domain, { baseline: 0 })), rgba('#ffff00', .12));
+    view.world.remove(curve, area);
+    view.world.add(nextCurve, nextArea);
+    curve = nextCurve; area = nextArea;
+    area.reveal = shaded ? 1 : 0;
+    equation.innerHTML = mathml(formulas[kind]);
+    place();
+  });
+  $<HTMLInputElement>('plot-probe').addEventListener('input', event => {
+    probe = Number((event.target as HTMLInputElement).value);
+    place();
+  });
+  $<HTMLInputElement>('plot-area').addEventListener('change', event => {
+    shaded = (event.target as HTMLInputElement).checked;
+    area.reveal = shaded ? 1 : 0;
   });
 
+  // Dragging the picture moves the probe: the cursor is the slider.
+  attachHandles(canvasOf('plot-canvas'), view.camera, () => [{
+    id: 'probe',
+    at: () => [probe, functions[kind](probe), 0],
+    radius: 40,
+    plane: { normal: [0, 0, 1] },
+    cursor: 'ew-resize',
+    to: point => {
+      probe = Math.max(domain[0], Math.min(domain[1], point[0]));
+      $<HTMLInputElement>('plot-probe').value = String(probe);
+      place();
+    },
+  }]);
+
+  view.onResize = fit;
+  fit();
   return { labels, update: () => {} };
+}
+
+/* --------------------------------------------------------------------------------------------
+ * 25 · Why the power rule works: a derivation that plays while its picture changes.
+ *
+ * The algebra is the explanation and the plot is the evidence: as the beats walk from "expand the
+ * square" to "let h vanish", the chord in the picture shrinks onto the tangent, and the two slopes
+ * printed beside it converge. The derivation is DOM, the picture is a canvas, and both are driven
+ * by one position, so a reader can scrub either.
+ * ------------------------------------------------------------------------------------------ */
+
+function secantDemo(view: WebGPUView): Demo {
+  const labels = new LabelLayer($('secant-labels'), view.camera);
+  const domain: [number, number] = [-2.7, 2.7];
+  const square = (x: number): number => x * x;
+  const yRange: [number, number] = [-.7, 7.6];
+  // On a phone the derivation moves under the picture rather than over it, and the crowd of small
+  // labels around A and B goes away: only what the derivation is talking about stays.
+  let cramped = false;
+  const fit = (): void => {
+    const canvas = canvasOf('secant-canvas');
+    const aspect = canvas.clientWidth / Math.max(1, canvas.clientHeight);
+    cramped = canvas.clientWidth < 560;
+    view.camera.projection = 'orthographic';
+    view.camera.yaw = 0;
+    view.camera.pitch = 0;
+    // The parabola sits right of centre so the derivation has the left of the frame to itself; when
+    // the derivation drops below, the parabola moves up to keep out of its way.
+    view.camera.target = cramped ? [0, 4.6, 0] : [-1.35, 3.1, 0];
+    view.camera.height = Math.max(yRange[1] - yRange[0] + 1, (domain[1] - domain[0] + .6) / aspect);
+    for (const node of [labelA, labelB, deltaX, deltaY]) node.style.display = cramped ? 'none' : '';
+    // The y title would sit on top of the readout once the picture is this small, and every other
+    // tick would run into its neighbour.
+    if (titleNodes[1]) titleNodes[1].style.display = cramped ? 'none' : '';
+    thin(tickNodes, cramped);
+  };
+
+  const chart = plotFrame(domain, yRange, {
+    xTicks: 6, yTicks: 5, minor: 5,
+    xTitle: mi('x'), yTitle: row(mi('f'), mo('('), mi('x'), mo(')'), mo('='), msup(mi('x'), mn('2'))),
+  });
+  view.world.add(
+    new Visual(count(chart.minorGrid), rgba('#e8f0f6', .05)),
+    new Visual(count(chart.grid), rgba('#e8f0f6', .09)),
+    new Visual(count(chart.minor), rgba('#e8f0f6', .24)),
+    new Visual(count(chart.ticks), rgba('#e8f0f6', .36)),
+    new Visual(count(chart.axes), rgba('#e8f0f6', .7)),
+    new Visual(count(functionCurve(square, domain, 320, .022)), rgba('#8fd0ff', .95)),
+  );
+  const tickNodes = chart.labels.map(anchor => labels.addHTML(mathml(anchor.math ?? mtext(anchor.text)), () => anchor.position, '#8b9cae', 'math-label'));
+  const titleNodes = chart.titles.map(anchor => labels.addHTML(mathml(anchor.math ?? mtext(anchor.text)), () => anchor.position, '#cfe4ea', 'math-label'));
+
+  let x = 1.15, h = 1.3, targetH: number | undefined;
+  const areaVisual = new Visual(count(areaUnder(square, [x, x + h], { baseline: 0, samples: 40 })), rgba('#8fd0ff', .16));
+  const chord = new Visual(count(polyline([[0, 0, 0], [0, 0, 0]], .016)), rgba('#f7d681', .95));
+  const tangent = new Visual(count(polyline([[0, 0, 0], [0, 0, 0]], .01)), rgba('#ff9ec4', .75));
+  const legs = new Visual(count(polyline([[0, 0, 0], [0, 0, 0]], .008)), rgba('#cfe4ea', .5));
+  const dotA = new Visual(count(shadedSphere(.095)), rgba('#f7d681'));
+  const dotB = new Visual(count(shadedSphere(.095)), rgba('#ff9ec4'));
+  view.world.add(areaVisual, legs, tangent, chord, dotA, dotB);
+  const slopeOf = (fn: (value: number) => number, at: number): number => {
+    const step = 1e-4;
+    return (fn(at + step) - fn(at - step)) / (2 * step);
+  };
+
+  // A below its point, B above its own, so the two never collide as h shrinks towards nothing.
+  const labelA = labels.addHTML('', () => [x, square(x) - .46, 0], '#f7d681', 'math-label', 'center');
+  const labelB = labels.addHTML('', () => [x + h, square(x + h) + .44, 0], '#ff9ec4', 'math-label', 'center');
+  const deltaX = labels.addHTML('', () => [x + h / 2, square(x) - .2, 0], '#cfe4ea', 'math-label', 'center');
+  const deltaY = labels.addHTML('', () => [x + h + .28, (square(x) + square(x + h)) / 2, 0], '#cfe4ea', 'math-label', 'left');
+  /** The world x at the right edge of the view, so a readout can hug it at any aspect ratio. */
+  const rightEdge = (): number => {
+    const canvas = canvasOf('secant-canvas');
+    const aspect = canvas.clientWidth / Math.max(1, canvas.clientHeight);
+    return view.camera.target[0] + view.camera.height * aspect / 2;
+  };
+  const readout = labels.addHTML('', () => [rightEdge() - .12, 7.1, 0], '#cfe4ea', 'math-label', 'right');
+  fit();
+
+  /** Redraw the picture for the current x and h. */
+  const draw = (): void => {
+    const yA = square(x), yB = square(x + h);
+    const chordSlope = (yB - yA) / h, tangentSlope = slopeOf(square, x);
+    areaVisual.geometry = count(areaUnder(square, [x, x + h], { baseline: 0, samples: 40 }));
+    // The chord runs a little past B, and the tangent past it, so they read as lines rather than marks.
+    chord.geometry = count(lineThrough([x, yA, 0], chordSlope, [x - .8, x + h + .8], .016));
+    tangent.geometry = count(lineThrough([x, yA, 0], tangentSlope, [x - 1.6, x + 1.6], .01));
+    legs.geometry = count(merge(
+      polyline([[x, yA, 0], [x + h, yA, 0]], .008),
+      polyline([[x + h, yA, 0], [x + h, yB, 0]], .008),
+    ));
+    dotA.position = [x, yA, 0];
+    dotB.position = [x + h, yB, 0];
+    labelA.innerHTML = mathml(row(mi('A'), mo('='), paren(row(number(x, 2), mo(','), space('.3em'), number(yA, 2)))));
+    labelB.innerHTML = mathml(row(mi('B'), mo('='), paren(row(number(x + h, 2), mo(','), space('.3em'), number(yB, 2)))));
+    deltaX.innerHTML = mathml(row(mi('\u0394'), mi('x'), mo('='), mi('h'), mo('='), number(h, 2)));
+    deltaY.innerHTML = mathml(row(mi('\u0394'), mi('y'), mo('='), number(yB - yA, 2)));
+    readout.innerHTML = mathml(row(
+      frac(row(mi('\u0394'), mi('y')), row(mi('\u0394'), mi('x'))), mo('='), number(chordSlope, 2), space('1.2em'),
+      msup(mi('f'), mo('\u2032')), mo('('), mi('x'), mo(')'), mo('='), number(tangentSlope, 2), space('1.2em'),
+      mtext('gap'), space('.4em'), number(Math.abs(chordSlope - tangentSlope), 2),
+    ));
+  };
+  draw();
+
+  /* The derivation. Five lines, nine beats; the plot follows whichever line is showing. */
+  const lim = (): M => limit(row(mi('h'), mo('\u2192'), mn('0')));
+  const squared = (inner: M): M => msup(paren(inner), mn('2'));
+  const dx = (): M => row(mi('\u0394'), mi('x'));
+  const dy = (): M => row(mi('\u0394'), mi('y'));
+  const steps: DerivationStep[] = [
+    {
+      note: mtext('the derivative, from first principles'),
+      tokens: [
+        { id: 'lhs', math: row(msup(mi('f'), mo('\u2032')), paren(mi('x'))), text: "f'(x)" },
+        { id: 'eq', math: mo('='), text: '=' },
+        { id: 'lim', math: lim(), text: 'lim h->0' },
+        { id: 'square', math: squared(row(mi('x'), mo('+'), mi('h'))), text: '(x+h)^2', colour: '#8fd0ff' },
+        { id: 'minus', math: mo('\u2212'), text: '-' },
+        { id: 'plain', math: msup(mi('x'), mn('2')), text: 'x^2', colour: '#f7d681' },
+        { id: 'over', math: mo('\u2044'), text: '/' },
+        { id: 'h', math: mi('h'), text: 'h' },
+      ],
+      beats: [
+        { marks: [{ kind: 'highlight', ids: ['square'], colour: '#8fd0ff' }, { kind: 'highlight', ids: ['plain'], colour: '#f7d681' }], note: mtext('two squares, and their difference') },
+        { marks: [{ kind: 'bracket', ids: ['square', 'minus', 'plain'], note: mtext('difference') }], note: mtext('expand the square') },
+      ],
+    },
+    {
+      tokens: [
+        { id: 'eq', math: mo('='), text: '=' },
+        { id: 'lim', math: lim(), text: 'lim h->0' },
+        { id: 'x1', math: msup(mi('x'), mn('2')), text: 'x^2', colour: '#f7d681' },
+        { id: 'plus1', math: mo('+'), text: '+' },
+        { id: 'twice', math: row(mn('2'), mi('x')), text: '2x', colour: '#9ee6a8' },
+        { id: 'h1', math: mi('h'), text: 'h', colour: '#9ee6a8' },
+        { id: 'plus2', math: mo('+'), text: '+' },
+        { id: 'h2', math: msup(mi('h'), mn('2')), text: 'h^2' },
+        { id: 'minus', math: mo('\u2212'), text: '-' },
+        { id: 'x2', math: msup(mi('x'), mn('2')), text: 'x^2', colour: '#f7d681' },
+        { id: 'over', math: mo('\u2044'), text: '/' },
+        { id: 'h', math: mi('h'), text: 'h' },
+      ],
+      beats: [
+        { marks: [{ kind: 'bracket', ids: ['x1', 'plus1', 'twice', 'h1', 'plus2', 'h2', 'minus', 'x2'], note: mtext('expanded') }], note: mtext('the same numerator, expanded') },
+        { marks: [{ kind: 'cancel', ids: ['x1', 'x2'], colour: '#f7d681' }], note: mtext('x\u00b2 \u2212 x\u00b2 = 0: the squares cancel') },
+        { marks: [{ kind: 'highlight', ids: ['twice', 'h1'], colour: '#9ee6a8' }, { kind: 'recolour', ids: ['h2', 'h'], colour: '#9ee6a8' }], note: mtext('every surviving term still carries an h') },
+      ],
+    },
+    {
+      tokens: [
+        { id: 'eq', math: mo('='), text: '=' },
+        { id: 'lim', math: lim(), text: 'lim h->0' },
+        { id: 'twice', math: row(mn('2'), mi('x')), text: '2x', colour: '#9ee6a8' },
+        { id: 'dot1', math: mo('\u00b7'), text: '.' },
+        { id: 'h1', math: mi('h'), text: 'h', colour: '#9ee6a8' },
+        { id: 'plus', math: mo('+'), text: '+' },
+        { id: 'h2', math: mi('h'), text: 'h', colour: '#9ee6a8' },
+        { id: 'dot2', math: mo('\u00b7'), text: '.' },
+        { id: 'h3', math: mi('h'), text: 'h', colour: '#9ee6a8' },
+        { id: 'over', math: mo('\u2044'), text: '/' },
+        { id: 'h4', math: mi('h'), text: 'h', colour: '#9ee6a8' },
+      ],
+      beats: [
+        { marks: [
+          { kind: 'bracket', ids: ['twice', 'dot1', 'h1', 'plus', 'h2'], note: mtext('h is a common factor') },
+          { kind: 'bracket', ids: ['h4'] },
+        ], note: mtext('divide through by h') },
+        { marks: [
+          { kind: 'cancel', ids: ['h1', 'h3', 'h4'], colour: '#9ee6a8' },
+          { kind: 'recolour', ids: ['h2'], colour: '#ff9ec4' },
+        ], note: mtext('one h cancels from each term, one survives') },
+      ],
+    },
+    {
+      tokens: [
+        { id: 'eq', math: mo('='), text: '=' },
+        { id: 'lim', math: lim(), text: 'lim h->0' },
+        { id: 'twice', math: row(mn('2'), mi('x')), text: '2x', colour: '#9ee6a8' },
+        { id: 'plus', math: mo('+'), text: '+' },
+        { id: 'h', math: mi('h'), text: 'h', colour: '#ff9ec4' },
+      ],
+      beats: [
+        { marks: [
+          { kind: 'highlight', ids: ['twice'], colour: '#9ee6a8' },
+          { kind: 'cancel', ids: ['h'], colour: '#ff9ec4' },
+        ], note: mtext('as h \u2192 0 the last term vanishes') },
+      ],
+    },
+    {
+      tokens: [
+        { id: 'eq', math: mo('='), text: '=' },
+        { id: 'answer', math: `<mstyle mathsize="1.25em">${row(mn('2'), mi('x'))}</mstyle>`, text: '2x', colour: '#f7d681' },
+      ],
+      beats: [
+        { marks: [{ kind: 'highlight', ids: ['answer'], colour: '#f7d681' }], note: mtext('the power rule: d/dx x\u00b2 = 2x') },
+      ],
+    },
+  ];
+
+  const playButton = $<HTMLButtonElement>('secant-play');
+  const position = $<HTMLInputElement>('secant-position');
+  const derivation = new Derivation($('secant-derivation'), {
+    interval: 1500,
+    onChange: (at: DerivationPosition) => {
+      position.value = String(at.index);
+      $('secant-position-value').textContent = `${at.index} / ${at.total - 1}`;
+      // The picture follows the algebra: the chord closes on the tangent as the beats demand it.
+      if (at.step >= 4) targetH = .06;
+      else if (at.step === 3) targetH = .32;
+      else targetH = undefined;
+      playButton.textContent = derivation.playing ? 'Pause' : 'Play';
+      playButton.setAttribute('aria-pressed', String(derivation.playing));
+    },
+  });
+  derivation.set(steps);
+  position.max = String(derivation.total - 1);
+  derivation.seek(0, false);
+  playButton.addEventListener('click', () => {
+    if (derivation.playing) derivation.pause();
+    else derivation.play();
+    playButton.textContent = derivation.playing ? 'Pause' : 'Play';
+    playButton.setAttribute('aria-pressed', String(derivation.playing));
+  });
+  $<HTMLButtonElement>('secant-step').addEventListener('click', () => derivation.next());
+  $<HTMLButtonElement>('secant-restart').addEventListener('click', () => derivation.reset());
+  position.addEventListener('input', () => derivation.seek(Number(position.value), false));
+  $<HTMLInputElement>('secant-h').addEventListener('input', event => {
+    h = Math.max(.05, Number((event.target as HTMLInputElement).value));
+    $('secant-h-value').textContent = h.toFixed(2);
+    targetH = undefined;
+    draw();
+  });
+  $<HTMLInputElement>('secant-x').addEventListener('input', event => {
+    x = Number((event.target as HTMLInputElement).value);
+    $('secant-x-value').textContent = x.toFixed(2);
+    draw();
+  });
+  $('secant-h-value').textContent = h.toFixed(2);
+  $('secant-x-value').textContent = x.toFixed(2);
+
+  // Dragging B changes h: the picture is the slider.
+  attachHandles(canvasOf('secant-canvas'), view.camera, () => [{
+    id: 'b',
+    at: () => [x + h, square(x + h), 0],
+    radius: 30,
+    plane: { normal: [0, 0, 1] },
+    cursor: 'ew-resize',
+    to: point => {
+      h = Math.max(.05, Math.min(2.6, Math.abs(point[0] - x)));
+      $<HTMLInputElement>('secant-h').value = String(h);
+      $('secant-h-value').textContent = h.toFixed(2);
+      targetH = undefined;
+      draw();
+    },
+  }]);
+
+  view.onResize = fit;
+  return {
+    labels,
+    update: delta => {
+      if (targetH !== undefined && Math.abs(h - targetH) > .002) {
+        h += (targetH - h) * Math.min(1, delta * 2.6);
+        $<HTMLInputElement>('secant-h').value = String(h);
+        $('secant-h-value').textContent = h.toFixed(2);
+        draw();
+      }
+    },
+  };
 }
 
 /* --------------------------------------------------------------------------------------------
@@ -1843,7 +2264,7 @@ function plotDemo(view: WebGPUView): Demo {
  * ------------------------------------------------------------------------------------------ */
 
 async function initialize(): Promise<void> {
-  const canvases = ['coordinates-canvas', 'interpolation-canvas', 'transparency-canvas', 'shapes-canvas', 'groups-canvas', 'labels-canvas', 'colour-canvas', 'plot-canvas', 'depth-canvas', 'instances-canvas', 'camera-canvas', 'simulation-canvas', 'field-canvas', 'streamlines-canvas', 'story-canvas', 'vectors-canvas', 'path-canvas', 'normals-canvas', 'layers-canvas', 'bars-canvas', 'follow-canvas', 'transform-canvas', 'measure-canvas', 'contrast-canvas'];
+  const canvases = ['coordinates-canvas', 'interpolation-canvas', 'transparency-canvas', 'shapes-canvas', 'groups-canvas', 'labels-canvas', 'colour-canvas', 'plot-canvas', 'depth-canvas', 'instances-canvas', 'camera-canvas', 'simulation-canvas', 'field-canvas', 'streamlines-canvas', 'story-canvas', 'vectors-canvas', 'path-canvas', 'normals-canvas', 'layers-canvas', 'bars-canvas', 'follow-canvas', 'transform-canvas', 'measure-canvas', 'contrast-canvas', 'secant-canvas'];
   const first = await WebGPUView.create($<HTMLCanvasElement>(canvases[0]), { samples: msaa, maxDpr, onError: report });
   views.push(first);
   if (disposed) { first.dispose(); return; }
@@ -1875,6 +2296,7 @@ async function initialize(): Promise<void> {
     transformDemo(views[21]),
     measureDemo(views[22]),
     contrastDemo(views[23]),
+    secantDemo(views[24]),
   );
 
   // Eleven views on one page: drawing the ones below the fold would cost a full render each frame for

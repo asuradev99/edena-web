@@ -1,12 +1,12 @@
 // Run against a Chrome debugging session: node scripts/check-basics.mjs [port]
 //
 // Checks the basics tour the way a reader meets it:
-//   1. every one of the twenty-four demos draws something, and each draws something distinct;
+//   1. every one of the twenty-five demos draws something, and each draws something distinct;
 //   2. every control changes its own stage — projection, grid, marker height, opacity, spin, the mesh
 //      selector, the group's spread and opacity, and the helix's turn count — and leaves the others be;
 //   3. the two moving demos advance on their own, and the transport seeks;
 //   4. the page reports a frame rate and never throws or logs an error;
-//   5. the tour still works at 390 px: the panels stack, nothing overflows sideways, the demo draws.
+//   6. the tour still works at 390 px: the panels stack, nothing overflows sideways, the demo draws.
 //
 // Pixels come from the compositor (`Page.captureScreenshot`) and are measured back inside the page, so
 // no image library is needed: a WebGPU canvas cannot be read once it has been presented, but a
@@ -42,7 +42,19 @@ const evaluate = async expression => (await call('Runtime.evaluate', { awaitProm
 const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 /** Average absolute difference between two normalised 8×8 signatures: 0 is identical. */
-const difference = (a, b) => a.grid.reduce((sum, value, index) => sum + Math.abs(value - b.grid[index]), 0) / a.grid.length;
+// Two demos have to differ in *shape*, not just in brightness: a dark scene of thin lines is mostly
+// background, so compare the lit distribution with the overall level divided out, and keep the lit
+// fraction as a second signal.
+const shape = measured => {
+  const total = measured.grid.reduce((sum, value) => sum + value, 0) || 1;
+  return measured.grid.map(value => value / total);
+};
+const difference = (a, b) => {
+  const left = shape(a), right = shape(b);
+  const spread = left.reduce((sum, value, index) => sum + Math.abs(value - right[index]), 0) / left.length;
+  const lit = Math.abs(a.bright / (a.mean * a.grid.length || 1) - b.bright / (b.mean * b.grid.length || 1));
+  return spread + Math.min(1, lit) * .5;
+};
 
 try {
   await call('Runtime.enable');
@@ -108,7 +120,7 @@ try {
     return evaluate(`window.__measureRegion(${JSON.stringify(shot)}, ${JSON.stringify(rect)})`);
   };
 
-  const stageIds = ['coordinates', 'interpolation', 'transparency', 'shapes', 'groups', 'labels', 'colour', 'plot', 'depth', 'instances', 'camera', 'simulation', 'field', 'streamlines', 'story', 'vectors', 'path', 'normals', 'layers', 'bars', 'follow', 'transform', 'measure', 'contrast'];
+  const stageIds = ['coordinates', 'interpolation', 'transparency', 'shapes', 'groups', 'labels', 'colour', 'plot', 'depth', 'instances', 'camera', 'simulation', 'field', 'streamlines', 'story', 'vectors', 'path', 'normals', 'layers', 'bars', 'follow', 'transform', 'measure', 'contrast', 'secant'];
   const startup = await evaluate(`({ stats: document.getElementById('stats').textContent, status: document.getElementById('status').hidden, labels: document.querySelectorAll('.labels span').length })`);
   assert.ok(startup.status, `the page reported an error: ${await evaluate('document.getElementById("status").textContent')}`);
   assert.match(startup.stats, /fps/);
@@ -123,7 +135,8 @@ try {
     signatures[stageId] = measured;
   }
   for (let a = 0; a < stageIds.length; a++) for (let b = a + 1; b < stageIds.length; b++) {
-    assert.ok(difference(signatures[stageIds[a]], signatures[stageIds[b]]) > .1, `${stageIds[a]} and ${stageIds[b]} look the same`);
+    const apart = difference(signatures[stageIds[a]], signatures[stageIds[b]]);
+    assert.ok(apart > .1, `${stageIds[a]} and ${stageIds[b]} look the same (${apart.toFixed(3)})`);
   }
 
   // 2. Every control moves its own stage, and leaves the others alone.
@@ -169,6 +182,9 @@ try {
     ['follow-pitch', 1.2, 'follow'],
     ['measure-x', 4.2, 'measure'],
     ['measure-y', -1.4, 'measure'],
+    ['secant-h', 1.45, 'secant'],
+    ['secant-x', -1.4, 'secant'],
+    ['secant-position', 6, 'secant'],
     ['contrast-field', 'bowl', 'contrast'],
     ['contrast-palette', 'heat', 'contrast'],
     ['contrast-range', 25, 'contrast'],
@@ -176,12 +192,13 @@ try {
   // Stop the demos that spin, so every control can be judged against a still picture. The spin buttons
   // themselves are checked afterwards, by measuring exactly this drift.
   await evaluate(`document.getElementById('transparency-spin').click(); document.getElementById('groups-spin').click(); document.getElementById('depth-spin').click(); document.getElementById('instances-spin').click(); document.getElementById('field-spin').click(); document.getElementById('streamlines-turn').click(); document.getElementById('vectors-spin').click(); document.getElementById('normals-spin').click(); document.getElementById('layers-turn').click(); document.getElementById('bars-spin').click(); document.getElementById('measure-turn').click(); document.getElementById('contrast-spin').click();`);
+  await evaluate(`{ const node = document.getElementById('secant-play'); if (node.textContent === 'Pause') node.click(); }`);
   await evaluate(`{ const node = document.getElementById('follow-play'); if (node.textContent === 'Pause') node.click(); }`);
   await evaluate(`{ const node = document.getElementById('path-play'); if (node.textContent === 'Pause') node.click(); }`);
   await evaluate(`{ const node = document.getElementById('story-play'); if (node.textContent === 'Pause') node.click(); }`);
   await wait(500);
   // Only these hold still on their own, so only they can prove that a control left them alone.
-  const still = new Set(['coordinates', 'shapes', 'groups', 'colour', 'plot', 'depth', 'instances', 'field', 'streamlines', 'story', 'vectors', 'path', 'normals', 'layers', 'bars', 'follow', 'transform', 'measure', 'contrast']);
+  const still = new Set(['coordinates', 'shapes', 'groups', 'colour', 'plot', 'depth', 'instances', 'field', 'streamlines', 'story', 'vectors', 'path', 'normals', 'layers', 'bars', 'follow', 'transform', 'measure', 'contrast', 'secant']);
   for (const [control, value, stageId] of changes) {
     // The helix keeps moving, so stop it first: then the turn count is the only thing that changes.
     if (control === 'labels-turns' || control.startsWith('camera-') || control.startsWith('simulation-') || control.startsWith('follow-')) {
@@ -319,9 +336,87 @@ try {
   const stats = await evaluate(`document.getElementById('stats').textContent`);
   const fps = Number(/· (\d+) fps/.exec(stats)?.[1] ?? 0);
   assert.ok(fps >= 50, `expected a healthy frame rate, saw ${stats}`);
-  assert.match(stats, /24 views/);
+  assert.match(stats, /25 views/);
   const problems = events.filter(event => event.method === 'Runtime.exceptionThrown' || (event.method === 'Runtime.consoleAPICalled' && event.params.type === 'error') || (event.method === 'Log.entryAdded' && event.params.entry.level === 'error'));
   assert.equal(problems.length, 0, `the page reported ${problems.length} problem(s): ${JSON.stringify(problems[0]?.params ?? {}).slice(0, 300)}`);
+
+  // 5. Dragging. Three demos put handles on the canvas, and a drag has to move the handle without
+  //    turning the camera: the neighbour's position is the control for "and nothing else happened".
+  const centreOf = selector => evaluate(`(() => { const r = document.querySelector(${JSON.stringify(selector)}).getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; })()`);
+  const away = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+  /** Scroll a panel into view and wait for the scroll to settle before anything is measured. */
+  const settle = async stageId => {
+    await evaluate(`document.getElementById(${JSON.stringify(stageId)}).querySelector('.stage').scrollIntoView({ block: 'center' })`);
+    await wait(500);
+  };
+  const dragAt = async (start, dx, dy) => {
+    await call('Input.dispatchMouseEvent', { type: 'mousePressed', x: start.x, y: start.y, button: 'left', buttons: 1, clickCount: 1 });
+    for (let step = 1; step <= 10; step++) {
+      await call('Input.dispatchMouseEvent', { type: 'mouseMoved', x: start.x + dx * step / 10, y: start.y + dy * step / 10, button: 'left', buttons: 1 });
+      await wait(20);
+    }
+    await call('Input.dispatchMouseEvent', { type: 'mouseReleased', x: start.x + dx, y: start.y + dy, button: 'left', buttons: 0, clickCount: 1 });
+    await wait(300);
+  };
+
+  // The Bézier control point P1, with P0 as the witness that the camera stayed put. Nothing may
+  // scroll between the two measurements, or the viewport-relative positions move on their own.
+  await settle('path');
+  const p0Before = await centreOf('#path-labels span:nth-child(2)');
+  const p1Before = await centreOf('#path-labels span:nth-child(3)');
+  await dragAt(p1Before, -150, 80);
+  const p0After = await centreOf('#path-labels span:nth-child(2)');
+  const p1After = await centreOf('#path-labels span:nth-child(3)');
+  assert.ok(away(p1After, p1Before) > 60, `dragging the control point should move it (${away(p1After, p1Before).toFixed(0)} px)`);
+  assert.ok(away(p0After, p0Before) < 6, `dragging a handle must not orbit the camera (${away(p0After, p0Before).toFixed(1)} px)`);
+
+  // The grid marker: its label states the coordinates, so the label is the witness.
+  await settle('coordinates');
+  const markerStart = await centreOf('#coordinates-labels span');
+  const markerBefore = await evaluate(`document.querySelector('#coordinates-labels span').textContent`);
+  await dragAt(markerStart, -130, 80);
+  const markerAfter = await evaluate(`document.querySelector('#coordinates-labels span').textContent`);
+  assert.notEqual(markerAfter, markerBefore, `the dragged marker should report new coordinates (${markerBefore})`);
+
+  // The measurement: dragging B changes the distance and the angle it prints.
+  await settle('measure');
+  const bStart = await centreOf('#measure-labels span:nth-child(3)');
+  const measureBefore = await evaluate(`document.getElementById('measure-readout').textContent`);
+  await dragAt(bStart, -110, -70);
+  const measureAfter = await evaluate(`document.getElementById('measure-readout').textContent`);
+  assert.notEqual(measureAfter, measureBefore, `dragging B should remeasure (${measureBefore})`);
+
+  // The derivation: stepping must change the line, and advancing must add lines and marks.
+  const derivationState = () => evaluate(`(() => {
+    const root = document.querySelector('#secant-derivation .dvn');
+    return {
+      lines: root.querySelectorAll('.dvn-line').length,
+      strikes: root.querySelectorAll('.dvn-strike').length,
+      brackets: root.querySelectorAll('.dvn-bracket').length,
+      label: root.getAttribute('aria-label'),
+    };
+  })()`);
+  await evaluate(`window.__set('secant-position', 0)`);
+  await wait(300);
+  const opening = await derivationState();
+  await evaluate(`document.getElementById('secant-step').click()`);
+  await wait(300);
+  const stepped = await derivationState();
+  assert.equal(stepped.lines, opening.lines, 'stepping one beat stays on the same line');
+  assert.notEqual(stepped.label, opening.label, 'a beat should change the state of the line');
+  await evaluate(`window.__set('secant-position', 5)`);
+  await wait(600);
+  const cancelled = await derivationState();
+  assert.ok(cancelled.lines >= 2, `advancing should add a line (${cancelled.lines})`);
+  assert.ok(cancelled.strikes >= 1, 'the squares must be struck through when they cancel');
+  assert.ok(cancelled.brackets >= 2, 'a bracket pair should have grown around the expansion');
+  await evaluate(`window.__set('secant-position', 13)`);
+  await wait(800);
+  const finished = await derivationState();
+  assert.equal(finished.lines, 5, `the finished derivation should show every line (${finished.lines})`);
+  assert.ok(finished.strikes >= 3, `each cancellation should leave a strike (${finished.strikes})`);
+  assert.match(finished.label, /2x/, 'the last line should be the answer');
+  await evaluate(`window.__set('secant-position', 0)`);
 
   // 5. The tour has to work on a phone: at 390 px the panels stack, nothing overflows, and the first
   //    demo still draws. This is the layout half of the check — it is what catches a canvas with a
@@ -356,7 +451,7 @@ try {
   assert.ok(narrowStage.bright > 60, `the first demo should still draw on a phone (${narrowStage.bright.toFixed(0)} bright pixels)`);
   await call('Emulation.clearDeviceMetricsOverride');
 
-  console.log('PASS: twenty-four demos drawing distinct scenes, every control moving its own stage alone,');
+  console.log('PASS: twenty-five demos drawing distinct scenes, every control moving its own stage alone,');
   console.log('      the helix and the timeline running, the transport seeking and resuming, the phone layout stacking,', stats);
   console.log('     ', JSON.stringify(Object.fromEntries(stageIds.map(stageId => [stageId, Number(signatures[stageId].mean.toFixed(3))]))));
 } finally {
