@@ -853,16 +853,22 @@ function showFile(file: File, kind: string, error?: string): void {
   if (!existing) fileList.append(item);
 }
 
+/** One line of feedback under the file controls; the colour says whether it went well. */
+function setStatus(message: string, state: 'info' | 'ok' | 'error' = 'info'): void {
+  status.textContent = message;
+  status.dataset.state = state;
+}
+
 async function loadText(file: File, kind: 'poscar' | 'symmetry'): Promise<void> {
   try {
     const text = await file.text();
-    if (kind === 'poscar') { base = parsePOSCAR(text); showFile(file, 'POSCAR'); status.textContent = `${file.name} loaded`; }
-    else { const parsed = parsePhonopySymmetry(text); if (parsed.length) operations = orderOperations(parsed); showFile(file, 'PHONOPY'); status.textContent = `${file.name} · ${parsed.length} operations`; }
+    if (kind === 'poscar') { base = parsePOSCAR(text); showFile(file, 'POSCAR'); setStatus(`${file.name} loaded`, 'ok'); }
+    else { const parsed = parsePhonopySymmetry(text); if (parsed.length) operations = orderOperations(parsed); showFile(file, 'PHONOPY'); setStatus(`${file.name} · ${parsed.length} operations`, 'ok'); }
     if (kind === 'poscar') recomputeOperations(); else populateOperationOptions();
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     showFile(file, kind === 'poscar' ? 'POSCAR' : 'PHONOPY', message);
-    status.textContent = `${file.name}: ${message}`;
+    setStatus(`${file.name}: ${message}`, 'error');
   }
 }
 
@@ -873,7 +879,7 @@ async function loadUnknown(file: File): Promise<void> {
 }
 
 async function init(): Promise<void> {
-  view = await WebGPUView.create(canvas, { onError: message => { status.textContent = message; } });
+  view = await WebGPUView.create(canvas, { onError: message => setStatus(message, 'error') });
   if (disposed) { view.dispose(); return; }
   view.camera.yaw = .62; view.camera.pitch = .38;
   // Re-fit when the stage changes shape, so a narrow window cannot clip the box and a resize cannot
@@ -942,12 +948,12 @@ async function init(): Promise<void> {
       progress = Math.min(1, progress + delta * speed / 1.3);
       if (progress >= 1) playing = false;
     }
-    try { update(); } catch (error) { status.textContent = error instanceof Error ? error.message : String(error); }
+    try { update(); } catch (error) { setStatus(error instanceof Error ? error.message : String(error), 'error'); }
     frame = requestAnimationFrame(tick);
   };
   frame = requestAnimationFrame(tick);
-  status.textContent = 'Ready · ' + operations.length + ' operations';
+  setStatus('Ready · ' + operations.length + ' operations');
 }
 
 window.addEventListener('pagehide', () => { disposed = true; cancelAnimationFrame(frame); lifetime.abort(); labels?.dispose(); view?.dispose(); }, { once: true });
-void init().catch(error => { status.textContent = String(error); });
+void init().catch(error => setStatus(String(error), 'error'));

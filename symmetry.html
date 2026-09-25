@@ -72,7 +72,9 @@ input[type=range]{width:100%;accent-color:#70d7df;margin:2px 0}
 .report-line.bad{color:var(--bad)}
 .map-grid{display:flex;flex-wrap:wrap;gap:4px;margin-top:7px}
 .map-cell{font:10.5px ui-monospace,monospace;padding:2px 5px;border-radius:5px;background:#162536;border-left:3px solid var(--accent)}
-#status{color:#ffaca4;font-size:11px;min-height:1em}
+#status{color:#9fd8a8;font-size:11px;min-height:1em}
+#status[data-state=info]{color:#a4b3c6}
+#status[data-state=error]{color:#ffaca4}
 @media(max-width:900px){body{overflow:auto}main{grid-template-columns:1fr;height:auto}.stage{height:52vh}.app-bar .hint{display:none}aside{overflow:visible}}
 </style></head>
 <body>
