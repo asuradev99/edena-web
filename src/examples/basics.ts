@@ -10,7 +10,7 @@ import {
   axes3d, boundsBox, box, boxEdges, cylinder, polyline, arrow, circle, sphere, shadedSphere, wireSphere, isosurface,
   parametricSurface, functionSurface, functionCurve, merge, rgba, lerp, smooth, transform, applyMatrix,
   createParticleState, stepParticles, streamlines, sphereSeeds, type VectorField, type ParticleAcceleration,
-  mathml, mi, mn, mo, mtext, msub, msup, row, vec, tickValues, formatTick, plotFrame, viridis, plasma,
+  mathml, mi, mn, mo, mtext, msub, msup, row, vec, tickValues, niceStep, formatTick, plotFrame, viridis, plasma,
   Geometry, type Vec3, type Rgb,
 } from '../index.js';
 
@@ -551,6 +551,117 @@ function colourDemo(view: WebGPUView): Demo {
   sync();
 
   return { labels, update: () => {} };
+}
+
+/* --------------------------------------------------------------------------------------------
+ * 20 · A bar chart in 3D: data becomes geometry, and a sort eases rather than jumps.
+ * ------------------------------------------------------------------------------------------ */
+
+function barDemo(view: WebGPUView): Demo {
+  look(view, .55, .24, 12);
+  // The bars stand on y = 0 and reach 7, so look above the baseline rather than at it.
+  view.camera.target = [0, 2.6, 0];
+  const labels = new LabelLayer($('bars-labels'), view.camera);
+  const spin = new Group();
+  view.world.add(spin);
+
+  const series: Record<string, { name: string; values: number[] }> = {
+    orbits: { name: 'orbit radii (AU)', values: [.39, .72, 1, 1.52, 5.2, 9.58, 19.2, 30.1] },
+    moons: { name: 'known moons', values: [0, 0, 1, 2, 95, 146, 28, 16] },
+    sizes: { name: 'mean diameter (10³ km)', values: [4.9, 12.1, 12.7, 6.8, 139.8, 116.5, 50.7, 49.2] },
+  };
+  const slots = 8, gap = 1.05;
+  let kind = 'orbits', rank = 0, phase = 0, spinning = !reducedMotion;
+  let heights = [...series.orbits.values];
+  let targets = [...heights];
+  const barMesh = box([-.3, 0, -.3], [.3, 1, .3]);
+  let bars: Visual[] = [];
+  let gridLines: Visual | undefined;
+  let axisLabels: HTMLElement[] = [];
+
+  const scale = (values: number[]): number => Math.max(...values) * 1.15;
+  const paint = (): void => {
+    const maximum = scale(targets);
+    for (let index = 0; index < slots; index++) {
+      const value = heights[index] / maximum;
+      bars[index].scale = [1, Math.max(.001, value * 7), 1];
+      bars[index].position = [(index - (slots - 1) / 2) * gap, 0, 0];
+    }
+  };
+
+  const build = (): void => {
+    const values = series[kind].values;
+    targets = rank ? [...values].sort((a, b) => b - a) : [...values];
+    heights = rank ? [...values] : [...values];
+    if (!rank) heights = [...values];
+    const maximum = scale(targets);
+    spin.clear();
+    bars = [];
+    // A grid and a value axis: ticks are the library's own nice numbers.
+    const ticks = tickValues(0, maximum, 5);
+    const lines: Geometry[] = [polyline([[-(slots - 1) / 2 * gap - .7, 0, 0], [(slots - 1) / 2 * gap + .7, 0, 0]], .006)];
+    spin.add(new Visual(count(merge(...lines)), rgba('#9db0c2', .5)));
+    const gridGeometry: Geometry[] = ticks.filter(value => value > 0).map(value => polyline([[-(slots - 1) / 2 * gap - .7, value / maximum * 7, 0], [(slots - 1) / 2 * gap + .7, value / maximum * 7, 0]], .003));
+    gridLines = new Visual(count(merge(...gridGeometry)), rgba('#9db0c2', .2));
+    spin.add(gridLines);
+    for (const label of axisLabels) label.remove();
+    axisLabels = ticks.map(value => labels.addHTML(mathml(mn(value.toFixed(value < 1 && value > 0 ? 2 : 0))), () => [-(slots - 1) / 2 * gap - 1, value / maximum * 7, 0], '#8b98a8', 'math-label'));
+    for (let index = 0; index < slots; index++) {
+      // `viridis` returns components in [0, 1] — for per-vertex colours, and for a solid once they
+      // are written as hex.
+      const shade = `#${viridis(index / (slots - 1)).map(component => Math.round(component * 255).toString(16).padStart(2, '0')).join('')}`;
+      const bar = new Visual(barMesh, rgba(shade));
+      spin.add(bar);
+      bars.push(bar);
+    }
+    paint();
+    const text = `${series[kind].name} · max ${Math.max(...values).toFixed(values === series.moons.values ? 0 : 1)}`;
+    $('bars-readout').textContent = text;
+    labels.addHTML(mathml(mtext(text)), () => [0, -1.3, 0], '#9db0c2', 'math-label');
+  };
+
+  const seriesSelect = $<HTMLSelectElement>('bars-series');
+  const sortInput = $<HTMLInputElement>('bars-sort');
+  const playButton = $<HTMLButtonElement>('bars-play');
+  const spinButton = $<HTMLButtonElement>('bars-spin');
+  let playing = !reducedMotion;
+  const button = (): void => {
+    playButton.textContent = playing ? 'Pause' : 'Play';
+    playButton.setAttribute('aria-pressed', String(playing));
+    spinButton.textContent = spinning ? 'Turning' : 'Still';
+    spinButton.setAttribute('aria-pressed', String(spinning));
+  };
+  seriesSelect.addEventListener('change', () => { kind = seriesSelect.value; build(); });
+  sortInput.addEventListener('input', () => {
+    rank = Number(sortInput.value);
+    $('bars-sort-value').textContent = rank < .5 ? 'by index' : 'by size';
+    targets = rank < .5 ? [...series[kind].values] : [...series[kind].values].sort((a, b) => b - a);
+    playing = true;
+    button();
+  });
+  spinButton.addEventListener('click', () => { spinning = !spinning; button(); });
+  playButton.addEventListener('click', () => { playing = !playing; button(); });
+  build();
+  button();
+
+  return {
+    labels,
+    update: delta => {
+      if (spinning) phase += delta * .3;
+      spin.rotation = phase;
+      // Ease the heights towards the target order: a sort that jumps is a sort you cannot follow.
+      if (playing) {
+        let settled = true;
+        for (let index = 0; index < slots; index++) {
+          const difference = targets[index] - heights[index];
+          if (Math.abs(difference) > 1e-3) settled = false;
+          heights[index] += difference * Math.min(1, delta * 4.5);
+        }
+        paint();
+        if (settled) { playing = false; button(); }
+      }
+    },
+  };
 }
 
 /* --------------------------------------------------------------------------------------------
@@ -1449,7 +1560,7 @@ function plotDemo(view: WebGPUView): Demo {
  * ------------------------------------------------------------------------------------------ */
 
 async function initialize(): Promise<void> {
-  const canvases = ['coordinates-canvas', 'interpolation-canvas', 'transparency-canvas', 'shapes-canvas', 'groups-canvas', 'labels-canvas', 'colour-canvas', 'plot-canvas', 'depth-canvas', 'instances-canvas', 'camera-canvas', 'simulation-canvas', 'field-canvas', 'streamlines-canvas', 'story-canvas', 'vectors-canvas', 'path-canvas', 'normals-canvas', 'layers-canvas'];
+  const canvases = ['coordinates-canvas', 'interpolation-canvas', 'transparency-canvas', 'shapes-canvas', 'groups-canvas', 'labels-canvas', 'colour-canvas', 'plot-canvas', 'depth-canvas', 'instances-canvas', 'camera-canvas', 'simulation-canvas', 'field-canvas', 'streamlines-canvas', 'story-canvas', 'vectors-canvas', 'path-canvas', 'normals-canvas', 'layers-canvas', 'bars-canvas'];
   const first = await WebGPUView.create($<HTMLCanvasElement>(canvases[0]), { samples: msaa, maxDpr, onError: report });
   views.push(first);
   if (disposed) { first.dispose(); return; }
@@ -1476,6 +1587,7 @@ async function initialize(): Promise<void> {
     pathDemo(views[16]),
     normalDemo(views[17]),
     layerDemo(views[18]),
+    barDemo(views[19]),
   );
 
   // Eleven views on one page: drawing the ones below the fold would cost a full render each frame for

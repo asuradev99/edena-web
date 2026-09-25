@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="theme-color" content="#090e16">
-<meta name="description" content="The nineteen pieces Edena is built from: the 3D coordinate system, interpolation, transparent solids, geometry primitives, nested groups, projected labels, colour from data, a chart in 3D, depth, many copies of one mesh, a camera move, a hand-stepped simulation, an implicit surface, streamlines through a field, a story told in steps, a vector diagram, a path to travel along, the normals of a surface, and layers you can switch off.">
+<meta name="description" content="The twenty pieces Edena is built from: the 3D coordinate system, interpolation, transparent solids, geometry primitives, nested groups, projected labels, colour from data, a chart in 3D, depth, many copies of one mesh, a camera move, a hand-stepped simulation, an implicit surface, streamlines through a field, a story told in steps, a vector diagram, a path to travel along, the normals of a surface, layers you can switch off, and a chart built from data.">
 <title>Edena · basics</title>
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <style>
@@ -64,7 +64,7 @@
   <main>
     <div class="intro">
       <span class="eyebrow">START HERE · ONE IDEA PER DEMO</span>
-      <h1>The nineteen pieces the rest is built from.</h1>
+      <h1>The twenty pieces the rest is built from.</h1>
       <p class="lede">Every other page in this showcase is a combination of a few small, separable ideas: a world with a camera, geometry made of triangles, transforms and interpolation, transparency, and text projected onto the scene. Each demo below isolates one of them — with the API it uses written underneath the title — so you can read it, then reuse it.</p>
     </div>
     <ul class="toc">
@@ -87,6 +87,7 @@
       <li><a href="#path">17 · A path to travel along</a></li>
       <li><a href="#normals">18 · A surface and its normals</a></li>
       <li><a href="#layers">19 · Switching layers on and off</a></li>
+      <li><a href="#bars">20 · A bar chart in 3D</a></li>
     </ul>
 
     <div class="grid">
@@ -161,6 +162,19 @@
           <label>Palette <select id="colour-palette"><option value="viridis" selected>Viridis</option><option value="plasma">Plasma</option></select></label>
           <label>Height <input id="colour-amplitude" type="range" min="0.2" max="1.4" step="0.05" value="0.8"> <output id="colour-amplitude-value">0.80</output></label>
           <p>Geometry can carry a linear RGB triple per vertex, which is the whole mechanism behind a colour-mapped surface: the palette is a function from a number in [0,1] to a colour, and the surface is a grid of triangles the demo builds by hand. The ribbon beside it samples the same function, so the encoding is readable.</p>
+        </div>
+      </section>
+
+      <section class="panel" id="bars" aria-label="A bar chart in 3D">
+        <div class="panel-head"><span class="index">20</span><div><h2>A bar chart in 3D</h2><p>box · tickValues · niceStep · ramps · a tweened sort</p></div><span class="tag">CHART</span></div>
+        <div class="stage"><canvas id="bars-canvas" aria-label="Eight bars rising from a grid, coloured by value, with a labelled value axis"></canvas><div class="labels" id="bars-labels"></div></div>
+        <div class="controls">
+          <label>Series <select id="bars-series"><option value="orbits" selected>Orbit radii</option><option value="moons">Moon counts</option><option value="sizes">Body diameters</option></select></label>
+          <label><button id="bars-play" aria-pressed="false">Pause</button></label>
+          <label>Sort <input id="bars-sort" type="range" min="0" max="1" step="0.02" value="0"> <output id="bars-sort-value">by index</output></label>
+          <label><button id="bars-spin" aria-pressed="true">Turning</button></label>
+          <p class="readout" id="bars-readout">orbits</p>
+          <p>Data becomes geometry: one unit bar mesh, scaled per datum, sitting on a grid whose ticks come from <code>tickValues</code> and <code>niceStep</code>. The sort slider eases the heights towards their ranked order rather than jumping, which is the whole reason an animated chart reads better than a redrawn one — and it is the same <code>smooth</code> the rest of the tour uses.</p>
         </div>
       </section>
 
@@ -307,7 +321,7 @@
     <p class="status" id="status" role="alert" hidden></p>
   </main>
   <footer>
-    <span>Edena TypeScript visualization library · one device, nineteen views</span>
+    <span>Edena TypeScript visualization library · one device, twenty views</span>
     <span><a href="index.html">playground ↗</a> · <a href="legacy.html">archive ↗</a></span>
   </footer>
   <script type="module" src="build/examples/basics.js"></script>
