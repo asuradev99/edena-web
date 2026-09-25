@@ -1,9 +1,11 @@
 // Run against a Chrome debugging session: node scripts/check-depth.mjs [port]
 //
-// Checks two things against a live page:
-//   1. the renderer's depth behaviour (opaque order-independence, translucent blending), and
-//   2. the crystal viewer: every listed operation animates, and each caption's "N of M sites move"
-//      is a count the animation actually honours.
+// Checks three things against a live page:
+//   1. the renderer's depth behaviour (opaque order-independence, translucent blending),
+//   2. the crystal viewer: every listed operation animates, each caption's "N of M sites move" is a
+//      count the animation actually honours, and every operation reads distinctly, and
+//   3. the viewer's interaction locks: the identity cannot be played, a zoom survives an operation
+//      change, and choosing an operation stays well under a frame budget.
 import assert from 'node:assert/strict';
 const port=process.argv[2]??'9333';
 const target=await(await fetch(`http://localhost:${port}/json/new?http://127.0.0.1:5173/symmetry.html`,{method:'PUT'})).json();
@@ -31,6 +33,8 @@ try {
     // The viewer animates one operation at a time, so give every option a turn.
     const wait=ms=>new Promise(resolve=>setTimeout(resolve,ms));
     const select=document.getElementById('operation');
+    const play=document.getElementById('play');
+    const scene=document.getElementById('scene');
     const captions=[];
     for(let index=0;index<select.options.length;index++){
       select.value=String(index);
@@ -38,7 +42,49 @@ try {
       await wait(0);
       captions.push(document.getElementById('stage-op').textContent);
     }
-    return {first,reversed,translucentBehind,translucentFront,captions,report:document.getElementById('mapping').textContent,status:document.getElementById('status').textContent};
+    // Every operation must read distinctly: without the power suffix S4 and S4^3 about [100] were
+    // the same words for two different maps.
+    const labels=[...select.options].map(option=>option.textContent.replace(/^[0-9]+\\.\\s*/,'').replace(/\\s*·\\s*[0-9]+ moved$/,''));
+    const distinctLabels=new Set(labels).size;
+
+    // Pausing keeps the measured frames comparable; choosing an operation otherwise plays it.
+    const pause=async()=>{if(play.textContent==='Ⅱ')play.click();await wait(0);};
+    select.value='0';select.dispatchEvent(new Event('change'));await wait(0);
+    const identityPlayDisabled=play.disabled;
+    select.value='1';select.dispatchEvent(new Event('change'));await wait(0);
+    const rotationPlayDisabled=play.disabled;
+    await pause();
+
+    // How much of the stage the drawn box fills, sampled from the canvas.
+    const drawnHeight=async()=>{
+      const image=new Image();image.src=scene.toDataURL();await image.decode();
+      const probe=document.createElement('canvas');probe.width=216;probe.height=174;
+      const context=probe.getContext('2d');context.drawImage(image,0,0,216,174);
+      const data=context.getImageData(0,0,216,174).data;
+      let top=174,bottom=0;
+      for(let y=0;y<174;y++)for(let x=0;x<216;x++){const i=(y*216+x)*4;if(data[i]+data[i+1]+data[i+2]>160){top=Math.min(top,y);bottom=Math.max(bottom,y);break;}}
+      return bottom-top;
+    };
+    const beforeZoom=await drawnHeight();
+    for(let step=0;step<6;step++){
+      scene.dispatchEvent(new WheelEvent('wheel',{deltaY:-120,clientX:scene.clientWidth/2,clientY:scene.clientHeight/2,bubbles:true,cancelable:true}));
+      await wait(25);
+    }
+    await wait(250);
+    const zoomed=await drawnHeight();
+    select.value='7';select.dispatchEvent(new Event('change'));await wait(300);await pause();await wait(200);
+    const zoomedAfterSwitch=await drawnHeight();
+
+    // Choosing an operation rebuilds the scene; it used to cost 55-95 ms because the shaded sphere
+    // was rebuilt per element, which is thousands of vertices.
+    const switchTimes=[];
+    for(const index of [2,8,16,24,32,40]){
+      const started=performance.now();
+      select.value=String(index);select.dispatchEvent(new Event('change'));
+      switchTimes.push(performance.now()-started);
+    }
+    return {first,reversed,translucentBehind,translucentFront,captions,report:document.getElementById('mapping').textContent,status:document.getElementById('status').textContent,
+      distinctLabels,beforeZoom,zoomed,zoomedAfterSwitch,slowestSwitch:Math.max(...switchTimes),identityPlayDisabled,rotationPlayDisabled};
   })()`});
   if(result.exceptionDetails)throw new Error(result.exceptionDetails.text+JSON.stringify(result.exceptionDetails));
   const value=result.result.value;
@@ -56,5 +102,14 @@ try {
   assert.ok(Math.max(...moved)>=4,'the inversion moves 4 of the 5 perovskite sites');
   assert.match(value.report,/verified: every site maps to a distinct equivalent site/);
   assert.match(value.status,/^Ready/);
-  console.log('PASS: opaque depth, draw-order independence, translucent depth, and every operation captioned',{operations:value.captions.length,moving:moved.filter(count=>count>0).length,status:value.status});
+  assert.equal(value.distinctLabels,48,'every operation must read distinctly (S4 and S4^3 differ only by the power)');
+
+  // Viewer interaction locks.
+  assert.equal(value.identityPlayDisabled,true,'the identity relocates nothing, so it cannot be played');
+  assert.equal(value.rotationPlayDisabled,false,'a rotation must be playable');
+  assert.ok(value.zoomed>value.beforeZoom+5,`zooming must enlarge the drawn box (${value.beforeZoom} -> ${value.zoomed})`);
+  assert.ok(Math.abs(value.zoomedAfterSwitch-value.zoomed)<=3,`choosing an operation must keep the zoom (${value.zoomed} -> ${value.zoomedAfterSwitch})`);
+  assert.ok(value.slowestSwitch<80,`choosing an operation must stay inside a frame budget (slowest ${value.slowestSwitch.toFixed(1)} ms)`);
+  console.log('PASS: opaque depth, draw-order independence, translucent depth, every operation captioned, and the viewer interaction locks',
+    {operations:value.captions.length,moving:moved.filter(count=>count>0).length,slowestSwitchMs:Number(value.slowestSwitch.toFixed(1)),status:value.status});
 } finally {socket.close();await fetch(`http://localhost:${port}/json/close/${target.id}`);}
