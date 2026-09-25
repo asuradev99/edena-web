@@ -169,7 +169,8 @@ try {
   assert.ok(counts.every(count=>count.movers+count.pinned===count.total),'movers plus pinned sites must cover the cell: '+JSON.stringify(nonIdentity.filter((caption,index)=>counts[index]&&counts[index].movers+counts[index].pinned!==counts[index].total)));
   assert.ok(counts.filter(count=>count.movers>0).length>=20,'most operations must visibly move sites');
   assert.ok(Math.max(...counts.map(count=>count.movers))>=4,'the inversion moves 4 of the 5 perovskite sites');
-  assert.match(value.report,/verified: every site maps to a distinct equivalent site/);
+  assert.match(value.report,/maps every site to a distinct equivalent site of the cell/);
+  assert.match(value.report,/the animation as drawn permutes those sites/);
   assert.match(value.statusBeforeFiles,/^Ready/);
   assert.equal(value.distinctLabels,48,'every operation must read distinctly (S4 and S4^3 differ only by the power)');
 

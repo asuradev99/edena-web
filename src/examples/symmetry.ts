@@ -2,7 +2,7 @@ import {
   WebGPUView, Visual, Geometry, LabelLayer, rgba, smooth, clamp, polyline, merge, shadedSphere, arrow, wireSphere,
   parsePOSCAR, parsePhonopySymmetry,
   latticeSites, supercell as makeSupercell, bonds as findBonds, cellVolume,
-  fractionalToCartesian, shortestDistance, appearanceFor,
+  fractionalToCartesian, cartesianToFractional, shortestDistance, appearanceFor,
   latticePointGroup, mapsOntoSelf, siteMapping, symmetryOrbits,
   operationIsometry, isometryPoint, isometryTarget, rotateAboutAxis,
   mathml, mi, mn, mo, row, matrix, vec,
@@ -51,12 +51,18 @@ const ELEMENT_COLOR = (() => { const map = new Map<string, string>(); return (sy
 
 // --- Small vector helpers ----------------------------------------------------------------------
 const sub = (a: Vec3, b: Vec3): Vec3 => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+
 const add = (a: Vec3, b: Vec3): Vec3 => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
 const times = (a: Vec3, factor: number): Vec3 => [a[0] * factor, a[1] * factor, a[2] * factor];
 const dot3 = (a: Vec3, b: Vec3): number => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
 const cross3 = (a: Vec3, b: Vec3): Vec3 => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
 const unit3 = (a: Vec3): Vec3 => { const length = Math.hypot(...a) || 1; return [a[0] / length, a[1] / length, a[2] / length]; };
 const between = (a: Vec3, b: Vec3): number => Math.hypot(...sub(a, b));
+/** Distance between two points as a fraction of the cell, so it is the same in every direction. */
+const circularBetween = (a: Vec3, b: Vec3, lattice: Lattice): number => {
+  const first = cartesianToFractional(a, lattice), second = cartesianToFractional(b, lattice);
+  return Math.hypot(...[0, 1, 2].map(axis => { const delta = first[axis] - second[axis]; return delta - Math.round(delta); }));
+};
 
 /** Gentle start and stop, so the motion reads as a crystal settling rather than a linear wipe. */
 const ease = (value: number): number => { const t = clamp(value, 0, 1); return t * t * t * (t * (t * 6 - 15) + 10); };
@@ -97,6 +103,8 @@ type Built = {
   motion: Motion;
   centre: Vec3;
   extent: number;
+  /** Whether the animation, in the frame it is drawn in, permutes the drawn sites. */
+  drawnPermutes: boolean;
   /** Sites the operation visibly relocates; the report and the highlights both use this set. */
   movers: Set<number>;
   /** The same sites in index order, so the "before" markers pair with them without rebuilding. */
@@ -424,15 +432,21 @@ function rebuild(): void {
   const widest = Math.max(...[...appearance.values()].map(entry => entry.radius));
   const unit = Math.min(1, shortest * .26 / widest);
 
-  // Drawn positions: base fractional + cell offset, centred on the lattice point at the origin.
-  // `big.positions` are fractional in the supercell lattice, so converting with the supercell
-  // lattice and subtracting the pivot is the same as (f + offset) in base cell units.
+  // Drawn positions: base fractional + cell offset, centred on the cell so that the box fills the
+  // picture and every element — which passes through the lattice point at the origin — is drawn down
+  // the middle. Whether the operation is a symmetry *of the drawn cell* is checked below; it is not
+  // automatic, because the centre of a cell is itself a lattice point only for even repeat counts.
   const ideal = big.positions.map(position => sub(fractionalToCartesian(position, big.lattice), pivot));
   const motion = motionFor(operations[operationIndex]);
   const target = ideal.map(point => isometryTarget(motion, point, big.lattice));
   const drift = ideal.map((point, index) => sub(target[index], isometryPoint(motion, point, 1)));
   const tolerance = Math.max(1e-3, bounds.extent * 2e-4);
   const moverList = ideal.map((_, index) => index).filter(index => between(ideal[index], target[index]) > tolerance);
+  // Whether the animation, *as drawn*, permutes the sites. The operations pass through the lattice
+  // point at the crystal's origin, and the picture is centred on the middle of the cell; those are the
+  // same point only when the crystal has a symmetry centre there, so this is checked, not assumed.
+  const drawnPermutes = target.every((point, index) => ideal.some((other, slot) =>
+    big.species[slot] === big.species[index] && circularBetween(point, other, big.lattice) < 1e-3));
   const movers = new Set(moverList);
   // Announce what the picture will actually do. A point-group operation of a high-symmetry crystal
   // fixes every atom that sits on its element, so "3 of 5 sites move" is information, not a bug —
@@ -556,6 +570,7 @@ function rebuild(): void {
   built = {
     big, baseCount, ideal, target, drift, atomVisuals, atomScales, bondVisuals, bondSymbols, ghostSymbols, ghostVisuals,
     cellVisual, trailVisuals, trailSymbols, elementVisuals: element.visuals, startVisuals, atomLabels: [],
+    drawnPermutes,
     elementLabel: element.label, elementAnchor: element.anchor, motion, centre: bounds.centre, extent: bounds.extent, movers, moverList, shortest,
   };
   view.world.add(...atomVisuals, ...ghostVisuals, ...bondVisuals, ...(cellVisual ? [cellVisual] : []), ...trailVisuals, ...element.visuals, ...startVisuals);
@@ -667,6 +682,8 @@ function orbitsFor(used: CrystalOperation[]): number[][] {
 }
 
 function writeMapping(): void {
+  // The animation is the thing on screen, so the report judges what it actually does.
+  const drawnOk = built?.drawnPermutes ?? false;
   const exact = exactOperations();
   const orbits = orbitsFor(exact.length ? exact : [operations[operationIndex]]);
   const mapping = siteMapping(base, operations[operationIndex], 1e-3);
@@ -687,7 +704,8 @@ function writeMapping(): void {
   mappingPanel.innerHTML = `
     <div class="report-line"><strong>${exact.length}</strong> of ${operationsFromFile ? `${operations.length} listed operations` : `the lattice's ${latticeGroupSize} point-group operations`} map this cell onto itself.</div>
     ${!operationsFromFile && exact.length < latticeGroupSize ? '<div class="report-line muted">The rest are either broken by this decoration or need a lattice translation as well, which makes them space-group operations rather than point operations about the origin.</div>' : ''}
-    <div class="report-line ${valid ? 'ok' : 'bad'}">${valid ? '✓ verified: every site maps to a distinct equivalent site, and the animation ends back inside the cell.' : '✗ this operation does not preserve the structure.'}</div>
+    <div class="report-line ${valid ? 'ok' : 'bad'}">${valid ? '✓ this operation maps every site to a distinct equivalent site of the cell.' : '✗ this operation does not preserve the structure.'}</div>
+    <div class="report-line ${drawnOk ? 'ok' : 'bad'}">${drawnOk ? '✓ the animation as drawn permutes those sites and ends back inside the box.' : '✗ as drawn it does not: the box is centred on the middle of the cell, while the operations pass through the lattice point at its corner.'}</div>
     <div class="report-line"><strong>${orbits.length}</strong> symmetry orbit${orbits.length === 1 ? '' : 's'}: ${orbitList}${orbits.length > 8 ? ` … ${orbits.length - 8} more` : ''}</div>
     <div class="report-line">This operation <strong>permutes</strong> ${moved} of the cell's ${base.positions.length} sites; the caption counts the drawn sites instead, which one fold can hide.</div>
     <div class="map-grid">${rows}${mapping.length > 14 ? `<span class="map-cell muted">+${mapping.length - 14} more</span>` : ''}</div>`;
