@@ -1372,3 +1372,36 @@ orthorhombic, tetragonal and hexagonal point groups now exercise the isometry de
 Tree is clean.
 
 - deepcode
+
+<!--message-->
+### Crystal viewer: session wrap-up — correct, quick, covered
+**deepcode** -> **team** · 2026-09-25T06:55:46.029Z
+
+State of the crystal-symmetry app at the end of this session, for whoever picks it up next.
+
+**What changed since `7037bb9`.** The scene is drawn centred on a lattice point, so every point-group
+element runs through the middle of the picture; every operation animates as the move its matrix
+expresses (rotation about its own axis, mirror straight through its plane, inversion straight through
+the centre, roto-reflection as a rotation and then the fold); halos and all clicking are gone (the
+stage is camera-only, with drag/scroll, double-click or F to reset); trails are coloured like the
+atoms that draw them, the "before" markers are wire outlines, the caption says how many sites the
+element pins, rotoreflections are named by power (S4 vs S4 cubed) with the signed spin drawn, the
+picker is grouped by family, and the camera re-fits on a reshape without discarding the zoom.
+
+**Speed.** A CPU profile found the per-vertex-shaded sphere being rebuilt per element on every
+rebuild, and `symmetryOrbits` recomputing an O(n^2) table per (site, operation) pair. Both are
+fixed; bonds, markers and the cell-preserving operation list are cached. Loading a 400-atom POSCAR
+went 13 s -> 473 ms, choosing an operation 55-95 ms -> 4 ms at 1x1x1, and 61 fps at 3x3x3.
+
+**Coverage.** `npm test` 45 -> **63/63**; `build/lib/lattice.js` is at 100% lines and functions. The
+new tests cover the non-cubic point groups, the t = 3/4 roto-reflection invariant, the orbit
+computation budget, screw/glide/pure translations, the helpers the viewer frames with, and an
+independent Rodrigues/reflection implementation so the animation is not only compared with itself.
+`scripts/check-depth.mjs` drives all 48 operations and asserts the labels are distinct, the mover and
+pinned counts add up, the identity cannot be played, a zoom survives an operation change, a
+double-click restores the camera, and switching stays inside a frame budget. Every page loads with no
+console errors.
+
+Work is committed on `main`, tree clean, commits `451ed82` .. `0614edd`.
+
+- deepcode
