@@ -36,6 +36,8 @@ console.log(operations[0].rotation, operations[0].translation);
 
 The viewer draws the cell centred on a lattice point rather than on a corner, because every point-group element passes through the origin: with the origin in the middle of the picture the drawn axis or mirror plane is where the crystal actually turns, and no atom sweeps around the edge of the box. `isometryTarget` only nudges an atom by a lattice vector when its image leaves the cell, which never happens for a cubic cell.
 
+The stage is camera-only: drag to orbit, scroll to zoom, double-click (or `F`) to put the camera back where it started. Space plays the selected operation, the arrows scrub it, `[` and `]` step through the list and `R` returns to the start.
+
 ```ts
 import { operationIsometry, isometryPoint, isometryTarget } from 'edena-web';
 

@@ -310,6 +310,14 @@ function refit(): void {
   view.camera.height = fittedHeight * zoom;
 }
 
+/** Put the camera back where it started: the default orbit, fitted to the drawn box. */
+function resetView(): void {
+  if (!view || !fitted) return;
+  view.camera.yaw = .62;
+  view.camera.pitch = .38;
+  frameFor(fitted.corners, fitted.centre, fitted.extent);
+}
+
 function boundsOf(points: Vec3[]): { min: Vec3; max: Vec3; centre: Vec3; extent: number } {
   const min: Vec3 = [Infinity, Infinity, Infinity], max: Vec3 = [-Infinity, -Infinity, -Infinity];
   for (const point of points) for (let axis = 0; axis < 3; axis++) {
@@ -851,7 +859,9 @@ async function init(): Promise<void> {
     else if (event.key === ']') step(1);
     else if (event.key === 'r' || event.key === 'R') { playing = false; progress = 0; update(); }
     else if (event.key === 'p' || event.key === 'P') playButton.click();
+    else if (event.key === 'f' || event.key === 'F' || event.key === '0') resetView();
   }, events);
+  canvas.addEventListener('dblclick', () => resetView(), events);
   poscarInput.addEventListener('change', () => { const file = poscarInput.files?.[0]; if (file) void loadText(file, 'poscar'); }, events);
   symmetryInput.addEventListener('change', () => { const file = symmetryInput.files?.[0]; if (file) void loadText(file, 'symmetry'); }, events);
   filesInput.addEventListener('change', () => { for (const file of filesInput.files ?? []) void loadUnknown(file); }, events);
