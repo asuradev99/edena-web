@@ -10,7 +10,7 @@ import {
   axes3d, boundsBox, box, boxEdges, cylinder, polyline, arrow, circle, sphere, shadedSphere, wireSphere, isosurface,
   parametricSurface, functionSurface, functionCurve, merge, rgba, lerp, smooth, transform, applyMatrix,
   createParticleState, stepParticles, streamlines, sphereSeeds, type VectorField, type ParticleAcceleration,
-  mathml, mi, mn, mo, mtext, msup, row, vec, tickValues, formatTick, plotFrame, viridis, plasma,
+  mathml, mi, mn, mo, mtext, msub, msup, row, vec, tickValues, formatTick, plotFrame, viridis, plasma,
   Geometry, type Vec3, type Rgb,
 } from '../index.js';
 
@@ -551,6 +551,91 @@ function colourDemo(view: WebGPUView): Demo {
   sync();
 
   return { labels, update: () => {} };
+}
+
+/* --------------------------------------------------------------------------------------------
+ * 17 · A path to travel along: a cubic Bezier, its control polygon, and an eased marker.
+ * ------------------------------------------------------------------------------------------ */
+
+function pathDemo(view: WebGPUView): Demo {
+  look(view, .5, .3, 9.2);
+  const labels = new LabelLayer($('path-labels'), view.camera);
+  const world = new Group();
+  view.world.add(world, new Visual(count(axes3d(1.1, .005)), rgba('#dbe9f5', .2)));
+
+  /** A cubic Bézier: the four control points are the whole description of the path. */
+  const bezier = (points: Vec3[], t: number): Vec3 => {
+    const u = 1 - t;
+    const weight = [u * u * u, 3 * u * u * t, 3 * u * t * t, t * t * t];
+    return [0, 1, 2].map(axis => points.reduce((sum, point, index) => sum + weight[index] * point[axis], 0)) as Vec3;
+  };
+  const presets: Record<string, Vec3[]> = {
+    arc: [[-3.1, -1.5, 0], [-1.6, 2.6, .8], [1.6, 2.6, -.8], [3.1, -1.5, 0]],
+    swoop: [[-3.2, .6, .4], [-1.1, -2.4, -1.2], [1.1, 2.4, 1.2], [3.2, -.6, -.4]],
+    loop: [[-2.6, 0, 0], [3.4, 2.2, 1.6], [-3.4, 2.2, -1.6], [2.6, 0, 0]],
+  };
+  let kind = 'arc', along = 0, playing = !reducedMotion;
+  let eased: Vec3 = [0, 0, 0];
+
+  const markerMesh = shadedSphere(.22);
+  const dot = new Visual(markerMesh, rgba('#f7d681'));
+  const readout = labels.addHTML(mathml(mn('')), () => [0, -3.05, 0], '#9db0c2', 'math-label');
+  const panelReadout = $('path-readout');
+
+  const build = (): void => {
+    const points = presets[kind];
+    world.clear();
+    const samples: Vec3[] = Array.from({ length: 121 }, (_, index) => bezier(points, index / 120));
+    world.add(new Visual(count(polyline(samples, .028, 8)), rgba('#58c4dd', .95)));
+    // The control polygon and the control points: the construction behind the curve.
+    world.add(new Visual(count(merge(...[0, 1, 2].map(index => polyline([points[index], points[index + 1]], .008)))), rgba('#9db0c2', .4)));
+    points.forEach((point, index) => {
+      const handle = new Visual(count(shadedSphere(.09)), rgba('#ff9ec4', .95));
+      handle.position = point;
+      world.add(handle);
+    });
+    for (let index = 0; index < 4; index++) {
+      labels.addHTML(mathml(msub(mi('P'), mn(index))), () => {
+        const point = points[index];
+        return [point[0], point[1] + .28, point[2]] as Vec3;
+      }, '#ff9ec4', 'math-label');
+    }
+    world.add(dot);
+  };
+
+  const kindSelect = $<HTMLSelectElement>('path-kind');
+  const timeInput = $<HTMLInputElement>('path-time');
+  const playButton = $<HTMLButtonElement>('path-play');
+  const place = (): void => {
+    // `smooth` slows both ends: the same parameter, read twice, is the whole lesson.
+    const easedParameter = smooth(along);
+    eased = bezier(presets[kind], easedParameter);
+    dot.position = [...eased];
+    timeInput.value = String(along);
+    $('path-time-value').textContent = `${Math.round(along * 100)}%`;
+    const text = `t = ${along.toFixed(2)} · eased ${easedParameter.toFixed(2)}`;
+    readout.innerHTML = mathml(mtext(text));
+    panelReadout.textContent = text;
+  };
+  const button = (): void => {
+    playButton.textContent = playing ? 'Pause' : 'Play';
+    playButton.setAttribute('aria-pressed', String(playing));
+  };
+  kindSelect.addEventListener('change', () => { kind = kindSelect.value; build(); place(); });
+  playButton.addEventListener('click', () => { playing = !playing; button(); });
+  timeInput.addEventListener('input', () => { playing = false; along = Number(timeInput.value); button(); place(); });
+  build();
+  button();
+  place();
+
+  return {
+    labels,
+    update: delta => {
+      if (!playing) return;
+      along = (along + delta * .32) % 1;
+      place();
+    },
+  };
 }
 
 /* --------------------------------------------------------------------------------------------
@@ -1226,7 +1311,7 @@ function plotDemo(view: WebGPUView): Demo {
  * ------------------------------------------------------------------------------------------ */
 
 async function initialize(): Promise<void> {
-  const canvases = ['coordinates-canvas', 'interpolation-canvas', 'transparency-canvas', 'shapes-canvas', 'groups-canvas', 'labels-canvas', 'colour-canvas', 'plot-canvas', 'depth-canvas', 'instances-canvas', 'camera-canvas', 'simulation-canvas', 'field-canvas', 'streamlines-canvas', 'story-canvas', 'vectors-canvas'];
+  const canvases = ['coordinates-canvas', 'interpolation-canvas', 'transparency-canvas', 'shapes-canvas', 'groups-canvas', 'labels-canvas', 'colour-canvas', 'plot-canvas', 'depth-canvas', 'instances-canvas', 'camera-canvas', 'simulation-canvas', 'field-canvas', 'streamlines-canvas', 'story-canvas', 'vectors-canvas', 'path-canvas'];
   const first = await WebGPUView.create($<HTMLCanvasElement>(canvases[0]), { samples: msaa, maxDpr, onError: report });
   views.push(first);
   if (disposed) { first.dispose(); return; }
@@ -1250,6 +1335,7 @@ async function initialize(): Promise<void> {
     streamlineDemo(views[13]),
     storyDemo(views[14]),
     vectorDemo(views[15]),
+    pathDemo(views[16]),
   );
 
   // Eleven views on one page: drawing the ones below the fold would cost a full render each frame for

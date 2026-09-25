@@ -15,7 +15,7 @@ Open [http://localhost:5173/](http://localhost:5173/). The landing page is an in
 
 Dedicated demos:
 
-- [Basics](basics.html): start here. Sixteen small demos, one library idea each — the 3D coordinate
+- [Basics](basics.html): start here. Seventeen small demos, one library idea each — the 3D coordinate
   system and its projected labels, interpolation with a seekable `Timeline`, solids with transparent
   sides, the geometry primitives and `merge`, groups with nested transforms, typeset maths riding a
   moving point, colour taken from data, a chart drawn in 3D, and depth and draw order. Each panel names the API it uses.
@@ -41,7 +41,7 @@ view.world.add(new Visual(axes3d(1.9, .012), rgba('#dbe9f5', .9)));
 second.world.add(new Visual(box([-1, -1, -1], [1, 1, 1]), rgba('#58c4dd', .18)));
 ```
 
-The sixteen ideas, in the order the page presents them:
+The seventeen ideas, in the order the page presents them:
 
 | # | Idea | What it shows |
 | --- | --- | --- |
@@ -61,6 +61,9 @@ The sixteen ideas, in the order the page presents them:
 | 14 | Vector fields | `streamlines` integrated with RK4 from `sphereSeeds`, with markers riding the polylines |
 | 15 | Story | four cues on one `Timeline`, group opacity and per-visual `reveal`, scrubbed by seeking the same clock |
 | 16 | Diagram | `arrow` plus `polyline` construction lines, named with the `vec` accent, and a readout that restates the sum |
+| 17 | Path | a cubic Bézier sampled into a tube with its control polygon, and a marker whose raw and eased parameters are both printed |
+| 16 | Diagram | `arrow` plus `polyline` construction lines, named with the `vec` accent, and a readout that restates the sum |
+| 17 | Path | a cubic Bézier sampled into a tube with its control polygon, and a marker whose raw and eased parameters are both printed |
 
 ## Crystal workflow
 
@@ -221,7 +224,7 @@ than trusting the code that drew it:
 ```sh
 node scripts/check-links.mjs           # every page resolves, and every page reaches the tour
 node scripts/check-depth.mjs [port]    # renderer depth + the crystal viewer, pixel by pixel
-node scripts/check-basics.mjs [port]   # the basics tour: sixteen demos, every control, every assertion
+node scripts/check-basics.mjs [port]   # the basics tour: seventeen demos, every control, every assertion
 ```
 
 `check-basics` captures from the compositor and measures the regions back inside the page, because a
