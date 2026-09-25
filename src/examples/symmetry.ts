@@ -6,7 +6,7 @@ import {
   latticePointGroup, mapsOntoSelf, siteMapping, symmetryOrbits,
   operationIsometry, isometryPoint, isometryTarget, rotateAboutAxis,
   mathml, mi, mn, mo, msub, row, matrix, vec,
-  type Vec3, type CrystalStructure, type CrystalOperation, type Supercell, type Isometry,
+  type Vec3, type Bond, type CrystalStructure, type CrystalOperation, type Supercell, type Isometry,
 } from '../index.js';
 
 const $ = <T extends HTMLElement>(id: string): T => {
@@ -115,6 +115,8 @@ let holdStart = false;
 const hiddenElements = new Set<string>();
 let colourMode: 'species' | 'site' = 'species';
 let built: Built | undefined;
+/** Neighbour search and bonds, reused while the crystal and the bond toggle are unchanged. */
+let neighbours: { base: CrystalStructure; n: number; showBonds: boolean; shortest: number; bonds: Bond[] } | undefined;
 let frame = 0;
 let last = 0;
 let clock = 0;
@@ -286,7 +288,12 @@ function rebuild(): void {
   view.camera.target = bounds.centre;
   view.camera.height = bounds.extent * 1.45;
 
-  const shortest = shortestDistance(big.positions, big.lattice);
+  // The nearest-neighbour search and the bond list describe the structure, not the operation, and
+  // both are O(n²): re-deriving them on every operation change cost a 400-atom cell ~140 ms a time.
+  const cached = neighbours && neighbours.base === base && neighbours.n === n && neighbours.showBonds === showBonds ? neighbours : undefined;
+  const shortest = cached ? cached.shortest : shortestDistance(big.positions, big.lattice);
+  const found = cached ? cached.bonds : (showBonds && big.positions.length <= 1200 ? findBonds(big.positions, big.lattice, shortest * 1.28, { periodic: n === 1 }) : []);
+  neighbours = { base, n, showBonds, shortest, bonds: found };
   const elements = [...new Set(big.species)];
   // Forget folded elements the new structure does not contain, so a stale fold cannot blank a
   // freshly loaded crystal.
@@ -342,7 +349,7 @@ function rebuild(): void {
     const halves = new Map<string, Geometry[]>();
     const width = Math.min(.16, Math.max(.02, shortest * .055));
     const ghosts = new Set<string>();
-    for (const bond of findBonds(big.positions, big.lattice, shortest * 1.28, { periodic: n === 1 })) {
+    for (const bond of found) {
       const a = ideal[bond.i];
       const shifted: Vec3 = [big.positions[bond.j][0] + bond.image[0], big.positions[bond.j][1] + bond.image[1], big.positions[bond.j][2] + bond.image[2]];
       const b = sub(fractionalToCartesian(shifted, big.lattice), pivot);
@@ -485,9 +492,22 @@ function syncLegendControls(): void {
   if (showAllButton) showAllButton.hidden = hiddenElements.size === 0;
 }
 
-function writeMapping(): void {
+/**
+ * The structure summary — how many operations preserve the cell and what its orbits are — depends on
+ * the crystal, not on which operation is selected. Testing all of them is 48 `mapsOntoSelf` scans, so
+ * it is cached: switching operations should not re-scan the cell every time.
+ */
+let summary: { base: CrystalStructure; operations: CrystalOperation[]; fallback: CrystalOperation; exact: number; orbits: number[][] } | undefined;
+function structureSummary(): { exact: number; orbits: number[][] } {
+  const fallback = operations[operationIndex];
+  if (summary && summary.base === base && summary.operations === operations && summary.fallback === fallback) return summary;
   const exact = operations.filter(operation => mapsOntoSelf(base, operation, 1e-3));
-  const orbits = symmetryOrbits(base, exact.length ? exact : [operations[operationIndex]], 1e-3);
+  summary = { base, operations, fallback, exact: exact.length, orbits: symmetryOrbits(base, exact.length ? exact : [fallback], 1e-3) };
+  return summary;
+}
+
+function writeMapping(): void {
+  const { exact, orbits } = structureSummary();
   const mapping = siteMapping(base, operations[operationIndex], 1e-3);
   const moved = mapping.filter((target, index) => target >= 0 && target !== index).length;
   // Validation: a symmetry operation must send every site to a distinct, same-species site.
@@ -500,7 +520,7 @@ function writeMapping(): void {
     return `<span class="map-cell" style="--accent:${ELEMENT_COLOR(species)}">${species}<sub>${index}</sub> → ${target < 0 ? '∉' : `${base.species[target]}<sub>${target}</sub>`}</span>`;
   }).join('');
   mappingPanel.innerHTML = `
-    <div class="report-line"><strong>${exact.length}</strong> of ${operations.length} listed operations map this cell onto itself.</div>
+    <div class="report-line"><strong>${exact}</strong> of ${operations.length} listed operations map this cell onto itself.</div>
     <div class="report-line ${valid ? 'ok' : 'bad'}">${valid ? '✓ verified: every site maps to a distinct equivalent site, and the animation ends back inside the cell.' : '✗ this operation does not preserve the structure.'}</div>
     <div class="report-line"><strong>${orbits.length}</strong> symmetry orbit${orbits.length === 1 ? '' : 's'}: ${orbits.map(orbit => `{${orbit.join(', ')}}`).join(' ')}</div>
     <div class="report-line">This operation moves <strong>${moved}</strong> site${moved === 1 ? '' : 's'} of the cell.</div>
