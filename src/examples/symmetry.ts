@@ -319,6 +319,8 @@ function rebuild(): void {
     camera.height = bounds.extent * 1.45;
     // A rotated box projects taller than its axis-aligned extent, and the guard changes with the
     // viewport aspect (a narrow stage clips the sides too), so measure the projection and fit it.
+    // CSS pixels, not the backing store: the backing store is resized asynchronously, so framing
+    // against it is not reproducible.
     const viewportWidth = canvas.clientWidth, viewportHeight = canvas.clientHeight;
     if (viewportWidth > 0 && viewportHeight > 0) {
       const aspect = viewportWidth / viewportHeight;
