@@ -955,9 +955,15 @@ async function init(): Promise<void> {
   poscarInput.addEventListener('change', () => { const file = poscarInput.files?.[0]; if (file) void loadText(file, 'poscar'); }, events);
   symmetryInput.addEventListener('change', () => { const file = symmetryInput.files?.[0]; if (file) void loadText(file, 'symmetry'); }, events);
   filesInput.addEventListener('change', () => { for (const file of filesInput.files ?? []) void loadUnknown(file); }, events);
+  const acceptDrop = (event: DragEvent) => { for (const file of [...(event.dataTransfer?.files ?? [])]) void loadUnknown(file); };
   for (const name of ['dragover', 'dragenter']) dropZone.addEventListener(name, event => { event.preventDefault(); dropZone.classList.add('active'); }, events);
-  for (const name of ['dragleave', 'drop']) dropZone.addEventListener(name, event => { event.preventDefault(); dropZone.classList.remove('active'); }, events);
-  dropZone.addEventListener('drop', event => { for (const file of [...(event as DragEvent).dataTransfer!.files]) void loadUnknown(file); }, events);
+  for (const name of ['dragleave', 'drop']) dropZone.addEventListener(name, event => { event.preventDefault(); event.stopPropagation(); dropZone.classList.remove('active'); }, events);
+  dropZone.addEventListener('drop', acceptDrop, events);
+  // A file dropped anywhere else must not navigate the page away from the viewer, and is just as
+  // welcome as one dropped on the zone — the crystals people drag in usually land on the picture.
+  for (const name of ['dragover', 'dragenter']) window.addEventListener(name, event => { event.preventDefault(); dropZone.classList.add('active'); }, { signal: lifetime.signal });
+  window.addEventListener('dragleave', event => { if (!event.relatedTarget) dropZone.classList.remove('active'); }, { signal: lifetime.signal });
+  window.addEventListener('drop', event => { event.preventDefault(); dropZone.classList.remove('active'); acceptDrop(event); }, { signal: lifetime.signal });
   // The header folds the legend away; it is a div so it needs the keyboard behaviour of a button.
   const toggleLegend = () => {
     const collapsed = legend.classList.toggle('collapsed');
