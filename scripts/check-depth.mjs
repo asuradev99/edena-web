@@ -117,8 +117,15 @@ try {
     const captionBefore=document.getElementById('stage-op').textContent;
     await drop('broken.vasp','not a poscar at all','poscar-file');
     const rejected={status:document.getElementById('status').textContent,state:document.getElementById('status').dataset.state,caption:document.getElementById('stage-op').textContent};
+    // A phonopy file's own operations must survive a structure load: dropping the two files in
+    // either order has to keep both.
+    const yaml=['rotations:','- [1, 0, 0, 0, 1, 0, 0, 0, 1]','- [-1, 0, 0, 0, -1, 0, 0, 0, 1]','translations:','- [0, 0, 0]','- [0, 0, 0]'].join(newline);
+    await drop('sym.yaml',yaml,'symmetry-file');
+    const afterYaml=select.options.length;
+    await drop('cubic.vasp',['Cubic','1.0','5 0 0','0 5 0','0 0 5','Si','1','Direct','0 0 0'].join(newline),'poscar-file');
+    const afterStructure=select.options.length;
     return {first,reversed,translucentBehind,translucentFront,captions,report:document.getElementById('mapping').textContent,status:document.getElementById('status').textContent,
-      distinctLabels,beforeZoom,zoomed,zoomedAfterSwitch,afterReset,countMismatches,loaded,rejected,captionBefore,statusBeforeFiles,slowestSwitch:Math.max(...switchTimes),identityPlayDisabled,rotationPlayDisabled};
+      distinctLabels,beforeZoom,zoomed,zoomedAfterSwitch,afterReset,countMismatches,loaded,rejected,afterYaml,afterStructure,captionBefore,statusBeforeFiles,slowestSwitch:Math.max(...switchTimes),identityPlayDisabled,rotationPlayDisabled};
   })()`});
   if(result.exceptionDetails)throw new Error(result.exceptionDetails.text+JSON.stringify(result.exceptionDetails));
   const value=result.result.value;
@@ -164,6 +171,8 @@ try {
   assert.match(value.rejected.status,/broken\.vasp: /);
   assert.equal(value.rejected.state,'error');
   assert.equal(value.rejected.caption,value.captionBefore,'a rejected file must leave the crystal alone');
+  assert.equal(value.afterYaml,2,'the phonopy file supplies two operations');
+  assert.equal(value.afterStructure,2,'a structure load must keep the phonopy file\'s operations');
   console.log('PASS: opaque depth, draw-order independence, translucent depth, every operation captioned, and the viewer interaction locks',
     {operations:value.captions.length,moving:counts.filter(count=>count.movers>0).length,movedPerOperation:counts.map(count=>count.movers),slowestSwitchMs:Number(value.slowestSwitch.toFixed(1)),loaded:value.loaded.options,status:value.statusBeforeFiles});
 } finally {socket.close();await fetch(`http://localhost:${port}/json/close/${target.id}`);}
