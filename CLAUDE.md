@@ -58,6 +58,7 @@ Edena is a WebGPU mathematical-visualization library plus a landing showcase, fo
 
 | Path | Role |
 |------|------|
+| `src/examples/basics.ts` + `basics.html` | The basics tour, and the place to start: six small demos that each isolate one fundamental idea — the coordinate frame (`axes3d`, `boundsBox`, integer ticks, a grid, projected `LabelLayer` labels, ortho/perspective), interpolation (one `Timeline`, three easings, absolute-time seeking, `tween`), solids with transparent sides (nested `box` faces with `boxEdges` cages and an opacity control, relying on the renderer's back-to-front sort), the geometry primitives side by side ending in a `parametricSurface`, groups with nested transforms and inherited opacity, and typeset maths riding a moving point. Each demo is a self-contained factory returning its own `update`; the page gives them one device, one render loop, `?samples=1`/`?dpr=1`, and `prefers-reduced-motion` |
 | `src/showcase/main.ts` + `index.html` | The landing showcase: three panels (curve, value-colored surface, perspective isosurface) sharing one device, with a frame-time readout |
 | `src/examples/field.ts` + `field.html` | Interactive isosurface: field (two balls / metaball blend / gyroid / torus), isovalue slider, marching resolution, rotation and an isovalue "melt" |
 | `src/examples/particles.ts` + `particles.html` | GPU particle benchmark: oscillator baseline (up to 100 000 particles) and all-pairs `nbody` gravity, with mode/count selectors and GPU-step metrics |

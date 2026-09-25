@@ -15,11 +15,39 @@ Open [http://localhost:5173/](http://localhost:5173/). The landing page is an in
 
 Dedicated demos:
 
+- [Basics](basics.html): start here. Six small demos, one library idea each — the 3D coordinate
+  system and its projected labels, interpolation with a seekable `Timeline`, solids with transparent
+  sides, the geometry primitives and `merge`, groups with nested transforms, and typeset maths riding
+  a moving point. Each panel names the API it uses.
 - [Physics laboratory](physics-lab.html): Kepler orbits, direct all-pairs GPU gravity, double pendulums, the Lorenz attractor, wave interference, and a vibrating drumhead.
 - [Crystal symmetry](symmetry.html): upload a POSCAR/CONTCAR and phonopy `symmetry.yaml`, then watch each rotation, mirror, inversion and roto-reflection play on the structure — bonds, periodic neighbours, orbit trails and a live site-mapping report.
 - [GPU particles](particles.html): compare the 50K oscillator baseline with direct O(N²) GPU gravity.
 - [Electric-field animatic](electrostatics.html): a complete visual derivation for a uniformly charged ball, including the volume integral and a Gauss-law check.
 - [3D field explorer](field.html): an isolated implicit-surface example.
+
+## Basics, one idea at a time
+
+`basics.html` exists so the rest of the showcase can be read as a combination of small parts. Each
+panel is a self-contained factory in `src/examples/basics.ts` — it builds its own world, returns its
+own `update`, and names the API it demonstrates — while the page gives them one device and one render
+loop:
+
+```ts
+import { WebGPUView, Visual, box, rgba, axes3d } from 'edena-web';
+
+const view = await WebGPUView.create(canvas);          // one device…
+const second = await WebGPUView.create(otherCanvas, { device: view.device });
+view.world.add(new Visual(axes3d(1.9, .012), rgba('#dbe9f5', .9)));
+second.world.add(new Visual(box([-1, -1, -1], [1, 1, 1]), rgba('#58c4dd', .18)));
+```
+
+The six ideas, in the order the page presents them: the frame (`axes3d`, `boundsBox`, tick labels
+through `LabelLayer`, perspective or orthographic camera); motion (`Timeline`, `tween`, `smooth`,
+`lerp`, absolute-time seeking); volume (`box` faces, per-face alpha, draw-order-independent sorting,
+`boxEdges` cages); shape (`polyline`, `arrow`, `circle`, `sphere`, `shadedSphere`, `wireSphere`,
+`parametricSurface`, `merge`); hierarchy (`Group.add`, inherited `position`/`scale`/`rotation`, and
+`opacity` that multiplies down the tree); and text (`LabelLayer.addHTML` with `mathml` nodes, so
+labels stay sharp, selectable and styleable at any zoom).
 
 ## Crystal workflow
 
@@ -68,7 +96,7 @@ The public entry point exports:
 
 | Area | Main tools |
 | --- | --- |
-| Geometry | `polyline`, `arrow`, `circle`, `sphere`, `wireSphere`, `parametricSurface`, `functionCurve`, `functionSurface`, `merge` |
+| Geometry | `polyline`, `arrow`, `circle`, `sphere`, `shadedSphere`, `wireSphere`, `box`/`boxEdges`, `parametricSurface`, `functionCurve`, `functionSurface`, `merge` |
 | Plotting | `plotFrame`, `axes3d`, `boundsBox`, `niceStep`, `tickValues`, `formatTick` |
 | Fields | `isosurface` for CPU marching-tetrahedra extraction |
 | Color | `ramp`, `viridis`, `plasma`, `colorMappedSurface` |
