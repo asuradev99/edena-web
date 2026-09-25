@@ -676,7 +676,8 @@ function writeMapping(): void {
   const valid = bijective && speciesKept;
   const rows = mapping.slice(0, 14).map((target, index) => {
     const species = base.species[index];
-    return `<span class="map-cell" style="--accent:${ELEMENT_COLOR(species)}">${species}<sub>${index}</sub> → ${target < 0 ? '∉' : `${base.species[target]}<sub>${target}</sub>`}</span>`;
+    // The accent follows the legend's colouring, so a cell reads as the same site the stage draws.
+    return `<span class="map-cell" style="--accent:${atomColor(index, species)}">${species}<sub>${index}</sub> → ${target < 0 ? '∉' : `${base.species[target]}<sub>${target}</sub>`}</span>`;
   }).join('');
   // A supercell has many orbits with many indices each, so the list is capped like the map grid;
   // otherwise the report becomes a wall of numbers for a large cell.
