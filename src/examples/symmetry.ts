@@ -60,6 +60,8 @@ const ease = (value: number): number => { const t = clamp(value, 0, 1); return t
 
 const SUBSCRIPTS = '₀₁₂₃₄₅₆₇₈₉';
 const subscript = (value: number): string => String(value).split('').map(digit => SUBSCRIPTS[Number(digit)] ?? digit).join('');
+const SUPERSCRIPTS = '⁰¹²³⁴⁵⁶⁷⁸⁹';
+const superscript = (value: number): string => String(value).split('').map(digit => SUPERSCRIPTS[Number(digit)] ?? digit).join('');
 
 /** A symmetry operation together with the rigid motion it performs, so animation and element agree. */
 type Motion = Isometry & { operation: CrystalOperation };
@@ -161,8 +163,14 @@ function describeOperation(operation: CrystalOperation): string {
     return `${rotationSymbol(degrees)} · ${degrees}° ‖ ${axisLabel(motion.axis)}${shift}`;
   }
   if (Math.abs(motion.angle) < 1e-6) return `σ · mirror ⟂ ${axisLabel(motion.axis)}${shift}`;
+  // A rotoreflection is S_n^k = R(k·360/n)·σ^k, and only odd k carries a single reflection, so the
+  // power separates an operation from its inverse: S4 about [100] and S4³ about [100] differ only in
+  // the sign of the spin, and without the power the two entries read identically.
   const degrees = Math.round(Math.abs(motion.angle) * 180 / Math.PI);
-  return `S${subscript(Math.round(360 / degrees))} · rotoreflection ‖ ${axisLabel(motion.axis)}${shift}`;
+  const order = Math.round(360 / degrees);
+  const turns = ((Math.round(motion.angle * 180 / Math.PI / (360 / order)) % order) + order) % order;
+  const power = turns % 2 === 1 ? turns : turns + order;
+  return `S${subscript(order)}${power > 1 ? superscript(power) : ''} · rotoreflection ‖ ${axisLabel(motion.axis)}${shift}`;
 }
 
 function rotationSymbol(degrees: number): string {
@@ -210,7 +218,10 @@ function operationElement(motion: Motion, centre: Vec3, extent: number): { visua
   }
   const axisLine = [sub(centre, times(motion.axis, reach)), add(centre, times(motion.axis, reach))];
   visuals.push(new Visual(polyline(axisLine, .012), gold));
-  const degrees = Math.round(Math.abs(motion.angle) * 180 / Math.PI);
+  // A rotoreflection's axis has no meaningful direction, so the sign of the spin has to be spoken
+  // here: S4³ about [100] turns the other way from S4 about [100], and only the sign says so.
+  const signed = Math.round(motion.angle * 180 / Math.PI);
+  const degrees = Math.abs(signed);
   if (!motion.improper) {
     // The arc spans exactly the rotation angle and carries an arrowhead, so the angle is visible.
     const ring = rotationRing(centre, motion.axis, extent * .26, motion.angle / (Math.PI * 2));
@@ -243,7 +254,7 @@ function operationElement(motion: Motion, centre: Vec3, extent: number): { visua
     anchor,
     label: Math.abs(motion.angle) < 1e-6
       ? `mirror plane ⟂ ${axisLabel(motion.axis)}`
-      : `rotate ${degrees}° about ${axisLabel(motion.axis)}, then mirror ⟂ ${axisLabel(motion.axis)}`,
+      : `rotate ${signed}° about ${axisLabel(motion.axis)}, then mirror ⟂ ${axisLabel(motion.axis)}`,
   };
 }
 

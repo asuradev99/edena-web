@@ -285,6 +285,8 @@ test('each family performs its own geometric move, and roto-reflections do two o
   const rotated = rotateAboutAxis(point, spin.axis, spin.angle);
   const halfway = isometryPoint(spin, point, .5);
   for (let axis = 0; axis < 3; axis++) close(halfway[axis], rotated[axis], 1e-9);
+  // Three quarters through, the fold is half done, so the site sits exactly in the mirror plane.
+  close(along(isometryPoint(spin, point, .75), spin.axis), 0, 1e-9);
   const finished = isometryPoint(spin, point, 1);
   close(along(finished, spin.axis), -along(rotated, spin.axis), 1e-9);          // the fold flips the axis
   for (let axis = 0; axis < 3; axis++) close(across(finished, spin.axis)[axis], across(rotated, spin.axis)[axis], 1e-9);  // and leaves the plane alone
