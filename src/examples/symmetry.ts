@@ -931,7 +931,18 @@ async function init(): Promise<void> {
   for (const name of ['dragover', 'dragenter']) dropZone.addEventListener(name, event => { event.preventDefault(); dropZone.classList.add('active'); }, events);
   for (const name of ['dragleave', 'drop']) dropZone.addEventListener(name, event => { event.preventDefault(); dropZone.classList.remove('active'); }, events);
   dropZone.addEventListener('drop', event => { for (const file of [...(event as DragEvent).dataTransfer!.files]) void loadUnknown(file); }, events);
-  legendAnchor.addEventListener('click', () => { legend.classList.toggle('collapsed'); }, events);
+  // The header folds the legend away; it is a div so it needs the keyboard behaviour of a button.
+  const toggleLegend = () => {
+    const collapsed = legend.classList.toggle('collapsed');
+    legendAnchor.setAttribute('aria-expanded', String(!collapsed));
+  };
+  legendAnchor.addEventListener('click', toggleLegend, events);
+  legendAnchor.addEventListener('keydown', event => {
+    if (event.target !== legendAnchor) return;
+    if (event.key !== 'Enter' && event.code !== 'Space') return;
+    event.preventDefault();
+    toggleLegend();
+  }, events);
   showAllButton?.addEventListener('click', event => {
     // The button lives inside the clickable header, so stop fold-all from also collapsing it.
     event.stopPropagation();
