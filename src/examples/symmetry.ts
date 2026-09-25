@@ -406,7 +406,7 @@ function rebuild(): void {
     bondsToggle.disabled = big.positions.length > 1200;
     bondsToggle.title = bondsToggle.disabled ? 'Bonds are found for cells of up to 1,200 atoms' : 'Draw a bond between neighbouring sites';
     trailsToggle.disabled = big.positions.length > 400;
-    trailsToggle.title = trailsToggle.disabled ? 'Orbit arcs are drawn for cells of up to 400 sites' : "Trace each site's path and outline where it started";
+    trailsToggle.title = trailsToggle.disabled ? 'Orbit arcs and start outlines are drawn for cells of up to 400 sites' : "Draw the orbit arcs, and the outlines marking where each site started";
   }
 
   // The nearest-neighbour search and the bond list describe the structure, not the operation, and
