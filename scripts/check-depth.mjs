@@ -117,6 +117,15 @@ try {
     const captionBefore=document.getElementById('stage-op').textContent;
     await drop('broken.vasp','not a poscar at all','poscar-file');
     const rejected={status:document.getElementById('status').textContent,state:document.getElementById('status').dataset.state,caption:document.getElementById('stage-op').textContent};
+    // A real material: rutile's origin-centred point operations are the identity, three 2-folds,
+    // three mirrors and the inversion — 8 of the tetragonal lattice's 16. The 4-fold needs the 4_2
+    // screw's translation, so it must not appear.
+    const rutile=['Rutile TiO2','1.0','4.5937 0 0','0 4.5937 0','0 0 2.9587','Ti O','2 4','Direct',
+      '0 0 0','0.5 0.5 0.5','0.3053 0.3053 0','0.6947 0.6947 0','0.8053 0.1947 0.5','0.1947 0.8053 0.5'].join(newline);
+    await drop('rutile.vasp',rutile,'poscar-file');
+    const rutileFamilies={};
+    for(const option of select.options){const label=option.textContent;const family=/· ([^·]*?) ·/.exec(label);const key=family?family[1].trim():'?';rutileFamilies[key]=(rutileFamilies[key]??0)+1;}
+    const rutileResult={options:select.options.length,report:[...document.querySelectorAll('#mapping .report-line')].map(node=>node.textContent).join(' '),families:rutileFamilies};
     // A phonopy file's own operations must survive a structure load: dropping the two files in
     // either order has to keep both.
     const yaml=['rotations:','- [1, 0, 0, 0, 1, 0, 0, 0, 1]','- [-1, 0, 0, 0, -1, 0, 0, 0, 1]','translations:','- [0, 0, 0]','- [0, 0, 0]'].join(newline);
@@ -125,7 +134,7 @@ try {
     await drop('cubic.vasp',['Cubic','1.0','5 0 0','0 5 0','0 0 5','Si','1','Direct','0 0 0'].join(newline),'poscar-file');
     const afterStructure=select.options.length;
     return {first,reversed,translucentBehind,translucentFront,captions,report:document.getElementById('mapping').textContent,status:document.getElementById('status').textContent,
-      distinctLabels,beforeZoom,zoomed,zoomedAfterSwitch,afterReset,countMismatches,loaded,rejected,afterYaml,afterStructure,captionBefore,statusBeforeFiles,slowestSwitch:Math.max(...switchTimes),identityPlayDisabled,rotationPlayDisabled};
+      distinctLabels,beforeZoom,zoomed,zoomedAfterSwitch,afterReset,countMismatches,loaded,rejected,afterYaml,afterStructure,rutileResult,captionBefore,statusBeforeFiles,slowestSwitch:Math.max(...switchTimes),identityPlayDisabled,rotationPlayDisabled};
   })()`});
   if(result.exceptionDetails)throw new Error(result.exceptionDetails.text+JSON.stringify(result.exceptionDetails));
   const value=result.result.value;
@@ -173,6 +182,9 @@ try {
   assert.equal(value.rejected.caption,value.captionBefore,'a rejected file must leave the crystal alone');
   assert.equal(value.afterYaml,2,'the phonopy file supplies two operations');
   assert.equal(value.afterStructure,2,'a structure load must keep the phonopy file\'s operations');
+  assert.equal(value.rutileResult.options,8,`rutile has 8 origin-centred point operations (got ${value.rutileResult.options})`);
+  assert.match(value.rutileResult.report,/8 of the lattice's 16 point-group operations/);
+  assert.match(value.rutileResult.report,/need a lattice translation/,'the report explains the missing operations');
   console.log('PASS: opaque depth, draw-order independence, translucent depth, every operation captioned, and the viewer interaction locks',
-    {operations:value.captions.length,moving:counts.filter(count=>count.movers>0).length,movedPerOperation:counts.map(count=>count.movers),slowestSwitchMs:Number(value.slowestSwitch.toFixed(1)),loaded:value.loaded.options,status:value.statusBeforeFiles});
+    {operations:value.captions.length,moving:counts.filter(count=>count.movers>0).length,movedPerOperation:counts.map(count=>count.movers),slowestSwitchMs:Number(value.slowestSwitch.toFixed(1)),loaded:value.loaded.options,rutile:value.rutileResult.options,rutileFamilies:value.rutileResult.families,status:value.statusBeforeFiles});
 } finally {socket.close();await fetch(`http://localhost:${port}/json/close/${target.id}`);}
