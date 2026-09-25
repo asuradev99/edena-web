@@ -163,6 +163,25 @@ export function boxEdges(min:Vec3,max:Vec3,width=.008): Geometry {
   for(const a of [0,1]) for(const b of [0,1]) edges.push(polyline([corner(a,b,0),corner(a,b,1)],width),polyline([corner(a,0,b),corner(a,1,b)],width),polyline([corner(0,a,b),corner(1,a,b)],width));
   return merge(...edges);
 }
+/**
+ * A solid axis-aligned box: six quads, wound outward. `boxEdges` draws the cage of a cell; this is
+ * the surface itself, which is what makes a translucent solid — nested boxes, a volume element, a
+ * region of a field — visible rather than a wireframe. Faces share no vertices, so a `Visual` can
+ * fade one box without touching its neighbours.
+ */
+export function box(min:Vec3,max:Vec3): Geometry {
+  if (![...min,...max].every(Number.isFinite) || max.some((value,axis)=>value<=min[axis])) throw new Error('Invalid box bounds');
+  const [x0,y0,z0]=min,[x1,y1,z1]=max;
+  const out:number[]=[];
+  const quad=(a:Vec3,b:Vec3,c:Vec3,d:Vec3)=>{ triangle(out,a,b,c); triangle(out,a,c,d); };
+  quad([x0,y0,z1],[x1,y0,z1],[x1,y1,z1],[x0,y1,z1]);  // +z
+  quad([x1,y0,z0],[x0,y0,z0],[x0,y1,z0],[x1,y1,z0]);  // -z
+  quad([x0,y0,z0],[x0,y0,z1],[x0,y1,z1],[x0,y1,z0]);  // -x
+  quad([x1,y0,z1],[x1,y0,z0],[x1,y1,z0],[x1,y1,z1]);  // +x
+  quad([x0,y1,z1],[x1,y1,z1],[x1,y1,z0],[x0,y1,z0]);  // +y
+  quad([x0,y0,z0],[x1,y0,z0],[x1,y0,z1],[x0,y0,z1]);  // -y
+  return new Geometry(out);
+}
 export function arrow(start:Vec3,end:Vec3,width=.018): Geometry {
   const d=sub(end,start), size=Math.hypot(...d), dir=normalize(d);
   if(size<1e-8) return new Geometry([]);

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { Timeline, tween, Group, Visual, Geometry, functionCurve, functionSurface, arrow, OrbitCamera } from '../build/index.js';
+import { Timeline, tween, Group, Visual, Geometry, functionCurve, functionSurface, arrow, box, OrbitCamera } from '../build/index.js';
 import { normalizedField, enclosedFraction, chapters, DURATION, chapterAt } from '../build/demo/physics.js';
 
 test('field is finite at the center, continuous at R, and decays outside',()=>{
@@ -59,4 +59,35 @@ test('camera projection and chapter boundaries are deterministic',()=>{
   for(const point of [[0,0,0],[1,2,3],[-2,.5,4]])assert.deepEqual(camera.projectWith(shared,point,800,400),camera.project(point,800,400));
   assert.equal(chapters[chapters.length-1].end,DURATION);
   chapters.forEach((c,i)=>{assert.equal(chapterAt(c.start),i);if(i)assert.equal(chapters[i-1].end,c.start);});
+});
+
+test('box builds six outward-wound faces around its bounds', () => {
+  const min = [-1, 0, .5], max = [2, 3, 4];
+  const geometry = box(min, max);
+  // Six quads, two triangles each, three vertices each, three floats each.
+  assert.equal(geometry.vertices.length, 6 * 2 * 3 * 3);
+  const points = [];
+  for (let i = 0; i < geometry.vertices.length; i += 3) points.push([geometry.vertices[i], geometry.vertices[i + 1], geometry.vertices[i + 2]]);
+  // Every vertex sits on the surface: each coordinate is one of the two bounds.
+  for (const point of points) point.forEach((value, axis) => assert.ok(Math.abs(value - min[axis]) < 1e-6 || Math.abs(value - max[axis]) < 1e-6, 'vertex off the surface'));
+  // The bounds really are the given ones in every direction.
+  for (let axis = 0; axis < 3; axis++) {
+    assert.equal(Math.min(...points.map(point => point[axis])), min[axis]);
+    assert.equal(Math.max(...points.map(point => point[axis])), max[axis]);
+  }
+  // Divergence theorem on the triangle soup: a face wound the other way would flip its own term, so
+  // an exact volume means an exactly consistent winding.
+  let volume = 0;
+  for (let i = 0; i < geometry.vertices.length; i += 9) {
+    const [a, b, c] = [0, 1, 2].map(corner => points[i / 3 + corner]);
+    volume += (a[0] * (b[1] * c[2] - b[2] * c[1]) + a[1] * (b[2] * c[0] - b[0] * c[2]) + a[2] * (b[0] * c[1] - b[1] * c[0])) / 6;
+  }
+  assert.ok(Math.abs(Math.abs(volume) - 3 * 3 * 3.5) < 1e-9, `enclosed volume ${volume}`);
+  // The surface's centroid is the centre of the box, so no face is missing or doubled.
+  for (let axis = 0; axis < 3; axis++) {
+    const mean = points.reduce((sum, point) => sum + point[axis], 0) / points.length;
+    assert.ok(Math.abs(mean - (min[axis] + max[axis]) / 2) < 1e-9);
+  }
+  assert.throws(() => box([0, 0, 0], [0, 1, 1]));
+  assert.throws(() => box([0, 0, 0], [1, 1, Infinity]));
 });
