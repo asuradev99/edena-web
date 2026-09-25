@@ -358,12 +358,15 @@ function rebuild(): void {
   const tolerance = Math.max(1e-3, bounds.extent * 2e-4);
   const moverList = ideal.map((_, index) => index).filter(index => between(ideal[index], target[index]) > tolerance);
   const movers = new Set(moverList);
-  // Announce what the picture will actually do: a point-group operation of a high-symmetry crystal
-  // fixes every atom that sits on its element, so "2 of 5 sites move" is information, not a bug.
+  // Announce what the picture will actually do. A point-group operation of a high-symmetry crystal
+  // fixes every atom that sits on its element, so "3 of 5 sites move" is information, not a bug —
+  // and saying how many are pinned explains why they are not moving.
   const description = describeOperation(motion.operation);
+  const pinned = ideal.length - moverList.length;
+  const held = !moverList.length ? ' (all lie on the element)' : pinned ? ` · ${pinned} ${pinned === 1 ? 'lies' : 'lie'} on the element` : '';
   $('stage-op').textContent = motion.trivial
     ? `${description} — every site maps onto itself`
-    : `${description} — ${moverList.length} of ${ideal.length} sites move${moverList.length ? '' : ' (all lie on the element)'}`;
+    : `${description} — ${moverList.length} of ${ideal.length} sites move${held}`;
 
   // Shaded spheres: the light-model shade rides in the vertex colours and the element hue is the
   // Visual colour, so the renderer's multiply makes each atom read as a lit ball, not a flat disc.
