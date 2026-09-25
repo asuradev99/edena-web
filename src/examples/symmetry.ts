@@ -123,6 +123,12 @@ let built: Built | undefined;
 let neighbours: { base: CrystalStructure; n: number; showBonds: boolean; shortest: number; bonds: Bond[] } | undefined;
 /** Which structure the camera was framed for, so a manual zoom survives operation changes. */
 let framed: { base: CrystalStructure; n: number } | undefined;
+/** Bond and ghost geometry, rebuilt only when the crystal changes. */
+let bondScene: { base: CrystalStructure; n: number; halves: Map<string, Geometry>; ghosts: { symbol: string; position: Vec3; radius: Vec3 }[] } | undefined;
+/** One shaded unit sphere for every atom of every element, built on first use. */
+let atomMesh: Geometry | undefined;
+/** Wire markers, keyed by their size, dropped when the crystal changes. */
+const markerCache = new Map<string, Geometry>();
 let frame = 0;
 let last = 0;
 let clock = 0;
@@ -323,6 +329,7 @@ function rebuild(): void {
       camera.height = Math.max(bounds.extent, tall, wide) * 1.18;
     }
     framed = { base, n };
+    markerCache.clear();
   }
 
   // The nearest-neighbour search and the bond list describe the structure, not the operation, and
@@ -358,7 +365,11 @@ function rebuild(): void {
 
   // Shaded spheres: the light-model shade rides in the vertex colours and the element hue is the
   // Visual colour, so the renderer's multiply makes each atom read as a lit ball, not a flat disc.
-  const meshes = new Map(elements.map(symbol => [symbol, shadedSphere(1)]));
+  // The sphere is unit-sized and shaded per vertex, which is thousands of vertices, so one mesh is
+  // built once and shared by every element and every rebuild — rebuilding it per element was the
+  // single largest cost of choosing an operation.
+  atomMesh ??= shadedSphere(1);
+  const meshes = new Map(elements.map(symbol => [symbol, atomMesh!]));
   const atomScales: Vec3[] = big.positions.map((_, index) => { const radius = Math.max(shortest * .08, appearance.get(big.species[index])!.radius * unit); return [radius, radius, radius]; });
   const atomVisuals = big.positions.map((_, index) => {
     const visual = new Visual(meshes.get(big.species[index])!, rgba(atomColor(index, big.species[index])));
@@ -367,11 +378,16 @@ function rebuild(): void {
     return visual;
   });
   // Wire outlines left at the starting sites make "before → after" legible while the operation runs.
-  // An outline reads as a marker; a filled translucent ball just looks like another atom. One
-  // outline geometry is shared per element — a cell with 400 movers would otherwise build 400 of
-  // them, which alone cost seconds on load.
+  // An outline reads as a marker; a filled translucent ball just looks like another atom. Their size
+  // and tube width follow the crystal, so they are cached per size and dropped when it changes.
   const markerWidth = Math.max(.004, bounds.extent * .0016);
-  const markers = new Map(elements.map(symbol => [symbol, wireSphere(Math.max(.02, appearance.get(symbol)!.radius * unit * .95), 12, 7, markerWidth)]));
+  const markers = new Map(elements.map(symbol => {
+    const radius = Math.max(.02, appearance.get(symbol)!.radius * unit * .95);
+    const key = `${radius.toFixed(4)}|${markerWidth.toFixed(4)}`;
+    let geometry = markerCache.get(key);
+    if (!geometry) { geometry = wireSphere(radius, 12, 7, markerWidth); markerCache.set(key, geometry); }
+    return [symbol, geometry] as [string, Geometry];
+  }));
   const startVisuals = moverList.map(index => {
     const marker = new Visual(markers.get(big.species[index])!, rgba(atomColor(index, big.species[index]), .55));
     marker.position = ideal[index];
@@ -383,39 +399,46 @@ function rebuild(): void {
   const ghostSymbols: string[] = [];
   const bondSymbols = new Map<Visual, string>();
   if (showBonds && big.positions.length <= 1200) {
-    const halves = new Map<string, Geometry[]>();
-    const width = Math.min(.16, Math.max(.02, shortest * .055));
-    const ghosts = new Set<string>();
-    for (const bond of found) {
-      const a = ideal[bond.i];
-      const shifted: Vec3 = [big.positions[bond.j][0] + bond.image[0], big.positions[bond.j][1] + bond.image[1], big.positions[bond.j][2] + bond.image[2]];
-      const b = sub(fractionalToCartesian(shifted, big.lattice), pivot);
-      const middle: Vec3 = times(add(a, b), .5);
-      // Half-bonds are grouped by element symbol — not by colour — so the legend can fold one
-      // element away without disturbing another that happens to share a colour.
-      const symbolI = big.species[bond.i], symbolJ = big.species[bond.j];
-      const listI = halves.get(symbolI) ?? []; listI.push(polyline([a, middle], width, 5)); halves.set(symbolI, listI);
-      const listJ = halves.get(symbolJ) ?? []; listJ.push(polyline([middle, b], width, 5)); halves.set(symbolJ, listJ);
-      // A bond with a non-zero image offset ends on a periodic copy, not on a drawn atom.
-      // Show that neighbour as a faded ghost so the coordination shell reads as complete.
-      const periodicImage = bond.i !== bond.j && (bond.image[0] !== 0 || bond.image[1] !== 0 || bond.image[2] !== 0);
-      if (periodicImage) {
-        const key = `${big.species[bond.j]}:${shifted.map(value => value.toFixed(3)).join(',')}`;
-        if (!ghosts.has(key)) {
-          ghosts.add(key);
-          const ghost = new Visual(meshes.get(big.species[bond.j])!, rgba(ELEMENT_COLOR(big.species[bond.j]), .22));
-          ghost.position = b;
+    // Bonds describe the crystal, so their geometry is built once per structure and re-wrapped in new
+    // Visuals as the operation changes — the same way the shaded spheres above share one geometry.
+    if (!bondScene || bondScene.base !== base || bondScene.n !== n) {
+      const halves = new Map<string, Geometry[]>();
+      const width = Math.min(.16, Math.max(.02, shortest * .055));
+      const ghosts: { symbol: string; position: Vec3; radius: Vec3 }[] = [];
+      const seen = new Set<string>();
+      for (const bond of found) {
+        const a = ideal[bond.i];
+        const shifted: Vec3 = [big.positions[bond.j][0] + bond.image[0], big.positions[bond.j][1] + bond.image[1], big.positions[bond.j][2] + bond.image[2]];
+        const b = sub(fractionalToCartesian(shifted, big.lattice), pivot);
+        const middle: Vec3 = times(add(a, b), .5);
+        // Half-bonds are grouped by element symbol — not by colour — so the legend can fold one
+        // element away without disturbing another that happens to share a colour.
+        const symbolI = big.species[bond.i], symbolJ = big.species[bond.j];
+        const listI = halves.get(symbolI) ?? []; listI.push(polyline([a, middle], width, 5)); halves.set(symbolI, listI);
+        const listJ = halves.get(symbolJ) ?? []; listJ.push(polyline([middle, b], width, 5)); halves.set(symbolJ, listJ);
+        // A bond with a non-zero image offset ends on a periodic copy, not on a drawn atom.
+        // Show that neighbour as a faded ghost so the coordination shell reads as complete.
+        const periodicImage = bond.i !== bond.j && (bond.image[0] !== 0 || bond.image[1] !== 0 || bond.image[2] !== 0);
+        const key = `${symbolJ}:${shifted.map(value => value.toFixed(3)).join(',')}`;
+        if (periodicImage && !seen.has(key)) {
+          seen.add(key);
           // Slightly smaller than a real site, so a periodic image never reads as an atom of the cell.
-          ghost.scale = times(atomScales[bond.j], .72);
-          ghostVisuals.push(ghost);
-          ghostSymbols.push(big.species[bond.j]);
+          ghosts.push({ symbol: symbolJ, position: b, radius: times(atomScales[bond.j], .72) });
         }
       }
+      bondScene = { base, n, halves: new Map([...halves].map(([symbol, list]) => [symbol, merge(...list)])), ghosts };
     }
-    for (const [symbol, list] of halves) {
-      const visual = new Visual(merge(...list), rgba(ELEMENT_COLOR(symbol), .8));
+    for (const [symbol, geometry] of bondScene.halves) {
+      const visual = new Visual(geometry, rgba(ELEMENT_COLOR(symbol), .8));
       bondSymbols.set(visual, symbol);
       bondVisuals.push(visual);
+    }
+    for (const ghost of bondScene.ghosts) {
+      const visual = new Visual(meshes.get(ghost.symbol)!, rgba(ELEMENT_COLOR(ghost.symbol), .22));
+      visual.position = ghost.position;
+      visual.scale = ghost.radius;
+      ghostVisuals.push(visual);
+      ghostSymbols.push(ghost.symbol);
     }
   }
 
