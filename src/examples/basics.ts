@@ -8,9 +8,9 @@
 import {
   WebGPUView, LabelLayer, Group, Visual, Timeline, tween,
   axes3d, boundsBox, box, boxEdges, cylinder, polyline, arrow, circle, sphere, shadedSphere, wireSphere,
-  parametricSurface, functionSurface, merge, rgba, lerp,
-  mathml, mi, mn, mo, mtext, row, tickValues, formatTick,
-  type Vec3, type Geometry,
+  parametricSurface, functionSurface, functionCurve, merge, rgba, lerp,
+  mathml, mi, mn, mo, mtext, msup, row, tickValues, formatTick, plotFrame, viridis, plasma,
+  Geometry, type Vec3, type Rgb,
 } from '../index.js';
 
 const $ = <T extends HTMLElement>(id: string): T => {
@@ -461,14 +461,132 @@ function labelDemo(view: WebGPUView): Demo {
 }
 
 /* --------------------------------------------------------------------------------------------
- * Wiring: one device, six views, one loop.
+ * 07 · Colour from data: per-vertex colours and a palette you can read.
+ * ------------------------------------------------------------------------------------------ */
+
+function colourDemo(view: WebGPUView): Demo {
+  look(view, .52, .34, 6.4);
+  const labels = new LabelLayer($('colour-labels'), view.camera);
+  const paletteSelect = $<HTMLSelectElement>('colour-palette');
+  const amplitudeInput = $<HTMLInputElement>('colour-amplitude');
+  const group = new Group();
+  view.world.add(group, new Visual(count(axes3d(1.2, .006)), rgba('#dbe9f5', .22)));
+  let amplitude = Number(amplitudeInput.value);
+
+  const paletteName = (): string => (paletteSelect.value === 'plasma' ? 'plasma' : 'viridis');
+  const palette = (): ((t: number) => Rgb) => (paletteSelect.value === 'plasma' ? plasma : viridis);
+  const span = 2.2;
+  /** Height of the surface, which is also the value the colour encodes. */
+  const f = (x: number, z: number): number => amplitude * Math.sin(x * 1.2) * Math.cos(z * 1.2);
+  const ribbonLeft = span + .5, ribbonRight = span + .8;
+
+  // Built by hand rather than with a helper, because the mechanism is the point of this demo: a
+  // palette is a function from [0, 1] to a colour, and geometry can carry one colour per vertex.
+  const build = (): void => {
+    const steps = 44;
+    const tint = (y: number): Rgb => palette()((y / amplitude + 1) / 2);
+    const at = (i: number, j: number): Vec3 => {
+      const x = -span + 2 * span * i / steps, z = -span + 2 * span * j / steps;
+      return [x, f(x, z), z];
+    };
+    const vertices: number[] = [], colours: number[] = [];
+    for (let i = 0; i < steps; i++) for (let j = 0; j < steps; j++) {
+      const a = at(i, j), b = at(i + 1, j), c = at(i, j + 1), d = at(i + 1, j + 1);
+      for (const triangle of [[a, c, b], [b, c, d]]) {
+        for (const vertex of triangle) { vertices.push(...vertex); colours.push(...tint(vertex[1])); }
+      }
+    }
+    // …and the same function sampled up a ribbon, which is what makes the encoding readable.
+    const rows = 96;
+    for (let k = 0; k < rows; k++) {
+      const low = -amplitude + 2 * amplitude * k / rows, high = -amplitude + 2 * amplitude * (k + 1) / rows;
+      const lowColour = tint(low), highColour = tint(high);
+      const bl: Vec3 = [ribbonLeft, low, 0], br: Vec3 = [ribbonRight, low, 0];
+      const tl: Vec3 = [ribbonLeft, high, 0], tr: Vec3 = [ribbonRight, high, 0];
+      vertices.push(...bl, ...br, ...tl, ...br, ...tr, ...tl);
+      colours.push(...lowColour, ...lowColour, ...highColour, ...lowColour, ...highColour, ...highColour);
+    }
+    group.clear();
+    group.add(
+      new Visual(count(new Geometry(vertices, colours)), rgba('#ffffff')),
+      new Visual(count(boxEdges([-span, -amplitude, -span], [span, amplitude, span], .003)), rgba('#9fe7ff', .1)),
+      new Visual(count(boxEdges([ribbonLeft, -amplitude, -.01], [ribbonRight, amplitude, .01], .003)), rgba('#e8f0f6', .3)),
+    );
+  };
+
+  // Three labels: what the palette is called, and the value at each end of the ribbon.
+  const title = labels.addHTML(mathml(mn('')), () => [ribbonLeft - .15, amplitude + .34, 0], '#cfe4ea', 'math-label');
+  const top = labels.addHTML(mathml(mn('')), () => [ribbonRight + .22, amplitude, 0], '#cfe4ea', 'math-label');
+  const bottom = labels.addHTML(mathml(mn('')), () => [ribbonRight + .22, -amplitude, 0], '#cfe4ea', 'math-label');
+
+  const sync = (): void => {
+    amplitude = Number(amplitudeInput.value);
+    $('colour-amplitude-value').textContent = amplitude.toFixed(2);
+    build();
+    title.innerHTML = mathml(row(mi(paletteName()), mo('('), mi('t'), mo(')')));
+    top.innerHTML = mathml(mn(`+${amplitude.toFixed(2)}`));
+    bottom.innerHTML = mathml(mn(`−${amplitude.toFixed(2)}`));
+  };
+  paletteSelect.addEventListener('change', sync);
+  amplitudeInput.addEventListener('input', sync);
+  sync();
+
+  return { labels, update: () => {} };
+}
+
+/* --------------------------------------------------------------------------------------------
+ * 08 · A chart in 3D: plotFrame, ticks and a function curve.
+ * ------------------------------------------------------------------------------------------ */
+
+function plotDemo(view: WebGPUView): Demo {
+  // Dead on the xy plane: a chart is a 3D scene, but it reads best from straight ahead.
+  look(view, 0, 0, 5.8);
+  const labels = new LabelLayer($('plot-labels'), view.camera);
+  const chart = plotFrame([-4.4, 4.4], [-1.6, 1.6], { xTicks: 8, yTicks: 4 });
+  view.world.add(
+    new Visual(count(chart.grid), rgba('#e8f0f6', .1)),
+    new Visual(count(chart.ticks), rgba('#e8f0f6', .38)),
+    new Visual(count(chart.axes), rgba('#e8f0f6', .75)),
+  );
+  for (const anchor of chart.labels) labels.addHTML(mathml(mtext(anchor.text)), () => anchor.position, '#8f9aad', 'math-label');
+
+  const functions: Record<string, (x: number) => number> = {
+    sine: x => Math.sin(x),
+    square: x => .9 * Math.sign(Math.sin(2 * x)),
+    damped: x => 1.15 * Math.exp(-x * x / 9) * Math.sin(3 * x),
+    gaussian: x => 1.25 * Math.exp(-x * x / 2.6),
+  };
+  const equations: Record<string, string> = {
+    sine: row(mi('f'), mo('('), mi('x'), mo(')'), mo('='), mi('sin'), mo('('), mi('x'), mo(')')),
+    square: row(mi('f'), mo('('), mi('x'), mo(')'), mo('='), mn('0.9'), mi('sign'), mo('('), mi('sin'), mo('('), mn('2'), mi('x'), mo(')'), mo(')')),
+    damped: row(mi('f'), mo('('), mi('x'), mo(')'), mo('='), msup(mi('e'), row(mo('−'), msup(mi('x'), mn('2')), mo('⁄'), mn('9'))), mi('sin'), mo('('), mn('3'), mi('x'), mo(')')),
+    gaussian: row(mi('f'), mo('('), mi('x'), mo(')'), mo('='), msup(mi('e'), row(mo('−'), msup(mi('x'), mn('2')), mo('⁄'), mn('2.6')))),
+  };
+  let curve = new Visual(count(functionCurve(functions.sine, [-4.4, 4.4], 640, .022)), rgba('#ffff00'));
+  view.world.add(curve);
+  const equation = labels.addHTML(mathml(equations.sine), () => [-4.35, 1.78, 0], '#e9f2fa', 'math-label');
+
+  $<HTMLSelectElement>('plot-function').addEventListener('change', event => {
+    const kind = (event.target as HTMLSelectElement).value;
+    const next = new Visual(count(functionCurve(functions[kind], [-4.4, 4.4], 640, .022)), rgba('#ffff00'));
+    view.world.remove(curve);
+    view.world.add(next);
+    curve = next;
+    equation.innerHTML = mathml(equations[kind]);
+  });
+
+  return { labels, update: () => {} };
+}
+
+/* --------------------------------------------------------------------------------------------
+ * Wiring: one device, eight views, one loop.
  * ------------------------------------------------------------------------------------------ */
 
 async function initialize(): Promise<void> {
   const first = await WebGPUView.create($<HTMLCanvasElement>('coordinates-canvas'), { samples: msaa, maxDpr, onError: report });
   views.push(first);
   if (disposed) { first.dispose(); return; }
-  for (const id of ['interpolation-canvas', 'transparency-canvas', 'shapes-canvas', 'groups-canvas', 'labels-canvas']) {
+  for (const id of ['interpolation-canvas', 'transparency-canvas', 'shapes-canvas', 'groups-canvas', 'labels-canvas', 'colour-canvas', 'plot-canvas']) {
     views.push(await WebGPUView.create($<HTMLCanvasElement>(id), { device: first.device, onError: report }));
   }
   demos.push(
@@ -478,6 +596,8 @@ async function initialize(): Promise<void> {
     shapesDemo(views[3]),
     groupsDemo(views[4]),
     labelDemo(views[5]),
+    colourDemo(views[6]),
+    plotDemo(views[7]),
   );
 
   const info = first.adapterInfo;

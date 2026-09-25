@@ -15,10 +15,10 @@ Open [http://localhost:5173/](http://localhost:5173/). The landing page is an in
 
 Dedicated demos:
 
-- [Basics](basics.html): start here. Six small demos, one library idea each — the 3D coordinate
+- [Basics](basics.html): start here. Eight small demos, one library idea each — the 3D coordinate
   system and its projected labels, interpolation with a seekable `Timeline`, solids with transparent
-  sides, the geometry primitives and `merge`, groups with nested transforms, and typeset maths riding
-  a moving point. Each panel names the API it uses.
+  sides, the geometry primitives and `merge`, groups with nested transforms, typeset maths riding a
+  moving point, colour taken from data, and a chart drawn in 3D. Each panel names the API it uses.
 - [Physics laboratory](physics-lab.html): Kepler orbits, direct all-pairs GPU gravity, double pendulums, the Lorenz attractor, wave interference, and a vibrating drumhead.
 - [Crystal symmetry](symmetry.html): upload a POSCAR/CONTCAR and phonopy `symmetry.yaml`, then watch each rotation, mirror, inversion and roto-reflection play on the structure — bonds, periodic neighbours, orbit trails and a live site-mapping report.
 - [GPU particles](particles.html): compare the 50K oscillator baseline with direct O(N²) GPU gravity.
@@ -41,13 +41,16 @@ view.world.add(new Visual(axes3d(1.9, .012), rgba('#dbe9f5', .9)));
 second.world.add(new Visual(box([-1, -1, -1], [1, 1, 1]), rgba('#58c4dd', .18)));
 ```
 
-The six ideas, in the order the page presents them: the frame (`axes3d`, `boundsBox`, tick labels
+The eight ideas, in the order the page presents them: the frame (`axes3d`, `boundsBox`, tick labels
 through `LabelLayer`, perspective or orthographic camera); motion (`Timeline`, `tween`, `smooth`,
-`lerp`, absolute-time seeking); volume (`box` faces, per-face alpha, draw-order-independent sorting,
-`boxEdges` cages); shape (`polyline`, `arrow`, `circle`, `sphere`, `shadedSphere`, `wireSphere`,
-`parametricSurface`, `cylinder`, `merge`); hierarchy (`Group.add`, inherited `position`/`scale`/`rotation`, and
-`opacity` that multiplies down the tree); and text (`LabelLayer.addHTML` with `mathml` nodes, so
-labels stay sharp, selectable and styleable at any zoom).
+`lerp`, absolute-time seeking); volume (`box`, `sphere` and `cylinder` faces, per-face alpha,
+draw-order-independent sorting, wire cages); shape (`polyline`, `arrow`, `circle`, `sphere`,
+`shadedSphere`, `wireSphere`, `parametricSurface`, `merge`); hierarchy (`Group.add`, inherited
+`position`/`scale`/`rotation`, and `opacity` that multiplies down the tree); text (`LabelLayer.addHTML`
+with `mathml` nodes, so labels stay sharp, selectable and styleable at any zoom); colour
+(`new Geometry(vertices, colors)`, with `viridis`/`plasma`/`ramp` as functions from [0, 1] to a
+colour); and plotting (`plotFrame` with `niceStep`/`tickValues`/`formatTick`, a `functionCurve`, and
+`msup`/`mn` in the equation label).
 
 ## Crystal workflow
 
@@ -207,7 +210,7 @@ than trusting the code that drew it:
 
 ```sh
 node scripts/check-depth.mjs [port]    # renderer depth + the crystal viewer, pixel by pixel
-node scripts/check-basics.mjs [port]   # the basics tour: six demos, every control, every assertion
+node scripts/check-basics.mjs [port]   # the basics tour: eight demos, every control, every assertion
 ```
 
 `check-basics` captures from the compositor and measures the regions back inside the page, because a
