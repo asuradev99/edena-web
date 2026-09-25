@@ -8,7 +8,7 @@
 import {
   WebGPUView, LabelLayer, Group, Visual, Timeline, tween,
   axes3d, boundsBox, box, boxEdges, cylinder, polyline, arrow, circle, sphere, shadedSphere, wireSphere,
-  parametricSurface, functionSurface, functionCurve, merge, rgba, lerp, transform, applyMatrix,
+  parametricSurface, functionSurface, functionCurve, merge, rgba, lerp, smooth, transform, applyMatrix,
   mathml, mi, mn, mo, mtext, msup, row, tickValues, formatTick, plotFrame, viridis, plasma,
   Geometry, type Vec3, type Rgb,
 } from '../index.js';
@@ -538,6 +538,71 @@ function colourDemo(view: WebGPUView): Demo {
 }
 
 /* --------------------------------------------------------------------------------------------
+ * 11 · A camera move: the orbit camera driven like a shot, and scrubbed like a storyboard.
+ * ------------------------------------------------------------------------------------------ */
+
+function cameraDemo(view: WebGPUView): Demo {
+  look(view, .5, .3, 8);
+  const labels = new LabelLayer($('camera-labels'), view.camera);
+
+  // Something worth moving around: a ring of solids on a floor, lit by nothing but their own colours.
+  const scene = new Group();
+  const shapes = [box([-.45, -.45, -.45], [.45, .45, .45]), sphere(.45), cylinder(.36, .9), shadedSphere(.42), wireSphere(.5, 8, 5, .008)];
+  const palette = ['#58c4dd', '#83c167', '#f7d681', '#ff9ec4', '#b5a1ff'];
+  for (let index = 0; index < 8; index++) {
+    const angle = index / 8 * Math.PI * 2;
+    const visual = new Visual(count(shapes[index % shapes.length]), rgba(palette[index % palette.length]));
+    visual.position = [2.1 * Math.cos(angle), index % 2 ? .75 : -.1, 2.1 * Math.sin(angle)];
+    scene.add(visual);
+  }
+  const floorLines: Geometry[] = [];
+  for (let value = -3; value <= 3; value += .75) {
+    floorLines.push(polyline([[value, -1, -3], [value, -1, 3]], .003), polyline([[-3, -1, value], [3, -1, value]], .003));
+  }
+  scene.add(new Visual(count(merge(...floorLines)), rgba('#7fb7d0', .16)));
+  view.world.add(scene, new Visual(count(axes3d(1.1, .006)), rgba('#dbe9f5', .3)));
+  labels.addHTML(tag('target'), () => [0, .18, 0], '#9db0c2', 'math-label');
+
+  // Four shots, all of them just numbers over p in [0, 1].
+  const paths: Record<string, (p: number) => [number, number, number]> = {
+    orbit: p => [.4 + p * Math.PI * 2, .3 + .1 * Math.sin(p * Math.PI * 2), 8.2],
+    dive: p => [.7 + .5 * p, .34 - .12 * p, lerp(10.5, 3.1, smooth(p))],
+    sweep: p => [-1 + 2 * smooth(p), .1 + .55 * Math.sin(Math.PI * p), 7.6 + 1.8 * Math.sin(p * Math.PI * 2)],
+    top: p => [.4 + 1.1 * p, lerp(.25, 1.4, smooth(p)), 8.4],
+  };
+  const pathSelect = $<HTMLSelectElement>('camera-path');
+  const playButton = $<HTMLButtonElement>('camera-play');
+  const timeInput = $<HTMLInputElement>('camera-time');
+  const readout = $('camera-readout');
+  let path = 'orbit', phase = 0, playing = !reducedMotion;
+  const apply = (): void => {
+    const [yaw, pitch, distance] = paths[path](phase);
+    view.camera.yaw = yaw;
+    view.camera.pitch = pitch;
+    view.camera.distance = distance;
+    timeInput.value = String(phase);
+    $('camera-time-value').textContent = `${Math.round(phase * 100)}%`;
+    readout.textContent = `yaw ${yaw.toFixed(2)} · pitch ${pitch.toFixed(2)} · distance ${distance.toFixed(1)}`;
+  };
+  const button = (): void => {
+    playButton.textContent = playing ? 'Pause' : 'Play';
+    playButton.setAttribute('aria-pressed', String(playing));
+  };
+  pathSelect.addEventListener('change', () => { path = pathSelect.value; apply(); });
+  playButton.addEventListener('click', () => { playing = !playing; button(); });
+  timeInput.addEventListener('input', () => { playing = false; phase = Number(timeInput.value); button(); apply(); });
+  button();
+  apply();
+
+  return {
+    labels,
+    update: delta => {
+      if (playing) { phase = (phase + delta * .11) % 1; apply(); }
+    },
+  };
+}
+
+/* --------------------------------------------------------------------------------------------
  * 10 · One mesh, many copies: shared geometry, moved and scaled, batched by the renderer.
  * ------------------------------------------------------------------------------------------ */
 
@@ -722,7 +787,7 @@ async function initialize(): Promise<void> {
   const first = await WebGPUView.create($<HTMLCanvasElement>('coordinates-canvas'), { samples: msaa, maxDpr, onError: report });
   views.push(first);
   if (disposed) { first.dispose(); return; }
-  for (const id of ['interpolation-canvas', 'transparency-canvas', 'shapes-canvas', 'groups-canvas', 'labels-canvas', 'colour-canvas', 'plot-canvas', 'depth-canvas', 'instances-canvas']) {
+  for (const id of ['interpolation-canvas', 'transparency-canvas', 'shapes-canvas', 'groups-canvas', 'labels-canvas', 'colour-canvas', 'plot-canvas', 'depth-canvas', 'instances-canvas', 'camera-canvas']) {
     views.push(await WebGPUView.create($<HTMLCanvasElement>(id), { device: first.device, onError: report }));
   }
   demos.push(
@@ -736,6 +801,7 @@ async function initialize(): Promise<void> {
     plotDemo(views[7]),
     depthDemo(views[8]),
     instancesDemo(views[9]),
+    cameraDemo(views[10]),
   );
 
   const info = first.adapterInfo;
