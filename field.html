@@ -20,6 +20,14 @@
     .labels{position:absolute;inset:0;pointer-events:none;font-family:var(--serif);font-style:italic;font-size:clamp(10px,1.7cqw,18px);text-shadow:0 1px 7px #000,0 0 3px #000}
     .hint,.stats{position:absolute;font-size:11px;color:#8f8f99;letter-spacing:.02em}.hint{left:14px;bottom:12px}.stats{right:14px;bottom:12px;font-family:ui-monospace,monospace}
     .status{position:absolute;inset:8%;display:grid;place-content:center;text-align:center;font-size:13px;line-height:1.7;color:#ff9d9d;background:#000}
+    .labels math{font-family:"STIX Two Math","STIXGeneral","Cambria Math","DejaVu Serif",serif;font-style:normal}
+    .labels .math-label{font-style:normal}
+    .controls{display:flex;flex-wrap:wrap;gap:20px;align-items:center;margin:18px 0 0;padding:16px 18px;border:1px solid #26262b;border-radius:10px;background:#0d0d10}
+    .controls label{display:flex;align-items:center;gap:9px;font-size:12px;color:#a9a9b3}
+    .controls select,.controls input[type=range]{font:inherit;font-size:12px;background:#16161b;color:#ededf0;border:1px solid #3a3a44;border-radius:7px;padding:6px 8px}
+    .controls input[type=range]{padding:0;width:190px;accent-color:var(--blue)}
+    .controls output{font-family:ui-monospace,monospace;color:#f7d681;min-width:5ch}
+    .controls input[type=checkbox]{accent-color:var(--blue)}
     footer{max-width:1100px;margin:auto;padding:0 48px 50px;display:flex;justify-content:space-between;gap:20px;font-size:11px;color:#7c7c85}
     @media(max-width:750px){.masthead{height:61px;padding:0 20px}.wordmark span,.edition{display:none}main{padding:0 16px 40px}h1{font-size:27px}footer{padding:0 16px 36px}}
   </style>
@@ -35,6 +43,13 @@
       <div id="hint" class="hint">Drag to orbit · scroll to zoom</div>
       <div id="stats" class="stats"></div>
       <div id="status" class="status" role="alert" hidden></div>
+    </section>
+    <section class="controls" aria-label="Field controls">
+      <label>Field <select id="shape"><option value="metaballs" selected>two balls</option><option value="blobs">metaball blend</option><option value="gyroid">gyroid</option><option value="torus">torus</option></select></label>
+      <label>Isovalue <input type="range" id="iso" min="-0.45" max="0.5" step="0.005" value="0"><output id="iso-value">0.000</output></label>
+      <label>Resolution <select id="resolution"><option value="32">32³</option><option value="40">40³</option><option value="48" selected>48³</option><option value="56">56³</option></select></label>
+      <label><input type="checkbox" id="spin" checked> rotate</label>
+      <label><input type="checkbox" id="melt"> melt isovalue</label>
     </section>
   </main>
   <footer><span>Edena TypeScript visualization library · <a href="./">Showcase ↗</a></span><span>Geometry · WebGPU · fields</span></footer>

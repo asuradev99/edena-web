@@ -1,10 +1,13 @@
-import { WebGPUView, LabelLayer, Group, Visual, plotFrame, axes3d, boundsBox, functionCurve, colorMappedSurface, viridis, plasma, isosurface, rgba, smooth, type Vec3 } from '../index.js';
+import { WebGPUView, LabelLayer, Group, Visual, plotFrame, axes3d, boundsBox, functionCurve, colorMappedSurface, viridis, plasma, isosurface, rgba, smooth, mathml, mi, mn, mo, msub, msup, frac, row, mtext, hat, summation, type Vec3 } from '../index.js';
 import { sphere, wireSphere, circle, arrow, polyline, merge, Timeline, parametricSurface } from '../index.js';
 
 const get = <T extends HTMLElement>(id: string) => { const node = document.getElementById(id); if (!node) throw new Error(`Missing ${id}`); return node as T; };
 const status = get('status'), stats = get('stats'), pauseButton = get<HTMLButtonElement>('pause');
 const views: WebGPUView[] = [], labels: LabelLayer[] = [], samples: number[] = [];
 let curve: Visual | undefined, surface: Visual | undefined, surfaceSpin: Group | undefined, fieldSpin: Group | undefined;
+/** A bright point that rides the curve, so the plot always reads as motion. */
+let curveMarker: Visual | undefined;
+let curveFn: (x: number) => number = x => Math.sin(x);
 let triangles = 0, frame = 0, disposed = false, last = 0, timer = 0, started = 0, paused = matchMedia('(prefers-reduced-motion: reduce)').matches;
 // Diagnostics: ?samples=1 drops MSAA, ?dpr=1 caps resolution — useful when a slow GPU backend is suspected.
 const params = new URLSearchParams(location.search);
@@ -34,8 +37,12 @@ async function initialize() {
   curve.reveal = 0;
   triangles += (chart.grid.vertices.length + chart.ticks.vertices.length + chart.axes.vertices.length + curve.geometry.vertices.length) / 9;
   curveView.world.add(new Visual(chart.grid, rgba('#eeeeee', .14)), new Visual(chart.ticks, rgba('#eeeeee', .45)), new Visual(chart.axes, rgba('#eeeeee', .8)), curve);
+  curveMarker = new Visual(circle(.055, 24, 'xy', .03), rgba('#ffffff'));
+  curveMarker.reveal = 0;
+  curveView.world.add(curveMarker);
+  get('curve-equation').innerHTML = mathml(row(mi('f'), mo('('), mi('x'), mo(')'), mo('='), mi('sin'), mo('('), mi('x'), mo(')')), 'block');
   const curveLabels = new LabelLayer(get('curve-labels'), curveView.camera);
-  for (const anchor of chart.labels) curveLabels.add(anchor.text, () => anchor.position, '#8f8f99');
+  for (const anchor of chart.labels) curveLabels.addHTML(mathml(mtext(anchor.text)), () => anchor.position, '#8f8f99', 'math-label');
   labels.push(curveLabels);
 
   // 2D — a height surface colored by its own value: one draw call, per-vertex colors.
@@ -46,7 +53,9 @@ async function initialize() {
   surfaceSpin = new Group().add(surface);
   surfaceView.world.add(new Visual(axes3d(1.7, .008), rgba('#eeeeee', .4)), surfaceSpin);
   const surfaceLabels = new LabelLayer(get('surface-labels'), surfaceView.camera);
-  surfaceLabels.add('x', () => [1.95, 0, 0]); surfaceLabels.add('f (x, y)', () => [0, 1.95, 0]); surfaceLabels.add('y', () => [0, 0, 1.95]);
+  surfaceLabels.addHTML(mathml(mi('x')), () => [1.95, 0, 0], '#c9c9d2', 'math-label');
+  surfaceLabels.addHTML(mathml(row(mi('f'), mo('('), mi('x'), mo(','), mi('y'), mo(')'))), () => [0, 1.95, 0], '#c9c9d2', 'math-label');
+  surfaceLabels.addHTML(mathml(mi('y')), () => [0, 0, 1.95], '#c9c9d2', 'math-label');
   labels.push(surfaceLabels);
 
   // 3D — one level set of w = f(x, y, z), framed by the domain box and drawn with the
@@ -59,19 +68,20 @@ async function initialize() {
   fieldSpin = new Group().add(level, new Visual(boundsBox(min, max, .004), rgba('#eeeeee', .16)));
   fieldView.world.add(fieldSpin, new Visual(axes3d(1.1, .007), rgba('#eeeeee', .5)));
   const fieldLabels = new LabelLayer(get('field-labels'), fieldView.camera);
-  fieldLabels.add('x', () => [1.26, -.05, 0]); fieldLabels.add('y', () => [-.05, 1.26, 0]); fieldLabels.add('z', () => [-.05, -.05, 1.26]);
+  fieldLabels.addHTML(mathml(mi('x')), () => [1.26, -.05, 0], '#c9c9d2', 'math-label');
+  fieldLabels.addHTML(mathml(mi('y')), () => [-.05, 1.26, 0], '#c9c9d2', 'math-label');
+  fieldLabels.addHTML(mathml(mi('z')), () => [-.05, -.05, 1.26], '#c9c9d2', 'math-label');
   labels.push(fieldLabels);
 
   get<HTMLInputElement>('harmonics').addEventListener('input', event => {
     const n = Number((event.target as HTMLInputElement).value);
     get('harmonics-value').textContent = String(n);
-    get('curve-equation').textContent = `f(x) = Σ sin((2j + 1)x)/(2j + 1), j = 0…${n - 1}`;
+    get('curve-equation').innerHTML = mathml(row(mi('f'), mo('('), mi('x'), mo(')'), mo('='), summation(mn(0), mn(n - 1)), frac(row(mi('sin'), mo('('), mn(2), mi('j'), mo('+'), mn(1), mo(')'), mi('x')), row(mn(2), mi('j'), mo('+'), mn(1)))), 'block');
     const previous = curve!;
-    curve = new Visual(functionCurve(x => {
-      let sum = 0; for (let j = 0; j < n; j++) sum += Math.sin((2*j+1)*x)/(2*j+1);
-      return sum;
-    }, [-4,4], 1200, .018), rgba('#ffff00'));
-    triangles += (curve.geometry.vertices.length - previous.geometry.vertices.length)/9;
+    const fn = (x: number) => { let sum = 0; for (let j = 0; j < n; j++) sum += Math.sin((2 * j + 1) * x) / (2 * j + 1); return sum; };
+    curveFn = fn;
+    curve = new Visual(functionCurve(fn, [-4, 4], 1200, .018), rgba('#ffff00'));
+    triangles += (curve.geometry.vertices.length - previous.geometry.vertices.length) / 9;
     curveView.world.remove(previous); curveView.world.add(curve);
   });
   const updateSurface = () => {
@@ -118,7 +128,10 @@ async function initialize() {
   const construction=new Timeline(6).add({start:0,duration:2,update:p=>{atoms.scale=[p,p,p];atoms.opacity=p;}}).add({start:2,duration:2,update:p=>{bonds.opacity=p;}}).add({start:4,duration:2,update:p=>{reference.opacity=p;}});
   construction.seek(6);
   get('build-lattice').addEventListener('input',event=>construction.seek(Number((event.target as HTMLInputElement).value)));
-  const latticeLabels=new LabelLayer(get('lattice-labels'),latticeView.camera);latticeLabels.add('a',()=>[.5,-1.15,1]);latticeLabels.add('ŷ',()=>[0,2.5,0],'#ffff00');labels.push(latticeLabels);
+  const latticeLabels=new LabelLayer(get('lattice-labels'),latticeView.camera);
+  latticeLabels.addHTML(mathml(row(mi('a'),msub(mn('1'),mn('1')))),()=>[.5,-1.15,1],'#c9c9d2','math-label');
+  latticeLabels.addHTML(mathml(hat(mi('y'))),()=>[0,2.5,0],'#ffff00','math-label');
+  labels.push(latticeLabels);
   for(const {node} of latticeView.world.flatten())triangles+=node.geometry.vertices.length/9;
 
   if (paused) { curve.reveal = 1; surface.reveal = 1; }
@@ -133,6 +146,7 @@ function animate(now: number) {
     // Reveal each plot once and keep it: a looping redraw would blank the curve mid-cycle.
     const elapsed = (now - started) / 1000;
     if (curve) curve.reveal = smooth(elapsed / 2.2);
+    if (curveMarker) { const markerX = -4 + ((elapsed * .8) % 8); curveMarker.position = [markerX, curveFn(markerX), .02]; curveMarker.reveal = curve ? curve.reveal : 1; }
     if (surface) surface.reveal = smooth(elapsed / .9);
     if (surfaceSpin) surfaceSpin.rotation += delta * .3;
     if (fieldSpin) fieldSpin.rotation += delta * .22;
