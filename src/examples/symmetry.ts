@@ -782,6 +782,9 @@ async function init(): Promise<void> {
     if (event.altKey || event.ctrlKey || event.metaKey) return;
     const tag = (event.target as HTMLElement)?.tagName;
     if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
+    // Space activates a focused button (a legend row folds its element), so leave that one to the
+    // button; the other shortcuts keep working wherever the focus is.
+    if (tag === 'BUTTON' && event.code === 'Space') return;
     if (event.code === 'Space') { event.preventDefault(); playButton.click(); }
     else if (event.code === 'ArrowLeft') { event.preventDefault(); playing = false; progress = clamp(progress - .05, 0, 1); update(); }
     else if (event.code === 'ArrowRight') { event.preventDefault(); playing = false; progress = clamp(progress + .05, 0, 1); update(); }
