@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { isosurface, plotFrame, tickValues, niceStep, formatTick, axes3d, boundsBox, Geometry, merge, ramp, viridis, plasma, colorMappedSurface, functionCurve } from '../build/index.js';
+import { isosurface, plotFrame, tickValues, niceStep, formatTick, tickMath, tickDecimals, axes3d, boundsBox, areaUnder, lineThrough, secantSlope, Geometry, merge, ramp, viridis, plasma, colorMappedSurface, functionCurve } from '../build/index.js';
 
 /** Colors round-trip through a Float32Array, so compare with a tolerance. */
 const closeTo = (a, b, eps = 1e-6) => a.length === b.length && a.every((value, index) => Math.abs(value - b[index]) < eps);
@@ -159,3 +159,87 @@ test('functionCurve reaches its documented sample budget instead of tripping the
 function perVertexOf(geometry, index) {
   return Array.from(geometry.colors.slice(index * 3, index * 3 + 3));
 }
+
+test('tick labels use a real minus sign and hand an exponent to MathML when one is needed', () => {
+  assert.equal(formatTick(-1.5, .5), '\u22121.5', 'a hyphen is not a minus');
+  assert.equal(formatTick(-1.5, .5).includes('-'), false);
+  assert.equal(formatTick(0, 1), '0');
+  assert.equal(formatTick(2.5, .5), '2.5');
+  assert.equal(formatTick(1.2e6, 1e5), '1.2\u00d710^6', 'plain text cannot do superscripts, so it says so');
+  assert.equal(tickDecimals(.5), 1);
+  assert.equal(tickDecimals(20), 0);
+  assert.throws(() => tickDecimals(0), /positive/);
+  // The MathML form keeps the exponent as an exponent.
+  assert.match(tickMath(-1500, 1000), /<mo>\u2212<\/mo>/);
+  assert.match(tickMath(1.2e6, 1e5), /<msup><mn>10<\/mn><mn>6<\/mn><\/msup>/);
+});
+
+test('the plot frame gains minor marks that stay inside their spine and titles outside the box', () => {
+  const frame = plotFrame([-3, 3], [-2, 4], { xTicks: 6, yTicks: 6, tickSize: .05, xTitle: 'x', yTitle: 'f(x)' });
+  assert.ok(frame.minor.vertices.length > 0, 'minor marks exist');
+  assert.ok(frame.minorGrid.vertices.length > 0, 'minor gridlines exist when the grid is on');
+  const originX = 0, originY = 0, spine = .05 * .55 + 1e-6;
+  for (let index = 0; index < frame.minor.vertices.length; index += 3) {
+    const x = frame.minor.vertices[index], y = frame.minor.vertices[index + 1];
+    const onVerticalSpine = Math.abs(x - originX) < spine && y >= -2 - 1e-6 && y <= 4 + 1e-6;
+    const onHorizontalSpine = Math.abs(y - originY) < spine && x >= -3 - 1e-6 && x <= 3 + 1e-6;
+    assert.ok(onVerticalSpine || onHorizontalSpine, `a minor mark strayed from its axis (${x}, ${y})`);
+  }
+  // Titles sit past the ends of the axes, so they never collide with a tick label.
+  assert.deepEqual(frame.titles.map(title => title.text), ['x', 'f(x)']);
+  for (const title of frame.titles) {
+    const outside = title.position[0] > 3.001 || title.position[1] > 4.001;
+    assert.ok(outside, 'a title should sit beyond the plot box');
+  }
+  assert.equal(plotFrame([-1, 1], [-1, 1], { minor: false }).minor.vertices.length, 0, 'minor marks can be switched off');
+  assert.throws(() => plotFrame([-1, 1], [-1, 1], { minor: 1 }), /at least 2/);
+});
+
+test('each tick label carries a plain text and a MathML form', () => {
+  const frame = plotFrame([-2, 2], [-1, 1], { xTicks: 4, yTicks: 2 });
+  assert.ok(frame.labels.length >= 4);
+  for (const label of frame.labels) {
+    assert.equal(typeof label.text, 'string');
+    assert.match(label.math, /^<mrow>/);
+    assert.ok(!label.math.includes('-'), 'the MathML form must not fall back to a hyphen');
+  }
+});
+
+test('the area under a curve is a strip that closes on its baseline and approximates the integral', () => {
+  const strip = areaUnder(Math.sin, [0, Math.PI], { baseline: 0, samples: 400 });
+  assert.equal(strip.vertices.length % 9, 0, 'triangles come in threes of vertices');
+  let signed = 0;
+  for (let index = 0; index < strip.vertices.length; index += 9) {
+    const [ax, ay] = [strip.vertices[index], strip.vertices[index + 1]];
+    const [bx, by] = [strip.vertices[index + 3], strip.vertices[index + 4]];
+    const [cx, cy] = [strip.vertices[index + 6], strip.vertices[index + 7]];
+    signed += ((bx - ax) * (cy - ay) - (cx - ax) * (by - ay)) / 2;
+  }
+  // sin over [0, pi] encloses 2; the strip is two triangles per column, so it lands on it closely.
+  assert.ok(Math.abs(Math.abs(signed) - 2) < .01, `strip area ${signed}`);
+  // Every vertex sits between the curve and the baseline.
+  for (let index = 0; index < strip.vertices.length; index += 3) {
+    const x = strip.vertices[index], y = strip.vertices[index + 1];
+    assert.ok(y >= -1e-6 && y <= Math.sin(x) + 1e-6, `vertex ${index} left the strip (${x}, ${y})`);
+  }
+  // A curved baseline and a function with a hole both behave.
+  const lens = areaUnder(x => Math.exp(-x * x), [-2, 2], { baseline: x => -.5 * Math.cos(x), samples: 64 });
+  assert.ok(lens.vertices.length > 0);
+  const holed = areaUnder(x => Math.log(x), [-1, 1], { samples: 32 });
+  assert.ok([...holed.vertices].every(Number.isFinite), 'a hole must not inject NaN vertices');
+  assert.throws(() => areaUnder(Math.sin, [1, 0]), /increasing/);
+  assert.throws(() => areaUnder(Math.sin, [0, 1], { samples: 1 }), /two samples/);
+});
+
+test('a line through a point carries its slope, and a secant becomes the derivative', () => {
+  const line = lineThrough([1, 1], 2, [0, 3]);
+  for (let index = 0; index < line.vertices.length; index += 3) {
+    const x = line.vertices[index], y = line.vertices[index + 1];
+    assert.ok(Math.abs(y - (1 + 2 * (x - 1))) < 1e-6, 'the line must satisfy y = y0 + m(x - x0)');
+  }
+  assert.equal(secantSlope(x => 3 * x + 1, -4, 9), 3, 'a straight line has one slope');
+  assert.equal(secantSlope(x => x * x, 1, 3), 4);
+  assert.ok(Math.abs(secantSlope(x => x * x, 2, 2.0001) - 4.0001) < 1e-9, 'as b nears a the secant nears the tangent');
+  assert.throws(() => secantSlope(x => x, 1, 1), /distinct/);
+  assert.throws(() => lineThrough([1, 1], Number.NaN, [0, 1]), /finite/);
+});

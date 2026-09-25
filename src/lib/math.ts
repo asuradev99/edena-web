@@ -5,6 +5,8 @@ export const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 export const smooth = (t: number) => { t = clamp(t); return t * t * (3 - 2 * t); };
 export const length = (v: Vec3) => Math.hypot(...v);
 export const sub = (a: Vec3, b: Vec3): Vec3 => [a[0]-b[0], a[1]-b[1], a[2]-b[2]];
+export const add = (a: Vec3, b: Vec3): Vec3 => [a[0]+b[0], a[1]+b[1], a[2]+b[2]];
+export const dot = (a: Vec3, b: Vec3): number => a[0]*b[0] + a[1]*b[1] + a[2]*b[2];
 export const cross = (a: Vec3, b: Vec3): Vec3 => [a[1]*b[2]-a[2]*b[1], a[2]*b[0]-a[0]*b[2], a[0]*b[1]-a[1]*b[0]];
 export const normalize = (v: Vec3): Vec3 => { const n = length(v) || 1; return [v[0]/n, v[1]/n, v[2]/n]; };
 export const identity = () => new Float32Array([1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1]);
