@@ -167,7 +167,8 @@ function motionFor(operation: CrystalOperation): Motion {
 
 function describeOperation(operation: CrystalOperation): string {
   const motion = motionFor(operation);
-  const shift = motion.translation.some(value => Math.abs(value) > 1e-9) ? ` + (${operation.translation.map(value => value.toFixed(2)).join(', ')})` : '';
+  // The translation is printed in fractional coordinates, like the matrix beside it, so it is labelled.
+  const shift = motion.translation.some(value => Math.abs(value) > 1e-9) ? ` + t = (${operation.translation.map(value => value.toFixed(2)).join(', ')})` : '';
   if (motion.trivial) return `E · identity${shift}`;
   if (motion.inversion) return `i · inversion${shift}`;
   if (!motion.improper) {
