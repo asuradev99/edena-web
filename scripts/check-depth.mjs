@@ -5,16 +5,23 @@
 //   2. the crystal viewer: every listed operation animates, each caption's "N of M sites move" is a
 //      count the animation actually honours, and every operation reads distinctly, and
 //   3. the viewer's interaction locks: the identity cannot be played, a zoom survives an operation
-//      change, and choosing an operation stays well under a frame budget.
+//      change, a double-click restores the camera, choosing an operation stays well under a frame
+//      budget, the picker's counts match the captions at every supercell size, a phonopy file keeps
+//      its operations when a structure loads, and rutile lists the 8 point operations it really has.
+// It also fails if the page throws, logs an error, or reports a severe entry while all of that runs.
 import assert from 'node:assert/strict';
 const port=process.argv[2]??'9333';
 const target=await(await fetch(`http://localhost:${port}/json/new?http://127.0.0.1:5173/symmetry.html`,{method:'PUT'})).json();
 const socket=new WebSocket(target.webSocketDebuggerUrl);
 await new Promise(resolve=>socket.onopen=resolve);
-let id=0;const pending=new Map();
-socket.onmessage=event=>{const message=JSON.parse(event.data);pending.get(message.id)?.(message);};
+let id=0;const pending=new Map();const events=[];
+socket.onmessage=event=>{const message=JSON.parse(event.data);if(message.id)pending.get(message.id)?.(message);else events.push(message);};
 const call=(method,params)=>new Promise((resolve,reject)=>{const key=++id;const timer=setTimeout(()=>reject(new Error('Browser check timed out')),20000);pending.set(key,message=>{clearTimeout(timer);pending.delete(key);message.error?reject(message.error):resolve(message.result);});socket.send(JSON.stringify({id:key,method,params}));});
 try {
+  // Enable the domains before the page runs so nothing it reports is missed, and reload so the load
+  // itself is covered too.
+  await call('Runtime.enable');await call('Log.enable');await call('Page.enable');
+  await call('Page.navigate',{url:'http://127.0.0.1:5173/symmetry.html'});
   await new Promise(resolve=>setTimeout(resolve,2500));
   const result=await call('Runtime.evaluate',{awaitPromise:true,returnByValue:true,expression:`(async()=>{
     const {WebGPUView,Geometry,Visual}=await import('/build/index.js');
@@ -185,6 +192,12 @@ try {
   assert.equal(value.rutileResult.options,8,`rutile has 8 origin-centred point operations (got ${value.rutileResult.options})`);
   assert.match(value.rutileResult.report,/8 of the lattice's 16 point-group operations/);
   assert.match(value.rutileResult.report,/need a lattice translation/,'the report explains the missing operations');
+  // Nothing may have complained along the way: no exception, no console.error, no severe log entry.
+  const complaints=events.filter(event=>event.method==='Runtime.exceptionThrown'
+    || (event.method==='Runtime.consoleAPICalled'&&event.params.type==='error')
+    || (event.method==='Log.entryAdded'&&event.params.entry.level==='error'))
+    .map(event=>event.params.exceptionDetails?.text ?? event.params.entry?.text ?? event.params.args?.map(arg=>arg.value).join(' ') ?? event.method);
+  assert.deepEqual(complaints,[],'the page must run without errors');
   console.log('PASS: opaque depth, draw-order independence, translucent depth, every operation captioned, and the viewer interaction locks',
     {operations:value.captions.length,moving:counts.filter(count=>count.movers>0).length,movedPerOperation:counts.map(count=>count.movers),slowestSwitchMs:Number(value.slowestSwitch.toFixed(1)),loaded:value.loaded.options,rutile:value.rutileResult.options,rutileFamilies:value.rutileResult.families,status:value.statusBeforeFiles});
 } finally {socket.close();await fetch(`http://localhost:${port}/json/close/${target.id}`);}
