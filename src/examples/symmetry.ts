@@ -939,9 +939,10 @@ async function init(): Promise<void> {
     if (event.altKey || event.ctrlKey || event.metaKey) return;
     const tag = (event.target as HTMLElement)?.tagName;
     if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
-    // Space activates a focused button (a legend row folds its element), so leave that one to the
-    // button; the other shortcuts keep working wherever the focus is.
-    if (tag === 'BUTTON' && event.code === 'Space') return;
+    // Space activates whatever button has focus — a legend row folds its element, the drop zone opens
+    // the file chooser — so leave that one to the button; the other shortcuts work wherever focus is.
+    const buttonish = tag === 'BUTTON' || (event.target as HTMLElement)?.getAttribute?.('role') === 'button';
+    if (buttonish && (event.code === 'Space' || event.key === 'Enter')) return;
     if (event.code === 'Space') { event.preventDefault(); playButton.click(); }
     else if (event.code === 'ArrowLeft') { event.preventDefault(); playing = false; progress = clamp(progress - .05, 0, 1); update(); }
     else if (event.code === 'ArrowRight') { event.preventDefault(); playing = false; progress = clamp(progress + .05, 0, 1); update(); }
@@ -959,6 +960,12 @@ async function init(): Promise<void> {
   for (const name of ['dragover', 'dragenter']) dropZone.addEventListener(name, event => { event.preventDefault(); dropZone.classList.add('active'); }, events);
   for (const name of ['dragleave', 'drop']) dropZone.addEventListener(name, event => { event.preventDefault(); event.stopPropagation(); dropZone.classList.remove('active'); }, events);
   dropZone.addEventListener('drop', acceptDrop, events);
+  dropZone.addEventListener('click', () => filesInput.click(), events);
+  dropZone.addEventListener('keydown', event => {
+    if (event.key !== 'Enter' && event.code !== 'Space') return;
+    event.preventDefault();
+    filesInput.click();
+  }, events);
   // A file dropped anywhere else must not navigate the page away from the viewer, and is just as
   // welcome as one dropped on the zone — the crystals people drag in usually land on the picture.
   for (const name of ['dragover', 'dragenter']) window.addEventListener(name, event => { event.preventDefault(); dropZone.classList.add('active'); }, { signal: lifetime.signal });
