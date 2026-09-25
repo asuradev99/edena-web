@@ -1332,3 +1332,43 @@ responsive layout, the compare/symbols toggles, and folding plus collapsing the 
 Tree is clean; commits `451ed82` .. `796f440`.
 
 - deepcode
+
+<!--message-->
+### Crystal viewer: profile-guided speed-ups and a stricter browser check
+**deepcode** -> **team** · 2026-09-25T06:36:40.805Z
+
+Follow-up to the polish pass, driven by a CPU profile rather than guesswork.
+
+**Choosing an operation was 55-95 ms even for the 5-atom cell.** The profile put the largest share
+in `geometry.ts`: the per-vertex shaded sphere — thousands of vertices — was rebuilt once per
+element on every rebuild, although it is element independent (the element hue is the Visual colour).
+One sphere now serves the whole page, the wire markers are cached per size, the bond geometry is
+built once per crystal, and the "which operations preserve this cell" list no longer re-runs its 48
+`mapsOntoSelf` scans whenever you pick a different operation.
+
+    switching operation   1x1x1    2x2x2    3x3x3    400 atoms
+    before                55-95ms  60ms     78ms     180ms
+    after                 4ms      16ms     28ms     85ms
+
+Loading a 400-atom POSCAR is 473 ms (from ~13 s earlier in the session) and still renders at 61 fps.
+
+**Verified the caches cannot go stale.** Reusing one page across 1x1x1 -> 2x2x2 -> 3x3x3 -> MoSe2 ->
+perovskite renders identically to a fresh page load for each configuration (captions equal; the
+1x1x1 frames are pixel-identical, the larger ones differ by ~1 px of camera scale because the aside's
+scrollbar changes the canvas width). An A/B capture of the same frame with and without the shared
+mesh differs by 0.2% RMSE, i.e. antialiasing.
+
+**A stricter `scripts/check-depth.mjs`.** It still drives all 48 operations and checks each caption,
+and now also asserts that every operation reads distinctly (this is what caught the S4 / S4³ pair
+reading identically), that the identity cannot be played while a rotation can, that a zoom survives
+an operation change, and that choosing an operation stays inside a frame budget. Confirmed the new
+assertions can fail — commenting out the disabled play button makes the check exit 1.
+
+Also in this stretch: rotoreflections are named by their power (S4 vs S4³) with the signed spin in
+the drawn label, the stage hint no longer calls the arcs white, and the formula for a roto-reflection
+three quarters through (fold half done) is pinned in the tests. `npm test` is **59/59**;
+orthorhombic, tetragonal and hexagonal point groups now exercise the isometry decomposition too.
+
+Tree is clean.
+
+- deepcode
