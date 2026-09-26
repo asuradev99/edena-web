@@ -3,7 +3,9 @@ import { readFile } from 'node:fs/promises';
 import { resolve, extname, sep } from 'node:path';
 
 const root = resolve(import.meta.dirname, '..');
-const mime = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.svg': 'image/svg+xml' };
+// `.md`, `.ts` and `.mjs` are served as plain text so the academy's chapter and source links open
+// in the browser instead of downloading.
+const mime = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.svg': 'image/svg+xml', '.md': 'text/plain; charset=utf-8', '.ts': 'text/plain; charset=utf-8', '.mjs': 'text/plain; charset=utf-8', '.map': 'application/json' };
 const port = Number(process.env.PORT || 5173);
 createServer(async (request, response) => {
   try {

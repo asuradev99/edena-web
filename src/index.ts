@@ -14,5 +14,7 @@ export * from './lib/lattice.js';
 export * from './lib/elements.js';
 export * from './lib/vectorfield.js';
 export * from './lib/mathtext.js';
+export * from './lib/latex.js';
+export * from './lib/occlusion.js';
 export * from './lib/derivation.js';
 export * from './lib/interact.js';

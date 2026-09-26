@@ -2,11 +2,12 @@
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Edena · Crystal symmetry</title>
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
-<!-- The maths face these pages already ask for: STIX Two Text for letters and operators, with the
-     system maths fonts covering the radicals and big operators it does not carry. -->
+<!-- The maths faces these pages ask for: STIX Two Math carries the OpenType MATH table that stretches
+     brackets, radicals and big operators; STIX Two Text follows it as the text fallback (it has no
+     such table, so it cannot lead a maths stack). -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=STIX+Two+Text:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=STIX+Two+Math&family=STIX+Two+Text:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
 <style>
 :root{color-scheme:dark;font-family:system-ui,sans-serif;--bg:#0b1019;--panel:#111b29;--line:#293648;--ink:#e9eff7;--muted:#8fa2b8;--accent:#83d4df;--gold:#f7d681;--ok:#7ee0a8;--bad:#ff9d9d}
 *{box-sizing:border-box}
@@ -21,9 +22,9 @@ main{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) 372px;
 .stage{position:relative;min-height:0;border:1px solid var(--line);border-radius:16px;overflow:hidden;background:radial-gradient(circle at 50% 42%,#0e1724,#05080d 74%)}
 .stage canvas{width:100%;height:100%;display:block;touch-action:none}
 #labels{position:absolute;inset:0;pointer-events:none}
-.math-label{font-family:"STIX Two Text","STIX Two Math","STIXGeneral","Cambria Math","DejaVu Serif",serif;font-style:normal;font-size:13px;text-shadow:0 1px 6px #000,0 0 3px #000}
+.math-label{font-family:"STIX Two Math","Cambria Math","Latin Modern Math","Noto Sans Math","STIX Two Text","STIXGeneral","DejaVu Serif",serif;font-style:normal;font-size:13px}
 .atom-tag{font-size:10px;font-weight:700;background:rgba(6,10,16,.66);border-radius:5px;padding:1px 3px;text-shadow:none}
-.stage-op{position:absolute;left:14px;top:12px;font-family:Georgia,serif;font-size:15px;color:var(--gold);text-shadow:0 1px 6px #000;pointer-events:none}
+.stage-op{position:absolute;left:14px;top:12px;font-family:Georgia,serif;font-size:15px;color:var(--gold);pointer-events:none}
 .stage-hint{position:absolute;left:14px;bottom:10px;font-size:10.5px;color:#7d90a6;pointer-events:none}
 .op-row{display:grid;grid-template-columns:34px minmax(0,1fr) 34px;gap:6px;align-items:center}
 .op-row button{padding:7px 0}
@@ -52,7 +53,7 @@ input[type=range]{width:100%;accent-color:#70d7df;margin:2px 0}
 .toggles input{width:auto}
 .info-title{font-family:Georgia,serif;font-size:15px;margin-bottom:4px}
 .info-math{overflow:visible;line-height:1.5}
-.info-math math,.op-matrix math{font-family:"STIX Two Text","STIX Two Math","STIXGeneral","Cambria Math","DejaVu Serif",serif}
+.info-math math,.op-matrix math{font-family:"STIX Two Math","Cambria Math","Latin Modern Math","Noto Sans Math","STIX Two Text","STIXGeneral","DejaVu Serif",serif}
 .info-line{color:var(--muted);font-size:11.5px;margin-top:4px}
 /* The drop zone is this input's button, so the bare chooser would be a duplicate row. */
 #files-input{display:none}

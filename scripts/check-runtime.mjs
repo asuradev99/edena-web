@@ -1,0 +1,50 @@
+// Integration checks for the actual physics lab runtime, not a duplicate simulation model.
+import assert from 'node:assert/strict';
+import {openPage} from './cdp.mjs';
+const page=await openPage(process.argv[2]??9555);
+try{
+  await page.call('Page.enable');await page.call('Network.enable');
+  await page.call('Network.setCacheDisabled',{cacheDisabled:true});
+  await page.call('Emulation.setDeviceMetricsOverride',{width:1200,height:800,deviceScaleFactor:1,mobile:false});
+  await page.call('Page.navigate',{url:`${process.env.EDENA_ORIGIN??'http://127.0.0.1:5173'}/legacy.html`});
+  await new Promise(r=>setTimeout(r,300));
+  const result=await page.evaluate(`(async()=>{
+    const {GpuParticleSimulation,WebGPUView}=await import('/build/index.js');
+    const measured=[],rendered=new Set(),steps=new Map(),views=[];
+    const originalMeasure=GpuParticleSimulation.prototype.measure,originalStep=GpuParticleSimulation.prototype.step,originalRender=GpuParticleSimulation.prototype.render;
+    GpuParticleSimulation.prototype.measure=function(...args){measured.push(this);return originalMeasure.apply(this,args);};
+    GpuParticleSimulation.prototype.step=function(...args){steps.set(this,(steps.get(this)??0)+(args[1]??1));return originalStep.apply(this,args);};
+    GpuParticleSimulation.prototype.render=function(...args){rendered.add(this);return originalRender.apply(this,args);};
+    const create=WebGPUView.create;
+    WebGPUView.create=async function(...args){const v=await create.apply(this,args);views.push(v);return v;};
+    const html=await fetch('/physics-lab.html').then(r=>r.text());
+    const parsed=new DOMParser().parseFromString(html,'text/html');
+    parsed.querySelectorAll('script').forEach(e=>e.remove());
+    document.head.innerHTML=parsed.head.innerHTML;document.body.innerHTML=parsed.body.innerHTML;
+    const wait=ms=>new Promise(r=>setTimeout(r,ms));
+    await import('/build/examples/physics-lab.js');
+    for(let i=0;i<100&&views.length<5;i++)await wait(50);
+    await wait(500);
+    const canvas=document.getElementById('nbody');canvas.scrollIntoView({block:'center'});await wait(400);
+    const live=[...rendered].at(-1),before=steps.get(live)??0;
+    await wait(300);const advancing=(steps.get(live)??0)>before;
+    document.getElementById('pause').click();await wait(100);
+    const pausedAt=steps.get(live)??0;
+    const rotations=views.map(v=>v.world.children.map(n=>n.rotation));
+    await wait(350);const pausedStable=pausedAt===(steps.get(live)??0);
+    const rotationsStable=JSON.stringify(rotations)===JSON.stringify(views.map(v=>v.world.children.map(n=>n.rotation)));
+    document.getElementById('pause').click();await wait(300);
+    const resumed=(steps.get(live)??0)>pausedAt;
+    window.scrollTo(0,document.body.scrollHeight);await wait(250);
+    const offscreenAt=steps.get(live)??0;await wait(350);const offscreenStable=offscreenAt===(steps.get(live)??0);
+    const noLiveMeasurement=measured.every(sim=>!rendered.has(sim));
+    const measuredCount=measured.length;await wait(1400);const noPeriodicMeasurement=measured.length===measuredCount;
+    const timing=document.getElementById('nbody-timing').textContent;
+    const status=document.getElementById('status');
+    window.dispatchEvent(new Event('pagehide'));
+    return {advancing,pausedStable,rotationsStable,resumed,offscreenStable,noLiveMeasurement,noPeriodicMeasurement,timing,views:views.length,error:status.hidden?null:status.textContent};
+  })()`);
+  for(const key of ['advancing','pausedStable','rotationsStable','resumed','offscreenStable','noLiveMeasurement','noPeriodicMeasurement'])assert.equal(result[key],true,key);
+  assert.equal(result.views,5);assert.equal(result.error,null);
+  console.log('PASS: physics runtime pause/resume, offscreen suspension and benchmark isolation',result);
+}finally{await page.close();}

@@ -7,11 +7,11 @@
   <meta name="description" content="Edena example: one isosurface level of a 3D scalar field, extracted with marching tetrahedra and drawn in WebGPU.">
   <title>Scalar field isosurface · Edena</title>
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
-  <!-- The maths face these pages already ask for: STIX Two Text for letters and operators, with the
-     system maths fonts covering the radicals and big operators it does not carry. -->
+  <!-- The maths faces these pages ask for: STIX Two Math carries the OpenType MATH table that stretches
+     brackets, radicals and big operators; STIX Two Text follows it as the text fallback. -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=STIX+Two+Text:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=STIX+Two+Math&family=STIX+Two+Text:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
 <style>
     *{box-sizing:border-box}:root{color-scheme:dark;--blue:#58c4dd;--muted:#85858e;--serif:'STIX Two Text','Cambria','Georgia',serif}
     body{margin:0;background:#080809;color:#ededf0;font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;-webkit-font-smoothing:antialiased}
@@ -23,10 +23,10 @@
     .lede{font-size:13px;line-height:1.85;color:#92929c;margin:0 0 26px;max-width:70ch}.lede code{font-family:ui-monospace,monospace;font-size:12px;color:#c9c9d2}
     .panel{position:relative;aspect-ratio:16/9;background:#000;border:1px solid #26262b;border-radius:3px;overflow:hidden;container-type:inline-size}
     canvas{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none}
-    .labels{position:absolute;inset:0;pointer-events:none;font-family:var(--serif);font-style:italic;font-size:clamp(10px,1.7cqw,18px);text-shadow:0 1px 7px #000,0 0 3px #000}
+    .labels{position:absolute;inset:0;pointer-events:none;font-family:var(--serif);font-style:italic;font-size:clamp(10px,1.7cqw,18px);}
     .hint,.stats{position:absolute;font-size:11px;color:#8f8f99;letter-spacing:.02em}.hint{left:14px;bottom:12px}.stats{right:14px;bottom:12px;font-family:ui-monospace,monospace}
     .status{position:absolute;inset:8%;display:grid;place-content:center;text-align:center;font-size:13px;line-height:1.7;color:#ff9d9d;background:#000}
-    .labels math{font-family:"STIX Two Text","STIX Two Math","STIXGeneral","Cambria Math","DejaVu Serif",serif;font-style:normal}
+    .labels math{font-family:"STIX Two Math","Cambria Math","Latin Modern Math","Noto Sans Math","STIX Two Text","STIXGeneral","DejaVu Serif",serif;font-style:normal}
     .labels .math-label{font-style:normal}
     .controls{display:flex;flex-wrap:wrap;gap:20px;align-items:center;margin:18px 0 0;padding:16px 18px;border:1px solid #26262b;border-radius:10px;background:#0d0d10}
     .controls label{display:flex;align-items:center;gap:9px;font-size:12px;color:#a9a9b3}

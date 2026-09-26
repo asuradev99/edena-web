@@ -1,0 +1,570 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#090e16">
+<meta name="description" content="The Edena academy: an animated, interactive manual of the whole library — coordinate spaces and projection, CPU meshes and GPU batches, colour as data, integration and error budgets, the simulation seam and GPU compute, crystal symmetry, the transform stack, time and easing, curves and tubes, surfaces and winding, marching tetrahedra, streamlines, plot frames, and more, each with a live lab and an honest note on the limits.">
+<title>Edena · academy</title>
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<!-- Inter for the UI; STIX Two Math for the maths. The local faces are listed before the webfont so
+     the page still typesets when the network is unavailable, which is how the browser checks run. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=STIX+Two+Math&display=swap" rel="stylesheet">
+<style>
+  *{box-sizing:border-box}
+  :root{color-scheme:dark;--ink:#e7edf5;--panel:#101925;--line:#2a3646;--muted:#9db0c2;--accent:#80d4df;--gold:#f1d087;
+    --math-font:"STIX Two Math","DejaVu Math TeX Gyre","Noto Sans Math","STIXGeneral","Cambria Math","DejaVu Serif",serif}
+  body{margin:0;background:radial-gradient(ellipse at 12% 0%,#172c39 0,transparent 42%),#090e16;color:var(--ink);
+    font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;-webkit-font-smoothing:antialiased}
+  a{color:inherit;text-decoration:none}a:hover{color:var(--accent)}
+  a:focus-visible,button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid var(--gold);outline-offset:4px}
+  .masthead{height:82px;border-bottom:1px solid #ffffff10;padding:0 40px;display:flex;align-items:center;justify-content:space-between;gap:20px}
+  .wordmark{font-family:Georgia,serif;font-size:30px;letter-spacing:-1px;color:#eefaff}
+  .wordmark span{font:11px ui-monospace,monospace;letter-spacing:.1em;color:#8ca0b0;margin-left:12px}
+  .masthead nav{display:flex;gap:18px;font-size:12px;color:#9db9c9}
+  main{max-width:1160px;margin:auto;padding:0 40px 64px}
+  .intro{margin:56px 0 26px;max-width:840px}
+  .eyebrow{font:9px ui-monospace,monospace;letter-spacing:.3em;color:#78cbd5}
+  h1{font-family:Georgia,serif;font-weight:400;font-size:clamp(34px,4.4vw,56px);line-height:1.14;letter-spacing:-2px;margin:16px 0 20px}
+  .lede{font-size:15px;line-height:1.9;color:#a1b2c3;margin:0}
+  .lede code,.prose code,.controls code{font-family:ui-monospace,monospace;font-size:.92em;color:#cfe4ea}
+  .toc{display:flex;flex-wrap:wrap;gap:10px;margin:26px 0 6px;padding:0;list-style:none}
+  .toc a{background:#152331;border:1px solid #304354;border-radius:24px;padding:9px 15px;font-size:12px;display:inline-block}
+  .toc a:hover{background:#223b49;color:#b7f2f5}
+  .chapter{border:1px solid var(--line);border-radius:18px;background:var(--panel);box-shadow:0 16px 42px #0003;overflow:hidden;margin-top:26px}
+  .chapter-head{display:flex;align-items:flex-start;gap:14px;padding:20px 24px;border-bottom:1px solid #263340;background:#14202e}
+  .chapter-head .index{font:12px ui-monospace,monospace;color:var(--accent);padding-top:5px}
+  .chapter-head h2{font-family:Georgia,serif;font-weight:400;font-size:23px;letter-spacing:-.4px;margin:0;color:#f0f4fa}
+  .chapter-head p{margin:6px 0 0;font:11px ui-monospace,monospace;color:#9cafc1}
+  .chapter-head .tag{margin-left:auto;font:9px ui-monospace,monospace;letter-spacing:.16em;color:#93d4dc;border:1px solid #42606b;border-radius:20px;padding:5px 10px;white-space:nowrap}
+  .prose{padding:20px 24px 4px;font-size:14px;line-height:1.85;color:#adbdcc;max-width:80ch}
+  .prose h3{font-family:Georgia,serif;font-weight:400;font-size:16px;color:#e9f1f9;margin:18px 0 6px}
+  .prose p{margin:10px 0}
+  .prose ul{margin:8px 0;padding-left:20px}
+  .prose li{margin:4px 0}
+  .prose .keep{color:var(--gold)}
+  .stage{position:relative;background:#04080e;aspect-ratio:16/9;container-type:inline-size;margin:8px 24px 0;border-radius:14px;overflow:hidden}
+  .stage canvas{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none}
+  .labels{position:absolute;inset:0;pointer-events:none;font-family:var(--math-font);
+    font-size:clamp(8.5px,1.5cqw,13.5px);line-height:1.35;text-shadow:0 1px 8px #000,0 0 3px #000}
+  .labels span{white-space:nowrap}
+  .labels math{font-family:var(--math-font);font-style:normal;font-size:1.02em}
+  .labels .math-label{font-style:normal;letter-spacing:.01em}
+  .hint{position:absolute;left:12px;bottom:9px;font-size:10.5px;color:#7d90a6;pointer-events:none}
+  .controls{padding:16px 24px 6px;color:#adbdcc;font-size:12.5px;line-height:1.8}
+  .controls label{display:inline-flex;align-items:center;gap:10px;margin:0 18px 8px 0}
+  .controls input[type=range]{accent-color:#79d3dd;max-width:190px}
+  .controls select,.controls button{background:#1b2b3d;border:1px solid #3b4e64;color:#eefcff;padding:8px 11px;border-radius:8px;font:inherit;cursor:pointer}
+  .controls button:hover{background:#207487}
+  .controls output{color:var(--gold);font-family:ui-monospace,monospace}
+  .controls .readout{margin-top:8px;font-family:ui-monospace,monospace;font-size:12px;color:#a9e6f2;letter-spacing:.02em}
+  .controls .fine{margin-top:6px;font-size:12px;color:#93a6b8}
+  .chapter-links{padding:4px 24px 20px;font-size:12px;color:#8fa8bd;display:flex;flex-wrap:wrap;gap:16px}
+  .chapter-links a{color:#86d9e2}
+  .audit{margin-top:26px;border:1px solid var(--line);border-radius:18px;background:#0d1622;padding:22px 24px;font-size:13.5px;line-height:1.8;color:#adbdcc}
+  .audit h2{font-family:Georgia,serif;font-weight:400;font-size:20px;color:#f0f4fa;margin:0 0 8px}
+  .audit ol{padding-left:20px;margin:10px 0 0}
+  .audit li{margin:8px 0}
+  .stats{margin-top:26px;font:11.5px ui-monospace,monospace;color:#8da2b6}
+  .status{margin-top:14px;font-size:12.5px;color:#ff9d9d}
+  footer{max-width:1160px;margin:auto;padding:0 40px 48px;font-size:11.5px;color:#8da2b6;display:flex;justify-content:space-between;gap:18px;flex-wrap:wrap}
+  .math-lab{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:18px 22px;overflow:auto}
+  .math-render math{font-family:var(--math-font);font-size:clamp(15px,3.2cqw,28px)}
+  .math-source{margin:0;max-width:100%;overflow:auto;font:10.5px ui-monospace,monospace;color:#7f97ab;white-space:pre-wrap;word-break:break-all}
+  .derivation-host{position:absolute;inset:0;display:flex;align-items:center;padding:18px;overflow:hidden}
+  .derivation-host .dvn{font-size:clamp(11px,1.7cqw,16px)}
+  @media(max-width:750px){.masthead{padding:0 16px;height:66px}.wordmark{font-size:23px}.wordmark span{display:none}
+    main{padding:0 16px 40px}.stage{margin:8px 14px 0}.prose,.controls,.chapter-links{padding-left:14px;padding-right:14px}
+    footer{padding:0 16px 36px}}
+  @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+</style>
+</head>
+<body>
+  <header class="masthead">
+    <span class="wordmark">edena<span>/ academy</span></span>
+    <nav><a href="basics.html">← basics</a><a href="index.html">playground</a><a href="symmetry.html">crystal symmetry</a><a href="physics-lab.html">physics lab</a></nav>
+  </header>
+  <main>
+    <div class="intro">
+      <span class="eyebrow">AN ANIMATED MANUAL · THE MATHS BEHIND THE PIXELS</span>
+      <h1>How edena turns maths into a picture.</h1>
+      <p class="lede">The <a href="basics.html">basics tour</a> shows the pieces one at a time; this is the manual for the whole library. Every module gets a chapter and every chapter has a <span class="keep">live lab</span> — drag it, scrub it, break its budget — followed by what the code actually computes, which numbers are exact and which are estimates, and where the implementation stops. Where a figure comes from a pure model it lives in <code>src/examples/academy-model.ts</code>, which the test suite checks; where it comes from the library, the lab reads the library's own value back out of the scene or the geometry.</p>
+    </div>
+    <ul class="toc">
+      <li><a href="#ch-projection">01 · Coordinate spaces &amp; projection</a></li>
+      <li><a href="#ch-mesh">02 · CPU meshes, GPU batches</a></li>
+      <li><a href="#ch-colour">03 · Colour as data</a></li>
+      <li><a href="#ch-integration">04 · Integration &amp; error budgets</a></li>
+      <li><a href="#ch-simulation">05 · The simulation seam</a></li>
+      <li><a href="#ch-symmetry">06 · Symmetry &amp; tolerance</a></li>
+      <li><a href="#ch-transform">07 · The transform stack</a></li>
+      <li><a href="#ch-time">08 · Time &amp; easing</a></li>
+      <li><a href="#ch-curves">09 · Curves &amp; tubes</a></li>
+      <li><a href="#ch-surfaces">10 · Surfaces &amp; winding</a></li>
+      <li><a href="#ch-isosurface">11 · Marching tetrahedra</a></li>
+      <li><a href="#ch-streamlines">12 · Streamlines</a></li>
+      <li><a href="#ch-plotframe">13 · Axes &amp; ticks</a></li>
+      <li><a href="#ch-typeset">14 · Typesetting maths</a></li>
+      <li><a href="#ch-derivation">15 · An animated derivation</a></li>
+      <li><a href="#ch-picking">16 · Picking &amp; dragging</a></li>
+      <li><a href="#ch-depth">17 · Depth &amp; order</a></li>
+      <li><a href="#ch-instancing">18 · Instancing</a></li>
+      <li><a href="#ch-crystal">19 · Crystal files</a></li>
+      <li><a href="#ch-elements">20 · Element appearance</a></li>
+      <li><a href="#ch-area">21 · Area &amp; quadrature</a></li>
+      <li><a href="#ch-limit">22 · The secant limit</a></li>
+    </ul>
+
+    <!-- 01 -->
+    <section class="chapter" id="ch-projection" aria-label="Coordinate spaces and projection">
+      <div class="chapter-head"><span class="index">01</span><div><h2>Coordinate spaces, and why perspective is a division</h2><p>OrbitCamera · projectWith · matrix(w/h) · perspective ÷ w</p></div><span class="tag">PROJECTION</span></div>
+      <div class="prose">
+        <p>The library keeps one right-handed world with +Y up. A <code>Visual</code> holds a position, a scale and a rotation; the renderer multiplies those into a model matrix, then the camera multiplies again into clip space, and only at the very end does the GPU divide by <code>w</code>. An orthographic camera writes <code>w = 1</code>, so that division changes nothing: an object's size on screen is the same at every depth. A perspective camera writes <code>w = depth</code>, so the same division makes an object half as wide when it is twice as far away. That is the whole difference, and it is why <code>OrbitCamera.projection</code> defaults to <code>'orthographic'</code> — it is the more predictable choice, and the one the plots want.</p>
+        <p>The lab below draws five identical boxes receding along the view axis and measures the width of the nearest and farthest one <span class="keep">through the real camera</span>, so the readout cannot drift from the picture. Switch the projection, then pull the camera back: under perspective the near/far ratio is exactly the depth ratio; under orthographic it stays 1.00× however far you go, because distance simply is not in the equation.</p>
+        <p><strong>Limits.</strong> Perspective projection has a near plane and a far plane; geometry behind the eye is clipped, and <code>far</code> defaults to 1000 in the library's units. There is no field-of-view slider on the page, but <code>camera.fovY</code> is public. Labels are DOM overlays projected by the same camera, so a point behind the camera cannot be labelled — the label is placed off-canvas rather than mirrored forward.</p>
+      </div>
+      <div class="stage" id="projection-stage"><canvas id="projection-canvas" aria-label="Five identical boxes receding down a rail, with a near and far label"></canvas><div class="labels" id="projection-labels"></div><div class="hint">drag to orbit · scroll to zoom</div></div>
+      <div class="controls">
+        <label>Projection <select id="projection-mode"><option value="orthographic" selected>orthographic</option><option value="perspective">perspective</option></select></label>
+        <label>Camera distance <input id="projection-distance" type="range" min="4" max="16" step="0.5" value="10"> <output id="projection-distance-value">10.0</output></label>
+        <p class="readout" id="projection-readout">measuring…</p>
+        <p class="fine">Under orthographic the picture zooms but never foreshortens; under perspective the same slider changes the size ratio itself.</p>
+      </div>
+      <div class="chapter-links"><a href="docs/academy/01-coordinate-spaces.md">Read chapter 01 ↗</a><a href="src/examples/academy.ts">Source: academy.ts ↗</a></div>
+    </section>
+
+    <!-- 02 -->
+    <section class="chapter" id="ch-mesh" aria-label="CPU mesh generation and GPU batches">
+      <div class="chapter-head"><span class="index">02</span><div><h2>CPU meshes, GPU batches</h2><p>functionSurface · parametricSurface · the sample budget · per-vertex colours</p></div><span class="tag">GEOMETRY</span></div>
+      <div class="prose">
+        <p>Every primitive in <code>src/lib/geometry.ts</code> is built on the CPU and returns an immutable <code>Geometry</code>: a flat <code>Float32Array</code> of triangle vertices, optionally with a parallel colour array. <code>functionSurface(f, x, y, resolution)</code> evaluates <code>f</code> on an <code>nu × nv</code> grid, writes two triangles per quad, and hands the result to the renderer. The renderer uploads each distinct Geometry <span class="keep">once</span> and then batches every <code>Visual</code> that shares it into one instanced draw, which is why a hundred copies of a sphere cost one buffer and one draw call.</p>
+        <p>That has a concrete cost model, and the lab fits a curve at increasing resolution while timing the build. Both counters matter: an <code>nu × nv</code> surface <em>evaluates</em> <code>(nu+1)(nv+1)</code> samples but the library's guard counts <em>quads</em> (<code>nu·nv</code>), so a square grid is legal to exactly 500×500. The isosurface extractor spends the same 250 000 budget against a different counter — its sample lattice is <code>(nx+1)(ny+1)(nz+1)</code>, so a cubic field tops out at 61³. The probe button below asks for one step too many and prints the library's own refusal.</p>
+        <p><strong>Limits.</strong> Mesh generation is single-threaded and synchronous on the main thread, so a large rebuild is a visible stall — the timing shown is real, not amortised. Geometry is treated as immutable; changing topology means allocating a new one, which is exactly what a slider does here. And the budget is a hard refusal, not a soft downgrade: exceed it and the call throws rather than silently decimating.</p>
+      </div>
+      <div class="stage" id="mesh-stage"><canvas id="mesh-canvas" aria-label="A height surface rebuilt at the resolution the reader chooses"></canvas><div class="labels" id="mesh-labels"></div><div class="hint">drag to orbit · scroll to zoom</div></div>
+      <div class="controls">
+        <label>Field <select id="mesh-kind"><option value="ripple" selected>ripple</option><option value="saddle">saddle</option><option value="waves">waves</option></select></label>
+        <label>Resolution <input id="mesh-resolution" type="range" min="8" max="240" step="8" value="40"> <output id="mesh-resolution-value">40</output></label>
+        <label><button id="mesh-probe">Probe the budget</button></label>
+        <p class="readout" id="mesh-readout">building…</p>
+        <p class="fine" id="mesh-probe-status"></p>
+      </div>
+      <div class="chapter-links"><a href="docs/academy/02-cpu-geometry-and-gpu-batches.md">Read chapter 02 ↗</a><a href="src/lib/geometry.ts">Source: geometry.ts ↗</a><a href="src/lib/view.ts">Source: view.ts ↗</a></div>
+    </section>
+
+    <!-- 03 -->
+    <section class="chapter" id="ch-colour" aria-label="Colour as data">
+      <div class="chapter-head"><span class="index">03</span><div><h2>Colour is data, and the range is a choice</h2><p>colorMappedSurface · viridis · plasma · ramp · range clamp</p></div><span class="tag">COLOUR</span></div>
+      <div class="prose">
+        <p><code>Geometry.colors</code> is optional. When it is present the renderer switches to its second pipeline and multiplies the per-vertex colour by the <code>Visual</code>'s own colour, so passing white shows the map at full strength and any other tint darkens it. <code>colorMappedSurface(f, x, y, colorOf, resolution, range)</code> builds such a Geometry directly: it samples <code>f</code>, normalises each value into <code>[0, 1]</code>, and calls <code>colorOf</code> once per vertex.</p>
+        <p>The subtle part is the range. With no <code>range</code> the surface uses its own sampled minimum and maximum, which is convenient and quietly dishonest: the picture changes when the data does. Pass an explicit range and every value outside it is clamped to the palette's first or last colour — two different values become indistinguishable. The lab prints the sampled min and max beside the chosen range and the percentage of samples pinned to an end, so you can see exactly what the clamp is hiding.</p>
+        <p><strong>Limits.</strong> <code>viridis</code> and <code>plasma</code> here are nine measured stops with linear interpolation between them, an approximation of the real perceptually-uniform maps rather than a lookup table. <code>ramp</code> requires strictly increasing stops and clamps outside its domain. Colour is linear RGB with no gamma or wide-gamut handling; the renderer blends in the canvas' preferred format and leaves colour management to the browser.</p>
+      </div>
+      <div class="stage" id="colour-stage"><canvas id="colour-canvas" aria-label="A height surface coloured by value, with an adjustable clamp range"></canvas><div class="labels" id="colour-labels"></div><div class="hint">drag to orbit · scroll to zoom</div></div>
+      <div class="controls">
+        <label>Palette <select id="colour-map"><option value="viridis" selected>viridis</option><option value="plasma">plasma</option><option value="terrain">terrain (custom ramp)</option><option value="ember">ember (custom ramp)</option></select></label>
+        <label>Low <input id="colour-low" type="range" min="-1.4" max="1.4" step="0.05" value="-1"> <output id="colour-low-value">-1.00</output></label>
+        <label>High <input id="colour-high" type="range" min="-1.4" max="1.4" step="0.05" value="1"> <output id="colour-high-value">1.00</output></label>
+        <p class="readout" id="colour-readout">building…</p>
+        <p class="fine">Pinned samples are values outside the range that all receive the same end colour.</p>
+      </div>
+      <div class="chapter-links"><a href="docs/academy/03-colour-as-data.md">Read chapter 03 ↗</a><a href="src/lib/colormap.ts">Source: colormap.ts ↗</a></div>
+    </section>
+
+    <!-- 04 -->
+    <section class="chapter" id="ch-integration" aria-label="Integration and error budgets">
+      <div class="chapter-head"><span class="index">04</span><div><h2>Integration, and the order you can measure</h2><p>Euler vs RK4 · exact e<sup>-t</sup> · observed order · float64 round-off</p></div><span class="tag">NUMERICS</span></div>
+      <div class="prose">
+        <p>An animation is a differential equation solved one frame at a time. The library's <code>stepParticles</code> is semi-implicit Euler — the cheapest useful scheme — and the GPU particle core uses the same method. The lab compares Euler with classical fourth-order Runge–Kutta on <code>y′ = −y</code>, <code>y(0) = 1</code>, whose exact solution <code>e<sup>−t</sup></code> can be drawn beside them.</p>
+        <p>The honest measure is not one error but how the error <em>falls</em> when the step is halved. Halve the step and Euler's error roughly halves; RK4's falls by about sixteen. The page reports that ratio as the <span class="keep">observed order</span>, <code>log₂(e(dt) / e(dt/2))</code>, computed from two real runs. Expect about 1.0 and 4.0 — matching the textbook, and a useful way to catch a bug in an integrator that only looks right at one step size.</p>
+        <p><strong>Limits.</strong> At <code>dt = 0.00625</code> over two seconds the RK4 error is near 1e-11 and the estimate gets noisy as float64 round-off takes over; the order is an estimate from two runs, not a proof. The global error is also not the picture: a transient can be visually indistinguishable at a step size that is quantitatively wrong. And RK4 costs four evaluations per step, so it is not free accuracy — the right choice depends on the frame budget.</p>
+      </div>
+      <div class="stage" id="integration-stage"><canvas id="integration-canvas" aria-label="The exact exponential beside Euler and RK4 approximations at the chosen step"></canvas><div class="labels" id="integration-labels"></div></div>
+      <div class="controls">
+        <label>Step size dt <select id="integration-dt">
+          <option value="0.5">0.5</option><option value="0.25">0.25</option><option value="0.2">0.2</option>
+          <option value="0.1" selected>0.1</option><option value="0.05">0.05</option><option value="0.025">0.025</option>
+          <option value="0.0125">0.0125</option><option value="0.00625">0.00625</option>
+        </select></label>
+        <p class="readout" id="integration-readout">integrating…</p>
+        <p class="fine">Euler in red, RK4 in green, the exact solution in white. Order is measured by halving dt.</p>
+      </div>
+      <div class="chapter-links"><a href="docs/academy/04-integration-and-error.md">Read chapter 04 ↗</a><a href="src/lib/simulation.ts">Source: simulation.ts ↗</a></div>
+    </section>
+
+    <!-- 05 -->
+    <section class="chapter" id="ch-simulation" aria-label="The simulation seam and GPU compute">
+      <div class="chapter-head"><span class="index">05</span><div><h2>The simulation seam, and where the GPU takes over</h2><p>createParticleState · stepParticles · semi-implicit Euler · GpuParticleSimulation</p></div><span class="tag">COMPUTE</span></div>
+      <div class="prose">
+        <p><code>src/lib/simulation.ts</code> is deliberately renderer-agnostic: <code>createParticleState</code> makes plain typed arrays, <code>stepParticles</code> advances them with a callback that returns an acceleration, and nothing there knows WebGPU exists. A page drives it and feeds the result into <code>Visual</code>s. <code>src/lib/particles.ts</code> is the GPU-resident counterpart — ping-pong storage buffers, one compute dispatch per step, rendering instanced straight from the buffer — and it uses the <span class="keep">same</span> semi-implicit Euler update, so moving to the GPU changes throughput, not accuracy.</p>
+        <p>This lab runs the CPU seam on a three-dimensional harmonic well, where total energy should be constant. Symplectic Euler does not conserve that energy exactly; its error is bounded and oscillates rather than growing linearly, which is why it is the right cheap scheme for a game loop. The readout shows the measured step rate and the energy drift, and a substep selector shows the obvious trade: more substeps per frame means less drift and proportionally more work.</p>
+        <p><strong>Limits.</strong> The measured step rate is CPU-side and single-threaded, and it includes the loop overhead of calling <code>stepParticles</code> once per substep. The GPU path is far faster for large counts — the project measured tens of thousands of bodies at a fraction of a millisecond per step — but it has fixed overheads, needs an adapter with compute support, and renders without a depth attachment. Nothing here simulates collisions or long-range forces; those are explicit non-goals of the baseline.</p>
+      </div>
+      <div class="stage" id="simulation-stage">
+        <canvas id="simulation-canvas" aria-label="Particles on a three-dimensional spring, stepped through the CPU simulation seam"></canvas>
+        <div class="labels" id="simulation-labels"></div><div class="hint">drag to orbit · scroll to zoom</div>
+      </div>
+      <div class="controls">
+        <label>Particles <select id="simulation-count"><option value="64">64</option><option value="256" selected>256</option><option value="1024">1024</option></select></label>
+        <label>Substeps <select id="simulation-substeps"><option value="1">1</option><option value="4" selected>4</option><option value="16">16</option></select></label>
+        <label><button id="simulation-play" aria-pressed="true">Pause</button></label>
+        <p class="readout" id="simulation-readout">stepping…</p>
+        <p class="fine">A symplectic integrator: the drift shown is bounded oscillation, not a runaway.</p>
+      </div>
+      <div class="chapter-links"><a href="docs/academy/05-simulation-seam-and-gpu-compute.md">Read chapter 05 ↗</a><a href="src/lib/particles.ts">Source: particles.ts ↗</a></div>
+    </section>
+
+    <!-- 06 -->
+    <section class="chapter" id="ch-symmetry" aria-label="Symmetry and tolerance">
+      <div class="chapter-head"><span class="index">06</span><div><h2>Symmetry, orbits, and the tolerance that decides</h2><p>latticeSites · CUBIC_OPERATIONS · siteMapping · symmetryOrbits · mapsOntoSelf</p></div><span class="tag">SYMMETRY</span></div>
+      <div class="prose">
+        <p>A symmetry operation is a map, so the questions worth asking are mechanical: where does each atom go, which atoms stay put, and which trade places? <code>siteMapping(structure, operation)</code> answers the first (one target index per site), <code>symmetryOrbits</code> groups the sites that permute among themselves, and <code>mapsOntoSelf</code> asks the species-aware whole-structure question. The cubic cell's point group has 48 operations, but the same C₄ about z fixes four atoms in a face-centred lattice and only three in a perovskite — the operation is identical; the basis is not.</p>
+        <p>All of this happens in fractional coordinates, and real crystals are not exact. Every test therefore carries a tolerance, here <code>1e-4</code>. The strain slider displaces one atom; while the displacement is below tolerance the structure still counts as symmetric, and once it crosses the report flips to <code>onto-self: no</code>. That flip is the honest centre of this chapter: "symmetric" is a statement about a tolerance, not an absolute.</p>
+        <p><strong>Limits.</strong> The viewer's operations are the cell's own point group computed from its metric — 48 for a cubic cell, fewer for lower symmetry. It does not check translations, so screw and glide operations are outside this panel even though the parser preserves them; and <code>1e-4</code> is a chosen default, not a physical constant. Change the tolerance and you change the verdict.</p>
+      </div>
+      <div class="stage" id="symmetry-stage"><canvas id="symmetry-canvas" aria-label="A lattice cell with atoms, fixed-site rings, and arrows showing how the chosen operation permutes the sites"></canvas><div class="labels" id="symmetry-labels"></div><div class="hint">drag to orbit · scroll to zoom</div></div>
+      <div class="controls">
+        <label>Lattice <select id="symmetry-lattice"><option value="sc">simple cubic</option><option value="bcc">body-centred</option><option value="fcc" selected>face-centred</option><option value="perovskite">perovskite</option></select></label>
+        <label>Operation <select id="symmetry-operation">
+          <option value="identity">E (identity)</option><option value="c2x">C₂ (x)</option>
+          <option value="c4z" selected>C₄ (z)</option><option value="mirror">σ (⊥ z)</option>
+          <option value="inversion">i (inversion)</option><option value="improper">S₄ (z)</option>
+        </select></label>
+        <label>Strain <input id="symmetry-strain" type="range" min="0" max="0.12" step="0.01" value="0"> <output id="symmetry-strain-value">0.00</output></label>
+        <p class="readout" id="symmetry-readout">mapping…</p>
+        <p class="fine">Gold rings mark fixed sites; coloured arrows show the orbits that trade places.</p>
+      </div>
+      <div class="chapter-links"><a href="docs/academy/06-symmetry-and-tolerance.md">Read chapter 06 ↗</a><a href="src/lib/lattice.ts">Source: lattice.ts ↗</a></div>
+    </section>
+
+    <!-- 07 -->
+    <section class="chapter" id="ch-transform" aria-label="The transform stack">
+      <div class="chapter-head"><span class="index">07</span><div><h2>The transform stack: local moves, composed</h2><p>Visual.matrix · Group.flatten · multiply · applyMatrix</p></div><span class="tag">SCENE GRAPH</span></div>
+      <div class="prose">
+        <p>A node does not store a world position. It stores a local <code>position</code>, <code>scale</code> and <code>rotation</code>, and <code>Visual.matrix</code> turns those into one 4×4. <code>Group.flatten()</code> then walks the tree multiplying each child's matrix onto its parent's, so a node's world matrix is <span class="keep">the product of every ancestor's</span>. That is why moving an arm moves the hand without the hand knowing anything about the shoulder.</p>
+        <p>The lab is three nested groups, each drawn in its parent's frame starting at the origin. Drag a joint and the whole chain downstream swings; the readout prints the wrist's world position <em>read back out of the graph</em>, and the matrix beside it is the top-left 3×3 the renderer actually used. The animation drives the wrist joint until you touch a slider, so you can watch composition and then take over.</p>
+        <p><strong>Limits.</strong> <code>Visual.rotation</code> is a single y-rotation; a full pose needs the optional Euler <code>orientation</code>, which is applied x→y→z inside the node's frame before the y-rotation. There is no inverse lookup, no constraints and no skinning — this is a transform chain, not a skeleton.</p>
+      </div>
+      <div class="stage" id="transform-stage"><canvas id="transform-canvas" aria-label="A three-link chain of nested groups with a labelled wrist"></canvas><div class="labels" id="transform-labels"></div><div class="hint">drag the sliders · the chain composes left to right</div></div>
+      <div class="controls">
+        <label>Joint 1 <input id="transform-joint-1" type="range" min="-1.4" max="1.4" step="0.02" value="0.4"></label>
+        <label>Joint 2 <input id="transform-joint-2" type="range" min="-1.4" max="1.4" step="0.02" value="-0.5"></label>
+        <label>Joint 3 <input id="transform-joint-3" type="range" min="-1.4" max="1.4" step="0.02" value="0.9"></label>
+        <p class="readout" id="transform-readout">composing…</p>
+        <p id="transform-matrix" class="readout">3×3…</p>
+      </div>
+      <div class="chapter-links"><a href="docs/academy/07-transform-stack.md">Read chapter 07 ↗</a><a href="src/lib/world.ts">Source: world.ts ↗</a><a href="src/lib/math.ts">math.ts ↗</a></div>
+    </section>
+
+    <!-- 08 -->
+    <section class="chapter" id="ch-time" aria-label="Interpolation and absolute time">
+      <div class="chapter-head"><span class="index">08</span><div><h2>Interpolation, easing, and why time is absolute</h2><p>Timeline · tween · lerp · smooth · cues fire on every seek</p></div><span class="tag">MOTION</span></div>
+      <div class="prose">
+        <p><code>lerp(a, b, t)</code> is the straight line; <code>smooth(t) = t²(3−2t)</code> is the ease that starts and ends at zero speed; <code>tween(time, start, duration, from, to)</code> is a delayed, eased lerp. Easing changes <em>when</em> a value arrives, never where it starts or ends — which is why the three markers below always share their first and last positions.</p>
+        <p>The important idea is that a <code>Timeline</code> cue is a function of <span class="keep">absolute</span> time. Seek to 2.5 s and every cue is evaluated at 2.5 s, from scratch. Playing is just seeking with an accumulating clock, so scrubbing, pausing, replaying and jumping all give the same picture — and a cue must therefore set absolute state rather than add a delta.</p>
+        <p><strong>Limits.</strong> A cue outside the timeline's duration is rejected rather than clipped; times are clamped into <code>[0, duration]</code>. Easing here is closed-form, so there is no way to author a spring or a bezier curve — a page that wants one writes its own <code>ease</code>. And <code>smooth</code> is C¹, not C²: its acceleration jumps at the ends.</p>
+      </div>
+      <div class="stage" id="time-stage"><canvas id="time-canvas" aria-label="Three markers crossing the same rail with linear, smoothed and delayed timing"></canvas><div class="labels" id="time-labels"></div><div class="hint">scrub the clock · every marker is a function of absolute time</div></div>
+      <div class="controls">
+        <label>Time <input id="time-scrub" type="range" min="0" max="4" step="0.01" value="0"></label>
+        <label><button id="time-play" aria-pressed="true">Pause</button></label>
+        <p class="readout" id="time-readout">t = 0.00 s</p>
+        <p class="fine">The third marker's cue starts at 1.2 s, so it is stationary for the first third of the clock.</p>
+      </div>
+      <div class="chapter-links"><a href="docs/academy/08-time-and-easing.md">Read chapter 08 ↗</a><a href="src/lib/timeline.ts">Source: timeline.ts ↗</a></div>
+    </section>
+
+    <!-- 09 -->
+    <section class="chapter" id="ch-curves" aria-label="Curves, tubes and the point budget">
+      <div class="chapter-head"><span class="index">09</span><div><h2>A curve is a sampled path, and a path is a tube</h2><p>functionCurve · polyline · MAX_LINE_POINTS · chunking</p></div><span class="tag">CURVES</span></div>
+      <div class="prose">
+        <p>There are no lines in the renderer, only triangles, so <code>polyline(points, width, sides)</code> sweeps a ring along the path and joins consecutive rings with quads. A curve is therefore two decisions: how finely you sample it, and how round the tube is. <code>functionCurve(f, domain, samples, width)</code> does the sampling and hands the points to <code>polyline</code> at the default four sides, which costs <span class="keep">8 triangles per segment</span>.</p>
+        <p>Two budgets meet here. The sampler refuses more than 100 000 points, and the tube has its own point cap; when a long run would hit the cap the library chunks it and <em>repeats the shared joint</em>, so the seam is a continuous tube rather than a gap. The probe button asks for one sample past the cap and prints the refusal, because the honest way to show a guard is to trip it.</p>
+        <p><strong>Limits.</strong> The tube width is world-space, so a curve keeps its thickness when you zoom; a screen-space line would be crisper at high zoom and is not implemented. Sampling is uniform in <code>x</code>, so a curve with a sharp feature between two samples is missed exactly there, and the triangle count grows linearly with the sample count — this is a quality/size dial, not an adaptive mesh.</p>
+      </div>
+      <div class="stage" id="curve-stage"><canvas id="curve-canvas" aria-label="A curve drawn as a tube at a resolution you choose"></canvas><div class="labels" id="curve-labels"></div><div class="hint">scroll to zoom</div></div>
+      <div class="controls">
+        <label>Function <select id="curve-kind"><option value="ripple" selected>damped sine</option><option value="runge">Runge</option><option value="chirp">chirp</option></select></label>
+        <label>Samples <input id="curve-samples" type="range" min="8" max="2000" step="4" value="240"></label>
+        <label>Tube width <input id="curve-width" type="range" min="0.004" max="0.08" step="0.002" value="0.03"></label>
+        <p class="readout" id="curve-readout">sampling…</p>
+        <p class="fine" id="curve-probe-status">Every point becomes a ring of four vertices.</p>
+        <label><button id="curve-probe">Ask for 100 001 samples</button></label>
+      </div>
+      <div class="chapter-links"><a href="docs/academy/09-curves-and-tubes.md">Read chapter 09 ↗</a><a href="src/lib/geometry.ts">Source: geometry.ts ↗</a></div>
+    </section>
+
+    <!-- 10 -->
+    <section class="chapter" id="ch-surfaces" aria-label="Surfaces, quads and winding">
+      <div class="chapter-head"><span class="index">10</span><div><h2>Surfaces, quads, and the winding that makes a volume positive</h2><p>parametricSurface · functionSurface · outward winding · divergence theorem</p></div><span class="tag">SURFACES</span></div>
+      <div class="prose">
+        <p>A parametric surface is two nested loops: evaluate the map on an <code>nu × nv</code> grid, then emit two triangles per quad. Nothing culls or lights, so the <em>order</em> of those three vertices is not cosmetic — it fixes the surface normal. The library winds every closed solid so that <code>du × dv</code> points outward, which has a checkable consequence: the signed volume <code>Σ a·(b×c)/6</code> comes out positive.</p>
+        <p>The lab is a torus with that sum printed beside its exact volume <code>2π²Rr²</code>. Turn the resolution up and the estimate converges to the closed form; the sign never changes, which is the whole point. The same winding rule is what lets the consistency test pin every primitive in the module at once.</p>
+        <p><strong>Limits.</strong> The grid is uniform, so a surface that curves sharply in one corner needs resolution everywhere. The guard counts <em>quads</em> — a square grid is legal to exactly 500×500 — and it throws rather than decimating. Non-finite samples are skipped, which can leave a hole rather than a repair.</p>
+      </div>
+      <div class="stage" id="surface-stage"><canvas id="surface-canvas" aria-label="A rotating torus whose signed volume is reported"></canvas><div class="labels" id="surface-labels"></div><div class="hint">drag to orbit · scroll to zoom</div></div>
+      <div class="controls">
+        <label>Resolution <input id="surface-resolution" type="range" min="6" max="120" step="2" value="40"></label>
+        <p class="readout" id="surface-readout">building…</p>
+        <p class="fine">The mesh is single-colour, so the renderer draws its wireframe over it — that is the default look for a 3D object in this library.</p>
+      </div>
+      <div class="chapter-links"><a href="docs/academy/10-surfaces-and-winding.md">Read chapter 10 ↗</a><a href="src/lib/geometry.ts">Source: geometry.ts ↗</a></div>
+    </section>
+
+    <!-- 11 -->
+    <section class="chapter" id="ch-isosurface" aria-label="Marching tetrahedra">
+      <div class="chapter-head"><span class="index">11</span><div><h2>One level set, cut out by marching tetrahedra</h2><p>isosurface(f, bounds, iso, resolution) · sample budget · non-finite cells</p></div><span class="tag">IMPLICIT</span></div>
+      <div class="prose">
+        <p>An implicit surface is the set <code>{p : f(p) = level}</code>. To draw it, <code>isosurface</code> samples <code>f</code> on a lattice, splits every cell into six tetrahedra, and walks the sixteen inside/outside patterns to emit the triangles where the level crosses an edge — the marching-tetrahedra analogue of marching cubes, with no ambiguous cases. The edges are interpolated linearly, so the surface is exact at the samples and approximate between them.</p>
+        <p>The cost model is a lattice: an <code>n³</code> grid evaluates <code>(n+1)³</code> samples, and the budget is 250 000 <em>samples</em> — not quads, which is the opposite of the surface builders. A cubic field therefore tops out at 61³. The slider melts the level through two metaball singularities, and the readout counts the triangles the extractor actually produced.</p>
+        <p><strong>Limits.</strong> Single-threaded and synchronous: a large rebuild is a visible stall. The sample budget is a hard refusal. Sampling a singularity can produce a non-finite value, and the library suppresses every cell that touches one rather than drawing nonsense — so a pole in the field becomes a hole, deliberately.</p>
+      </div>
+      <div class="stage" id="field-stage"><canvas id="field-canvas" aria-label="An isosurface of two blending metaballs, with a level you can move"></canvas><div class="labels" id="field-labels"></div><div class="hint">drag to orbit · scroll to zoom</div></div>
+      <div class="controls">
+        <label>Level <input id="field-melt" type="range" min="0.9" max="3.2" step="0.05" value="1.6"></label>
+        <label>Resolution <input id="field-resolution" type="range" min="12" max="48" step="2" value="30"></label>
+        <p class="readout" id="field-readout">extracting…</p>
+        <p class="fine">The two balls merge as the level falls; the lattice, not the field, decides where the surface can be.</p>
+      </div>
+      <div class="chapter-links"><a href="docs/academy/11-marching-tetrahedra.md">Read chapter 11 ↗</a><a href="src/lib/field.ts">Source: field.ts ↗</a></div>
+    </section>
+
+    <!-- 12 -->
+    <section class="chapter" id="ch-streamlines" aria-label="Streamlines by RK4">
+      <div class="chapter-head"><span class="index">12</span><div><h2>Field lines: RK4 with arc-length steps</h2><p>VectorField · streamline · streamlines · sphereSeeds · stagnation points</p></div><span class="tag">VECTOR FIELDS</span></div>
+      <div class="prose">
+        <p>A streamline solves <code>dx/ds = v̂(x)</code> — the field's direction, not its magnitude — so <code>step</code> is an <span class="keep">arc length</span> and lines do not bunch up where the field is strong. Each step is a classic four-stage Runge–Kutta evaluation with the intermediate points renormalised. Seeding a golden-spiral shell of directions (<code>sphereSeeds</code>) spreads lines without clustering, and <code>streamlines</code> drops any trace too short to read.</p>
+        <p>The lab's field has a stagnation point at the origin, where <code>|v|</code> falls below <code>minStrength</code> and the trace stops. The readout says how many of the seeds survived, and a marker walks the first surviving line to show that equal slider steps cover equal distance.</p>
+        <p><strong>Limits.</strong> A trapped seed is discarded, not drawn as a dot, so a field with many stagnation points looks sparser than it is. The integration has no adaptive step and no error estimate: tolerances are a step size you choose, not a bound the code guarantees. Lines are traced independently, so nothing enforces that they avoid each other.</p>
+      </div>
+      <div class="stage" id="streamline-stage"><canvas id="streamline-canvas" aria-label="Streamlines of a swirling field, with a marker walking one line"></canvas><div class="labels" id="streamline-labels"></div><div class="hint">drag to orbit · scroll to zoom</div></div>
+      <div class="controls">
+        <label>Step <input id="streamline-step" type="range" min="0.02" max="0.18" step="0.005" value="0.06"></label>
+        <p class="readout" id="streamline-readout">tracing…</p>
+        <p class="fine">A smaller step is more accurate and costs proportionally more integrations; the line is re-traced whenever you move the slider.</p>
+      </div>
+      <div class="chapter-links"><a href="docs/academy/12-streamlines.md">Read chapter 12 ↗</a><a href="src/lib/vectorfield.ts">Source: vectorfield.ts ↗</a></div>
+    </section>
+
+    <!-- 13 -->
+    <section class="chapter" id="ch-plotframe" aria-label="Axes, ticks and the plot frame">
+      <div class="chapter-head"><span class="index">13</span><div><h2>Axes, ticks, and choosing round numbers</h2><p>niceStep · tickValues · tickMath · formatTick · plotFrame</p></div><span class="tag">PLOTTING</span></div>
+      <div class="prose">
+        <p>A chart's gridlines should land on numbers a reader already knows how to divide. <code>niceStep(span, count)</code> picks the smallest of <code>1, 2, 5 × 10ⁿ</code> that fits the requested number of intervals, <code>tickValues</code> walks multiples of that step inside the range, and <code>tickMath</code>/<code>formatTick</code> print each one — a real minus sign (U+2212, not a hyphen), grouped digits, and an exponent when the value needs one.</p>
+        <p>Ask for more ticks than the span can hold at a nice step and you get <em>the same step</em>, not a denser grid: the count is a request, and the round number wins. The readout prints the ticks it chose so the rule is visible rather than asserted. <code>plotFrame</code> wraps all of that into geometry — axes, major ticks, exact minor subdivisions, gridlines — plus label anchors that carry plain text and MathML together.</p>
+        <p><strong>Limits.</strong> Minor ticks subdivide the major step by a fixed integer (five by default) and skip the majors themselves. Titles are positioned by a fixed offset from the axis end, so an unusually long tick label can still crowd one — and the frame is geometry, so changing a range means building a new one.</p>
+      </div>
+      <div class="stage" id="plotframe-stage"><canvas id="plotframe-canvas" aria-label="A Cartesian frame with ticks chosen from a requested count"></canvas><div class="labels" id="plotframe-labels"></div><div class="hint">scroll to zoom</div></div>
+      <div class="controls">
+        <label>x ticks <input id="plotframe-ticks" type="range" min="2" max="14" step="1" value="8"></label>
+        <p class="readout" id="plotframe-readout">…</p>
+        <p class="fine">The y axis keeps four intervals; the x axis shows what the requested count turns into.</p>
+      </div>
+      <div class="chapter-links"><a href="docs/academy/13-plot-frames.md">Read chapter 13 ↗</a><a href="src/lib/plot.ts">Source: plot.ts ↗</a></div>
+    </section>
+
+    <!-- 14 -->
+    <section class="chapter" id="ch-typeset" aria-label="Typesetting mathematics">
+      <div class="chapter-head"><span class="index">14</span><div><h2>Typesetting: builders, operands, and a real minus sign</h2><p>mathtext.ts · frac · msup · mroot · cases · number() · the operand rule</p></div><span class="tag">TYPESETTING</span></div>
+      <div class="prose">
+        <p>A formula here is a string of MathML elements, built by functions rather than written by hand. The builders exist because MathML has a rule that is easy to break: <code>msup</code>, <code>msub</code>, <code>mfrac</code>, <code>mover</code> and <code>munder</code> take <span class="keep">exactly their arguments as children</span>. Hand <code>msup</code> a fragment with two top-level nodes and Chrome does not raise the exponent — it lays a second base beside the first, which is how <code>(x+h)²</code> printed as <code>(x+h)2</code> for a while. Every builder that takes an operand now groups a multi-root fragment into one <code>mrow</code> first, and a test pins that rule.</p>
+        <p>Numbers get the same care. <code>number(−12.5, 1)</code> emits a genuine minus sign (U+2212, not a hyphen), groups digits with a thin space in the thousands, and switches to a real <code>msup</code> exponent at the extremes, so a readout lines up with the axes it annotates.</p>
+        <p><strong>Limits.</strong> The builders cover what the pages need — fractions, scripts, roots, matrices, cases, limits, integrals, accents — not the whole of MathML. Nothing sanitises a caller's own fragment, so a page that builds raw MathML is on its own; and the rendering is the browser's, so a face without an OpenType MATH table cannot stretch a delimiter or place a limit.</p>
+      </div>
+      <div class="stage" id="typeset-stage">
+        <div class="math-lab"><div id="typeset-output" class="math-render"></div><pre id="typeset-source" class="math-source"></pre></div>
+        <div class="hint">the same formula, as MathML, under the picture</div>
+      </div>
+      <div class="controls">
+        <label>Build <select id="typeset-kind">
+          <option value="fraction" selected>Δy / Δx</option>
+          <option value="square of a sum">(x + h)²</option>
+          <option value="radical">√(x + 1)</option>
+          <option value="nth root">∛x</option>
+          <option value="index and exponent">a²ₙ</option>
+          <option value="limit">lim h→0</option>
+          <option value="integral">∫₀¹ x dx</option>
+          <option value="matrix">[1 2; 3 4]</option>
+          <option value="cases">a piecewise definition</option>
+          <option value="cancellation">a cancelling fraction</option>
+        </select></label>
+        <label><button id="typeset-probe">Show the operand rule</button></label>
+        <p class="readout" id="typeset-probe-status">Press the button to see what grouping does.</p>
+      </div>
+      <div class="chapter-links"><a href="docs/academy/14-typesetting.md">Read chapter 14 ↗</a><a href="src/lib/mathtext.ts">Source: mathtext.ts ↗</a></div>
+    </section>
+
+    <!-- 15 -->
+    <section class="chapter" id="ch-derivation" aria-label="An animated derivation">
+      <div class="chapter-head"><span class="index">15</span><div><h2>An animated derivation: tokens, beats and marks</h2><p>Derivation · checkStep · strikeRuns · highlight · bracket · cancel</p></div><span class="tag">DERIVATION</span></div>
+      <div class="prose">
+        <p>A derivation is a list of lines; a line is a list of <span class="keep">tokens</span>, each with its own typeset fragment and a plain-text form; and the explanation is a list of <code>beats</code>, each of which applies marks to tokens by id. Nothing is written twice: the highlighter does not re-typeset a line, it tints the tokens that are already there, and a <code>bracket</code> mark draws its brace from the measured box of the tokens it names — which is why the marks survive a resize.</p>
+        <p>Because the model is data, it can be checked. <code>checkStep</code> refuses a mark that names a token the line does not contain — a typo that would otherwise fail silently — and the button below trips it on purpose. <code>strikeRuns</code> is the other half of the honesty: a cancellation over tokens that are <em>not</em> neighbours cannot be one straight line, so the ids are split into contiguous runs and each run gets its own stroke. A single diagonal through the terms between them was a real bug, and it is pinned by a test.</p>
+        <p><strong>Limits.</strong> Marks are per line, so a term that moves between lines cannot be followed by id. The animation is a timer over beats, not a Timeline: it cannot be scrubbed to an arbitrary moment, though <code>seek(index)</code> jumps to a step. And the accessible description is generated from the tokens' plain text, so a token without a <code>text</code> is silent.</p>
+      </div>
+      <div class="stage" id="derivation-stage"><div class="derivation-host" id="derivation-host"></div><div class="hint">the widget animates its own marks</div></div>
+      <div class="controls">
+        <label><button id="derivation-play" aria-pressed="false">Play</button></label>
+        <label><button id="derivation-next">Next</button></label>
+        <label>Step <input id="derivation-step" type="range" min="0" max="3" step="1" value="0"></label>
+        <p class="readout" id="derivation-readout">step 1</p>
+        <label><button id="derivation-bad">Mark a token that is not there</button></label>
+        <p class="fine" id="derivation-bad-status">—</p>
+      </div>
+      <div class="chapter-links"><a href="docs/academy/15-derivation.md">Read chapter 15 ↗</a><a href="src/lib/derivation.ts">Source: derivation.ts ↗</a></div>
+    </section>
+
+    <!-- 16 -->
+    <section class="chapter" id="ch-picking" aria-label="Picking and dragging in three dimensions">
+      <div class="chapter-head"><span class="index">16</span><div><h2>Picking: a ray through a pixel, and a plane to land on</h2><p>camera.ray · rayPlane · screenDistance · attachHandles · camera.locked</p></div><span class="tag">INTERACTION</span></div>
+      <div class="prose">
+        <p>The pointer gives a pixel; the camera turns it into a <span class="keep">ray</span>. An orthographic camera gets parallel rays (the origin walks across the camera plane and the direction is constant); a perspective camera gets a pinhole, with one origin at the eye and a direction per pixel. Intersecting that ray with a plane — here the floor, <code>y = 0</code> — is one dot product away, and the result is the world point the reader is pointing at.</p>
+        <p>Picking a <em>handle</em> is measured in pixels, not world units: <code>screenDistance</code> projects the handle and compares screen positions, so a small object far away is hard to grab and a large one near is easy, which is what the pointer expects. While a handle is held, the camera is locked for the duration of the gesture, so orbiting and dragging never fight over the same movement. The gold ball drags along the floor; the pink echo shows a point that would not be grabbed from the canvas centre.</p>
+        <p><strong>Limits.</strong> Picking is nearest-handle-wins against a pixel radius, with no occlusion: a handle hidden behind geometry can still be grabbed. Ray–plane is the only intersection implemented — no triangles, no boxes — so a page that needs surface picking must test its own geometry. And the plane is fixed at grab time, so a handle cannot switch planes mid-drag.</p>
+      </div>
+      <div class="stage" id="picking-stage"><canvas id="picking-canvas" aria-label="A ball on a floor plane that can be dragged, beside a static echo ball"></canvas><div class="labels" id="picking-labels"></div><div class="hint">drag the gold ball along the floor · orbit with the background</div></div>
+      <div class="controls">
+        <label>Echo ball <input id="picking-echo" type="range" min="-1.9" max="1.9" step="0.05" value="1.1"></label>
+        <p class="readout" id="picking-readout">measuring…</p>
+        <p class="fine">The echo ball is not grabbable; the readout prints both handle distances in pixels for the same pointer position.</p>
+      </div>
+      <div class="chapter-links"><a href="docs/academy/16-picking.md">Read chapter 16 ↗</a><a href="src/lib/interact.ts">Source: interact.ts ↗</a><a href="src/lib/camera.ts">camera.ts ↗</a></div>
+    </section>
+
+    <!-- 17 -->
+    <section class="chapter" id="ch-depth" aria-label="Depth, transparency and draw order">
+      <div class="chapter-head"><span class="index">17</span><div><h2>Depth, transparency, and the order the renderer chooses</h2><p>opaque-first · depthWriteEnabled · back-to-front blending · the alpha trap</p></div><span class="tag">COMPOSITING</span></div>
+      <div class="prose">
+        <p>Depth is a per-pixel competition. An opaque object writes its depth as it draws, so anything later that is farther away loses the test. A translucent object must not write depth — otherwise it would hide what is behind it — so it only <em>tests</em> against the opaque depth already there, and the renderer sorts those objects <span class="keep">back to front</span> by their origin before blending them.</p>
+        <p>That rule has a consequence worth knowing. A translucent surface has no depth in the buffer, so <em>it cannot hide itself</em>: two transparent faces that intersect in space will both be drawn, in the order the sort chose, and the picture will show the seam. The comb of fins that appeared in the contrast demo came from exactly this — a surface at <code>alpha .95</code> took the translucent path — and the fix was to make it opaque. Remove the core below and the shells have nothing to test against, so they read as flat panes rather than a nesting.</p>
+        <p><strong>Limits.</strong> Sorting is per object, by origin depth, so a large translucent surface can still be wrong against another that intersects it; there is no depth peeling and no order-independent transparency. Opaque geometry is drawn in scene order, which is fine because depth resolves it; translucent geometry keeps its given order among equals.</p>
+      </div>
+      <div class="stage" id="depth-stage"><canvas id="depth-canvas" aria-label="Three translucent shells around an opaque core"></canvas><div class="labels" id="depth-labels"></div><div class="hint">drag to orbit · scroll to zoom</div></div>
+      <div class="controls">
+        <label>Opaque core <select id="depth-order"><option value="opaque-first" selected>present — it writes depth</option><option value="shells-only">removed — nothing writes depth</option></select></label>
+        <p class="readout" id="depth-readout">…</p>
+        <p class="fine">The shells never write depth; the core is the only thing that does.</p>
+      </div>
+      <div class="chapter-links"><a href="docs/academy/17-depth-and-order.md">Read chapter 17 ↗</a><a href="src/lib/view.ts">Source: view.ts ↗</a></div>
+    </section>
+
+    <!-- 18 -->
+    <section class="chapter" id="ch-instancing" aria-label="Instancing and the upload contract">
+      <div class="chapter-head"><span class="index">18</span><div><h2>Instancing: one mesh, N draws, and the bytes that move</h2><p>one upload per Geometry · 17 floats per instance · only the changed interval</p></div><span class="tag">BATCHING</span></div>
+      <div class="prose">
+        <p>Geometry is uploaded once per distinct <code>Geometry</code> object, no matter how many <code>Visual</code>s share it. Everything that differs between those visuals — the model matrix and the opacity — travels in an <span class="keep">instance buffer</span>: 16 floats for the 4×4 and one for the opacity, so 17 floats, 68 bytes, per object. A batch of a thousand spheres is one vertex buffer, one instance buffer and one draw call.</p>
+        <p>The second half of the contract is what happens per frame. The renderer compares the packed float values against what it last uploaded and uploads only the changed interval, so a still scene transfers nothing and one object moving transfers a handful of bytes. The readout does that arithmetic out loud; the renderer's own upload counts are measured by <code>scripts/check-renderer.mjs</code>, which asserts that an idle frame writes zero bytes.</p>
+        <p><strong>Limits.</strong> A batch is keyed by geometry, colour and transparency, so a thousand copies in a thousand different colours is a thousand batches and loses the win — the colour is per batch, not per instance. Losing one instance is a <code>draw</code> count change, not a buffer edit. And the comparison is a full pass over the instance data each frame: cheap for thousands, not for millions.</p>
+      </div>
+      <div class="stage" id="instancing-stage"><canvas id="instancing-canvas" aria-label="A lattice of identical spheres scaling in a travelling wave"></canvas><div class="labels" id="instancing-labels"></div><div class="hint">drag to orbit · scroll to zoom</div></div>
+      <div class="controls">
+        <label>Instances <input id="instancing-count" type="range" min="1" max="2000" step="1" value="512"></label>
+        <p class="readout" id="instancing-readout">building…</p>
+        <p class="fine">Every sphere shares one mesh, so the vertex upload does not grow with the count — only the instance buffer does.</p>
+      </div>
+      <div class="chapter-links"><a href="docs/academy/18-instancing.md">Read chapter 18 ↗</a><a href="src/lib/view.ts">Source: view.ts ↗</a></div>
+    </section>
+
+    <!-- 19 -->
+    <section class="chapter" id="ch-crystal" aria-label="Parsing crystal data">
+      <div class="chapter-head"><span class="index">19</span><div><h2>Crystal data: reading a POSCAR, and the scale that is a volume</h2><p>parsePOSCAR · parsePhonopySymmetry · fractional → cartesian · negative scale</p></div><span class="tag">FILE FORMATS</span></div>
+      <div class="prose">
+        <p>A <code>POSCAR</code> is a small text file with a scale, three lattice vectors, a line of species and a line of counts, then fractional coordinates. The parser is strict about the parts that matter and tolerant about the parts that do not: blank lines and trailing comments are fine, the <code>Direct</code>/<code>Cartesian</code> switch is honoured, and the species line may be either symbols or numbers.</p>
+        <p>The one rule that surprises people is the <span class="keep">scale</span>. A positive scale multiplies every lattice vector. A <em>negative</em> scale is not a length at all: VASP reads its magnitude as a target cell volume and rescales the vectors so the cell encloses that many cubic ångström. A parser that treated it as a multiplier would silently shrink a cell by two orders of magnitude, so the second preset uses one and the readout prints the volume it implies.</p>
+        <p>The companion reader, <code>parsePhonopySymmetry</code>, takes the symmetry block of a phonopy file — rotation matrices and translations — and returns labelled operations, which is what the symmetry chapter consumes. Both parsers are pure text functions with no DOM, so the test suite feeds them the awkward files: Windows line endings, extra blank lines, a species line of bare numbers, and a missing count.</p>
+        <p><strong>Limits.</strong> Only the POSCAR/phonopy shapes are understood: no symmetry operations from a CIF, no selective dynamics flags, no per-site labels beyond the species. Fractional coordinates are used as given — the parser does not reduce them into the cell — and a malformed file throws with a message rather than guessing.</p>
+      </div>
+      <div class="stage" id="crystal-stage"><canvas id="crystal-canvas" aria-label="Atoms of a parsed crystal file, coloured by element"></canvas><div class="labels" id="crystal-labels"></div><div class="hint">drag to orbit · scroll to zoom</div></div>
+      <div class="controls">
+        <label>File <select id="crystal-source">
+          <option value="diamond (POSCAR)" selected>diamond · POSCAR</option>
+          <option value="rocksalt, volume scale">rocksalt · negative scale (volume)</option>
+        </select></label>
+        <p class="readout" id="crystal-readout">parsing…</p>
+        <p class="fine" id="crystal-operations">—</p>
+      </div>
+      <div class="chapter-links"><a href="docs/academy/19-crystal-files.md">Read chapter 19 ↗</a><a href="src/lib/crystal.ts">Source: crystal.ts ↗</a></div>
+    </section>
+
+    <!-- 20 -->
+    <section class="chapter" id="ch-elements" aria-label="Element appearance">
+      <div class="chapter-head"><span class="index">20</span><div><h2>Element appearance: one table for colour and size</h2><p>ELEMENTS · appearanceFor · covalent radii · the unknown-symbol fallback</p></div><span class="tag">DATA TABLE</span></div>
+      <div class="prose">
+        <p>Every element is drawn the same way: a sphere whose radius is a scaled covalent radius and whose colour is the CPK convention — white hydrogen, black carbon, red oxygen, blue nitrogen, yellow sulfur, green chlorine, and a muted palette for the metals so a structure of forty species still reads. The table lives in one place, <code>ELEMENTS</code>, and <code>appearanceFor</code> looks a symbol up, trims and title-cases it, and falls back to a neutral grey for anything it does not know.</p>
+        <p>The colours here are the library's own: chosen for a dark background and pushed slightly apart in hue, rather than the CMK/CPK values a print diagram uses. Radii are in ångström and are consistent with the lattice chapter, so a bond drawn between two spheres meets both surfaces — the panel below prints the fallback so a reader can see that an unknown symbol still draws something.</p>
+        <p><strong>Limits.</strong> A static table, not a periodic table: only the symbols it lists are styled, radii are one number per element rather than a radius per bond order, and there is no isotope or charge distinction. Because the renderer is unlit, a sphere in a pale colour reads flatter than in a rendered figure — the same reason every mesh here now carries a wireframe.</p>
+      </div>
+      <div class="stage" id="elements-stage"><canvas id="elements-canvas" aria-label="Spheres for a group of elements, sized by radius and coloured by convention"></canvas><div class="labels" id="elements-labels"></div><div class="hint">drag to orbit · scroll to zoom</div></div>
+      <div class="controls">
+        <label>Group <select id="elements-group">
+          <option value="organic backbone" selected>organic backbone</option>
+          <option value="alkali metals">alkali metals</option>
+          <option value="noble gases">noble gases</option>
+          <option value="transition metals">transition metals</option>
+        </select></label>
+        <p class="readout" id="elements-readout">loading…</p>
+        <p class="fine" id="elements-unknown">—</p>
+      </div>
+      <div class="chapter-links"><a href="docs/academy/20-elements.md">Read chapter 20 ↗</a><a href="src/lib/elements.ts">Source: elements.ts ↗</a></div>
+    </section>
+
+    <!-- 21 -->
+    <section class="chapter" id="ch-area" aria-label="Area under a curve">
+      <div class="chapter-head"><span class="index">21</span><div><h2>Area under a curve: the picture is the quadrature rule</h2><p>areaUnder · the trapezoid sum · error against the closed form · O(1/n²)</p></div><span class="tag">QUADRATURE</span></div>
+      <div class="prose">
+        <p>A definite integral is a limit of sums, and the strips drawn here <em>are</em> one of those sums: <code>areaUnder(f, [a, b], { baseline, samples })</code> emits one quad per interval between two samples, with corners at <code>(left, f(left))</code> and <code>(right, f(right))</code>. That is exactly the <span class="keep">trapezoid rule</span>, so the number the panel prints is not an illustration of the picture — it is the same arithmetic the triangles are built from.</p>
+        <p>Because each row of the table also knows its closed form — <code>∫₀^π sin = 2</code>, <code>∫₀¹ x² = 1/3</code>, <code>∫₀¹ √x = 2/3</code> — the error is a measurement rather than a claim. The trapezoid rule on a smooth function is second order: halve the width and the error falls by about four. Watch the exponent as the strip count doubles: that factor of four <em>is</em> the order of the method.</p>
+        <p><strong>Limits.</strong> The rule is trapezoid, not Simpson: there is no higher-order scheme to choose, and a function with a corner or a singularity inside the range converges far more slowly than the table suggests — <code>√x</code> on <code>[0, 1]</code> is included precisely because its endpoint slope is infinite, and its error falls like <code>1/n^1.5</code>, not <code>1/n²</code>. The strips also follow the samples rather than adapting to them, so a feature between two samples is integrated wrongly with no warning.</p>
+      </div>
+      <div class="stage" id="area-stage"><canvas id="area-canvas" aria-label="A curve with trapezoid strips under it, and an error printed against the closed form"></canvas><div class="labels" id="area-labels"></div><div class="hint">scroll to zoom</div></div>
+      <div class="controls">
+        <label>Integrand <select id="area-shape">
+          <option value="sin x on [0, π]" selected>sin x on [0, π]</option>
+          <option value="x² on [0, 1]">x² on [0, 1]</option>
+          <option value="√x on [0, 1]">√x on [0, 1] (a corner at 0)</option>
+        </select></label>
+        <label>Strips <input id="area-steps" type="range" min="2" max="200" step="1" value="8"></label>
+        <p class="readout" id="area-readout">integrating…</p>
+        <p class="fine">The shaded strips are triangles in the geometry, exactly as the sum counts them.</p>
+      </div>
+      <div class="chapter-links"><a href="docs/academy/21-area-and-quadrature.md">Read chapter 21 ↗</a><a href="src/lib/plot.ts">Source: plot.ts ↗</a></div>
+    </section>
+
+    <!-- 22 -->
+    <section class="chapter" id="ch-limit" aria-label="The secant limit">
+      <div class="chapter-head"><span class="index">22</span><div><h2>The difference quotient, and the limit that defines a derivative</h2><p>secantSlope · lineThrough · h → 0 · the truncation error of a chord</p></div><span class="tag">CALCULUS</span></div>
+      <div class="prose">
+        <p>The derivative is a limit of slopes of secants: <code>f′(a) = lim<sub>h→0</sub> (f(a+h) − f(a))/h</code>, which is exactly what <code>secantSlope(f, a, a+h)</code> computes. The panel draws one fixed tangent — the answer — and a secant whose <code>h</code> you can push down until the two are indistinguishable at the precision a float32 mesh can carry.</p>
+        <p>The error behaves the way Taylor's theorem says it must. The chord slope is the average of the derivative over the interval, so the difference from <code>f′(a)</code> is <span class="keep">O(h)</span> for a smooth function: every division of <code>h</code> by ten removes roughly one digit of error, until floating-point cancellation in <code>f(a+h) − f(a)</code> starts to cost digits instead. That is the honest ending to this chapter — the limit exists in analysis, but a computer reaches the noise floor first, and the slider goes there.</p>
+        <p><strong>Limits.</strong> Nothing here differentiates symbolically: the derivative is written out by hand in the lab, and there is no automatic differentiation in the library. The slider is logarithmic on purpose, and the last decade is where the round-off appears rather than the mathematics.</p>
+      </div>
+      <div class="stage" id="limit-stage"><canvas id="limit-canvas" aria-label="A curve with a fixed tangent and a secant whose second point approaches the first"></canvas><div class="labels" id="limit-labels"></div><div class="hint">scroll to zoom</div></div>
+      <div class="controls">
+        <label>h (log) <input id="limit-h" type="range" min="0" max="1" step="0.001" value="0.5"></label>
+        <p class="readout" id="limit-readout">measuring…</p>
+        <p class="fine">The gold curve is the function, the pink dot is <code>a</code>, the green dot is <code>a + h</code>, and the faint blue line is the tangent the secants converge to.</p>
+      </div>
+      <div class="chapter-links"><a href="docs/academy/22-secant-limit.md">Read chapter 22 ↗</a><a href="src/lib/plot.ts">Source: plot.ts ↗</a></div>
+    </section>
+
+    <section class="audit" id="audit">
+      <h2>In passing: a text-layout audit, and its verdicts</h2>
+      <p>Building the academy meant reading the existing demo pages closely, so the lane recorded where a label was not where its text suggested. The full note is in <a href="docs/academy/AUDIT-text-layout.md">docs/academy/AUDIT-text-layout.md</a>; four of the five findings have since been fixed by the typography lane, and the fifth is a property of projected labels rather than a defect.</p>
+      <ol>
+        <li><strong>Demo 24 · contrast — fixed.</strong> The range caption sat across the middle of the surface. It now sits on the rotation axis below the figure, the one place a y-rotation cannot move, and the surface is opaque (as <code>alpha .95</code> it took the no-depth-write translucent path and intersected itself).</li>
+        <li><strong>Demo 07 · colour — fixed.</strong> <code>viridis(t)</code> floated to the left of the ribbon; it is now centred over the ribbon it names.</li>
+        <li><strong>Demo 23 · measure — fixed.</strong> The figure turns on a group while the labels were anchored at raw world points, so every caption slid off the picture. The anchors and the drag handle now ride the group's own transform.</li>
+        <li><strong>Demo 25 · secant — fixed, and worse than reported.</strong> Beyond the endpoint collision, <code>msup(paren(…), 2)</code> was printing <code>(x+h)2</code> because <code>paren</code> returned three top-level nodes and a script base must be one; and a cancellation whose tokens were not neighbours drew one diagonal through every term between them. Both are fixed in the library, with tests.</li>
+        <li><strong>Academy panel 01 — a documented limit.</strong> The near/far labels are anchored at a fixed world offset, so at extreme camera distances they can leave the frame. That is inherent to DOM labels projected through a camera, and it is shared with every page here.</li>
+      </ol>
+    </section>
+    </section>
+
+    <p class="stats" id="stats">Measuring frame time…</p>
+    <p class="status" id="status" role="alert" hidden></p>
+  </main>
+  <footer>
+    <span>Edena TypeScript visualization library · one device, every chapter</span>
+    <span><a href="basics.html">basics ↗</a> · <a href="docs/academy/README.md">chapter index ↗</a> · <a href="index.html">playground ↗</a></span>
+  </footer>
+  <script type="module" src="build/examples/academy.js"></script>
+</body></html>

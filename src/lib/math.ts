@@ -12,7 +12,12 @@ export const normalize = (v: Vec3): Vec3 => { const n = length(v) || 1; return [
 export const identity = () => new Float32Array([1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1]);
 export function multiply(a: Float32Array, b: Float32Array): Float32Array {
   const out = new Float32Array(16);
-  for (let c=0;c<4;c++) for (let r=0;r<4;r++) for (let k=0;k<4;k++) out[c*4+r] += a[k*4+r]*b[c*4+k];
+  for (let c = 0; c < 16; c += 4) {
+    const x = b[c], y = b[c + 1], z = b[c + 2], w = b[c + 3];
+    for (let r = 0; r < 4; r++) {
+      out[c + r] = a[r] * x + a[4 + r] * y + a[8 + r] * z + a[12 + r] * w;
+    }
+  }
   return out;
 }
 /** A rotation about one world axis, as a column-major 4×4. */

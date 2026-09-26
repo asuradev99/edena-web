@@ -175,6 +175,25 @@ does, and letting the reader grab the picture.
 
 ## Landed recently
 
+- **Typography + derivation + basics polish (deepseek, 2026-09-25, uncommitted — for astra to
+  integrate).** `mathtext`'s `paren` returned three roots, so any `msup(paren(...), n)` lost its
+  exponent (demo 25 printed `(x+h)2`); every operand-taking builder now runs its operand through a
+  `one()` that groups only multi-root fragments, leaving single-element output byte-identical.
+  `Derivation` gained a pure `strikeRuns(order, ids)` — a cancellation now draws one strike per
+  contiguous run instead of a diagonal through every term between the named ones — and its rows
+  baseline-align, so a `lim`'s limits no longer drag the baseline. Demo 23's labels and drag handle
+  ride the turning group; demo 24's caption sits on the rotation axis below the figure and its
+  surface is opaque (as `alpha .95` it took the no-depth-write translucent path and intersected
+  itself, a pre-existing comb of fins); demo 07's palette name is centred over its ribbon. The tour
+  only projects labels for on-screen panels (**99 labels exist, 4 are on a visible panel at load**).
+  `MATH_FONT_STACK` leads with STIX Two Math (a `MATH`-table face) with Noto Sans Math behind it, and
+  `basics.html` / `field.html` / `symmetry.html` load it; `index.html` still needs the same one-line
+  link (astra owns it). `basics.html` links `academy.html`. `npm test` 102/102, typecheck clean,
+  `check-links` / `check-pages` / `check-basics` green, `check-depth` green on a dedicated 9555
+  Chrome (the shared 9444 times out). Files: `src/lib/mathtext.ts`, `src/lib/derivation.ts`,
+  `src/examples/basics.ts`, `basics.html`, `field.html`, `symmetry.html`,
+  `tests/derivation.test.mjs`. `view.ts` untouched — astra's.
+
 - **Basics tour (deepcode, 2026-09-25, third session).** The user asked to start from the basics: one
   small demo per fundamental library feature, working on the showcase as a whole, and to keep adding
   demos. Twenty-five are live, each a self-contained factory: the coordinate frame; interpolation with a

@@ -199,6 +199,12 @@ try {
   await wait(500);
   // Only these hold still on their own, so only they can prove that a control left them alone.
   const still = new Set(['coordinates', 'shapes', 'groups', 'colour', 'plot', 'depth', 'instances', 'field', 'streamlines', 'story', 'vectors', 'path', 'normals', 'layers', 'bars', 'follow', 'transform', 'measure', 'contrast', 'secant']);
+  // Labels are DOM overlays, and they now fade in and out as geometry passes in front of them, which
+  // adds motion to a stage that is otherwise holding still. This comparison is about the geometry a
+  // control moves, so take the overlays out of the picture for its duration. `display: none` rather
+  // than `visibility: hidden`: the layer sets `visibility: visible` on every label each frame, and a
+  // child that re-enables visibility wins over a hidden parent.
+  await evaluate(`for (const host of document.querySelectorAll('.labels')) host.style.display = 'none';`);
   for (const [control, value, stageId] of changes) {
     // The helix keeps moving, so stop it first: then the turn count is the only thing that changes.
     if (control === 'labels-turns' || control.startsWith('camera-') || control.startsWith('simulation-') || control.startsWith('follow-')) {
@@ -226,6 +232,8 @@ try {
       assert.ok(creep < .05, `${control} reached into ${other} (difference ${creep.toFixed(5)})`);
     }
   }
+
+  await evaluate(`for (const host of document.querySelectorAll('.labels')) host.style.display = '';`);
 
   // The layer checkboxes were switched off by the sweep above, which leaves that stage empty; put them
   // back before anything else measures it.

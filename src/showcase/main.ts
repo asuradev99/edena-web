@@ -8,7 +8,12 @@ let curve: Visual | undefined, surface: Visual | undefined, surfaceSpin: Group |
 /** A bright point that rides the curve, so the plot always reads as motion. */
 let curveMarker: Visual | undefined;
 let curveFn: (x: number) => number = x => Math.sin(x);
-let triangles = 0, frame = 0, disposed = false, last = 0, timer = 0, started = 0, paused = matchMedia('(prefers-reduced-motion: reduce)').matches;
+let triangles = 0, frame = 0, disposed = false, last = 0, timer = 0, elapsed = 0, paused = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const visibleCanvases=new Set<HTMLCanvasElement>();
+const visibility=new IntersectionObserver(entries=>{
+  for(const entry of entries){const canvas=entry.target as HTMLCanvasElement;
+    if(entry.isIntersecting)visibleCanvases.add(canvas);else visibleCanvases.delete(canvas);}
+},{rootMargin:'100px'});
 // Diagnostics: ?samples=1 drops MSAA, ?dpr=1 caps resolution — useful when a slow GPU backend is suspected.
 const params = new URLSearchParams(location.search);
 const msaa = params.get('samples') === '1' ? 1 : 4;
@@ -23,8 +28,8 @@ function report(message: string) {
 async function initialize() {
   // One device, three views: the later two borrow and are disposed before their owner.
   const curveView = await WebGPUView.create(get<HTMLCanvasElement>('curve'), { interactive: false, samples: msaa, maxDpr, onError: report });
-  const surfaceView = await WebGPUView.create(get<HTMLCanvasElement>('surface'), { device: curveView.device, onError: report });
-  const fieldView = await WebGPUView.create(get<HTMLCanvasElement>('field'), { device: curveView.device, onError: report });
+  const surfaceView = await WebGPUView.create(get<HTMLCanvasElement>('surface'), { device: curveView.device, samples:msaa,maxDpr,onError: report });
+  const fieldView = await WebGPUView.create(get<HTMLCanvasElement>('field'), { device: curveView.device, samples:msaa,maxDpr,onError: report });
   if (disposed) { fieldView.dispose(); surfaceView.dispose(); curveView.dispose(); return; }
   views.push(curveView, surfaceView, fieldView);
   const info = curveView.adapterInfo, name = info?.description || info?.device || info?.architecture || info?.vendor || '';
@@ -32,6 +37,10 @@ async function initialize() {
 
   // 1D — axes, ticks, grid, and DOM labels come straight from plotFrame.
   curveView.camera.yaw = 0; curveView.camera.pitch = 0; curveView.camera.height = 5.4;
+  const fitCurve=(width:number,height:number)=>{
+    if(width>0&&height>0)curveView.camera.height=Math.max(4.6,9.4*height/width);
+  };
+  curveView.onResize=fitCurve;fitCurve(curveView.canvas.clientWidth,curveView.canvas.clientHeight);
   const chart = plotFrame([-4, 4], [-1.6, 1.6], { xTicks: 8, yTicks: 4 });
   curve = new Visual(functionCurve(x => Math.sin(x), [-4, 4], 640, .018), rgba('#ffff00'));
   curve.reveal = 0;
@@ -42,7 +51,13 @@ async function initialize() {
   curveView.world.add(curveMarker);
   get('curve-equation').innerHTML = mathml(row(mi('f'), mo('('), mi('x'), mo(')'), mo('='), mi('sin'), mo('('), mi('x'), mo(')')), 'block');
   const curveLabels = new LabelLayer(get('curve-labels'), curveView.camera);
-  for (const anchor of chart.labels) curveLabels.addHTML(mathml(mtext(anchor.text)), () => anchor.position, '#8f8f99', 'math-label');
+  for (const anchor of chart.labels){
+    const yTick=anchor.position[1]!==chart.labels[0].position[1];
+    const label=curveLabels.addHTML(mathml(anchor.math??mtext(anchor.text)),()=>anchor.position,'#9db0c2','math-label',yTick?'right':'center');
+    // Plot coordinates scale with the viewport; text does not. Keep a CSS-pixel gap from
+    // the spine so long/negative tick labels remain legible on a narrow screen.
+    if(yTick)label.style.marginLeft='-6px';else label.style.marginTop='8px';
+  }
   labels.push(curveLabels);
 
   // 2D — a height surface colored by its own value: one draw call, per-vertex colors.
@@ -111,7 +126,7 @@ async function initialize() {
     fieldView.camera.height=3.5;
   });
 
-  const latticeView = await WebGPUView.create(get<HTMLCanvasElement>('lattice'),{device:curveView.device,onError:report});
+  const latticeView = await WebGPUView.create(get<HTMLCanvasElement>('lattice'),{device:curveView.device,samples:msaa,maxDpr,onError:report});
   views.push(latticeView);
   latticeView.camera.height=5.8;
   const atomMesh=sphere(.095), atoms=new Group(), bonds=new Group();
@@ -135,24 +150,23 @@ async function initialize() {
   for(const {node} of latticeView.world.flatten())triangles+=node.geometry.vertices.length/9;
 
   if (paused) { curve.reveal = 1; surface.reveal = 1; }
+  for(const view of views){visibleCanvases.add(view.canvas);visibility.observe(view.canvas);}
   animate(performance.now());
 }
 
 function animate(now: number) {
   if (disposed) return;
-  const delta = last ? Math.min((now - last) / 1000, .1) : 0; last = now;
-  if (!started) started = now;
+  const delta = last ? Math.max(0,Math.min((now - last) / 1000, .1)) : 0; last = now;
   if (!paused) {
     // Reveal each plot once and keep it: a looping redraw would blank the curve mid-cycle.
-    const elapsed = (now - started) / 1000;
+    elapsed+=delta;
     if (curve) curve.reveal = smooth(elapsed / 2.2);
     if (curveMarker) { const markerX = -4 + ((elapsed * .8) % 8); curveMarker.position = [markerX, curveFn(markerX), .02]; curveMarker.reveal = curve ? curve.reveal : 1; }
     if (surface) surface.reveal = smooth(elapsed / .9);
     if (surfaceSpin) surfaceSpin.rotation += delta * .3;
     if (fieldSpin) fieldSpin.rotation += delta * .22;
   }
-  for (const layer of labels) layer.update();
-  for (const view of views) view.render();
+  for(let i=0;i<views.length;i++)if(visibleCanvases.has(views[i].canvas)){labels[i]?.update();views[i].render();}
   samples.push(delta * 1000); if (samples.length > 120) samples.shift();
   timer += delta;
   if (timer >= .25) {
@@ -175,6 +189,7 @@ document.addEventListener('visibilitychange', () => { last = 0; });
 
 function shutdown() {
   disposed = true; cancelAnimationFrame(frame);
+  visibility.disconnect();
   for (const layer of labels) layer.dispose();
   for (const view of [...views].reverse()) view.dispose();
 }

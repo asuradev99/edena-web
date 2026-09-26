@@ -586,7 +586,12 @@ function rebuild(): void {
   if (element.anchor) labels.add(element.label, () => element.anchor!, '#83c167');
   if (atomLabelsToggle.checked && big.positions.length <= 36) {
     for (let index = 0; index < big.positions.length; index++) {
-      built.atomLabels.push(labels.addHTML(mathml(mi(big.species[index])), () => atomVisuals[index].position, '#ffffff', 'math-label atom-tag'));
+      // Put the symbol on the atom's near surface. Other atoms still occlude it normally.
+      built.atomLabels.push(labels.addHTML(mathml(mi(big.species[index])), () => {
+        const atom = atomVisuals[index], camera = view!.camera;
+        const back: Vec3 = [Math.sin(camera.yaw) * Math.cos(camera.pitch), Math.sin(camera.pitch), Math.cos(camera.yaw) * Math.cos(camera.pitch)];
+        return atom.position.map((value, axis) => value + back[axis] * atom.scale[0] * 1.01) as Vec3;
+      }, '#ffffff', 'math-label atom-tag'));
     }
   }
 

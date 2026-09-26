@@ -45,16 +45,31 @@ export function isosurface(field: (x: number, y: number, z: number) => number, b
   const values = new Float64Array(sx * sy * sz);
   for (let k = 0; k < sz; k++) for (let j = 0; j < sy; j++) for (let i = 0; i < sx; i++)
     values[i + sx * (j + sy * k)] = field(bounds.min[0] + i * hx, bounds.min[1] + j * hy, bounds.min[2] + k * hz);
-  const out: number[] = [], corner: Vec3[] = new Array(8), value = new Float64Array(8);
+  const out: number[] = [];
+  const corner: Vec3[] = Array.from({ length: 8 }, () => [0, 0, 0]);
+  const value = new Float64Array(8);
+  const offsets = Array.from({ length: 8 }, (_, c) => (c & 1) + sx * (((c >> 1) & 1) + sy * ((c >> 2) & 1)));
+  const x = Float64Array.from({ length: sx }, (_, i) => bounds.min[0] + i * hx);
+  const y = Float64Array.from({ length: sy }, (_, j) => bounds.min[1] + j * hy);
+  const z = Float64Array.from({ length: sz }, (_, k) => bounds.min[2] + k * hz);
   for (let k = 0; k < nz; k++) for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) {
-    let finite = true;
+    let finite = true, inside = 0;
+    const base = i + sx * (j + sy * k);
     for (let c = 0; c < 8; c++) {
-      const ix = i + (c & 1), iy = j + ((c >> 1) & 1), iz = k + ((c >> 2) & 1);
-      corner[c] = [bounds.min[0] + ix * hx, bounds.min[1] + iy * hy, bounds.min[2] + iz * hz];
-      value[c] = values[ix + sx * (iy + sy * iz)];
-      if (!Number.isFinite(value[c])) finite = false;
+      const sample = values[base + offsets[c]];
+      value[c] = sample;
+      if (!Number.isFinite(sample)) finite = false;
+      if (sample > isovalue) inside |= 1 << c;
     }
-    if (!finite) continue;
+    // Most cells do not touch the surface. Skip them before constructing corner positions
+    // or visiting tetrahedra; the eight corner vectors are reused for crossing cells.
+    if (!finite || inside === 0 || inside === 255) continue;
+    for (let c = 0; c < 8; c++) {
+      const point = corner[c];
+      point[0] = x[i + (c & 1)];
+      point[1] = y[j + ((c >> 1) & 1)];
+      point[2] = z[k + ((c >> 2) & 1)];
+    }
     for (const tet of TETS) {
       const mask = (value[tet[0]] > isovalue ? 1 : 0) | (value[tet[1]] > isovalue ? 2 : 0) | (value[tet[2]] > isovalue ? 4 : 0) | (value[tet[3]] > isovalue ? 8 : 0);
       // A crossing edge is the linear interpolation between opposite-side corners.

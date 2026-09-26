@@ -47,6 +47,8 @@ const PARAMS_BYTES = 32;
 const CAMERA_BYTES = 96;
 
 const COMPUTE_SHADER = /* wgsl */ `
+override mode: u32;
+
 struct Params {
   dt: f32,
   stiffness: f32,
@@ -71,10 +73,10 @@ fn integrate(@builtin(global_invocation_id) gid: vec3<u32>) {
   var position = inPositions[index].xyz;
   var velocity = inVelocities[index].xyz;
   var acceleration = vec3<f32>(0.0, 0.0, 0.0);
-  if (params.mode == 0u) {
+  if (mode == 0u) {
     // Harmonic oscillator: a = -k p, so the cloud breathes around the origin.
     acceleration = -params.stiffness * position;
-  } else if (params.mode == 1u) {
+  } else if (mode == 1u) {
     // Central attractor: a = -k p / |p|^3, softened so the core stays finite.
     let distance = max(length(position), 0.12);
     acceleration = -params.stiffness * position / (distance * distance * distance);
@@ -84,7 +86,16 @@ fn integrate(@builtin(global_invocation_id) gid: vec3<u32>) {
     // The j == index term is exactly zero, so the self-force needs no branch.
     let epsilonSquared = params.softening * params.softening;
     var total = vec3<f32>(0.0, 0.0, 0.0);
-    for (var j: u32 = 0u; j < params.count; j = j + 1u) {
+    // Unroll eight interactions to reduce loop overhead while keeping summation order.
+    var j = 0u;
+    for (; j + 7u < params.count; j += 8u) {
+      ${[0, 1, 2, 3, 4, 5, 6, 7].map(offset => `{
+        let delta = inPositions[j + ${offset}u].xyz - position;
+        let inverse = inverseSqrt(dot(delta, delta) + epsilonSquared);
+        total = total + delta * (inverse * inverse * inverse);
+      }`).join('\n')}
+    }
+    for (; j < params.count; j++) {
       let delta = inPositions[j].xyz - position;
       let inverse = inverseSqrt(dot(delta, delta) + epsilonSquared);
       total = total + delta * (inverse * inverse * inverse);
@@ -136,7 +147,7 @@ fn vertex(@builtin(vertex_index) vertexIndex: u32, @builtin(instance_index) inst
 fn fragment(input: VertexOutput) -> @location(0) vec4<f32> {
   let distance = length(input.offset);
   if (distance > 1.0) { discard; }
-  return vec4<f32>(camera.tint.rgb, camera.tint.a * smoothstep(1.0, 0.2, distance));
+  return vec4<f32>(camera.tint.rgb, camera.tint.a * (1.0 - smoothstep(0.2, 1.0, distance)));
 }
 `;
 
@@ -151,15 +162,6 @@ function seedRandom(seed: number): () => number {
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
 }
-
-/**
- * `writeTimestamp` belongs to the optional GPU timestamp-query feature but is missing from the
- * current `@webgpu/types` release, so declare just the one call used here. Timestamp values are
- * nanoseconds; `getTimestampPeriod()` (also untyped, and unimplemented in Chrome) is used only
- * when a browser actually provides it.
- */
-type TimestampEncoder = GPUCommandEncoder & { writeTimestamp(querySet: GPUQuerySet, queryIndex: number): void };
-type TimestampQueue = GPUQueue & { getTimestampPeriod?(): number };
 
 export class GpuParticleSimulation {
   static async create(options: GpuParticleSimulationOptions = {}): Promise<GpuParticleSimulation> {
@@ -235,7 +237,9 @@ export class GpuParticleSimulation {
   private readonly velocityB: GPUBuffer;
   private readonly paramsBuffer: GPUBuffer;
   private readonly cameraBuffer: GPUBuffer;
-  private readonly readbackBuffer: GPUBuffer;
+  private readbackBuffer?: GPUBuffer;
+  private errorListener?: (event: Event) => void;
+  private reading = false;
   private readonly computeAtoB: GPUBindGroup;
   private readonly computeBtoA: GPUBindGroup;
   private readonly renderFromA: GPUBindGroup;
@@ -274,7 +278,8 @@ export class GpuParticleSimulation {
 
     if (config.onError) {
       const report = config.onError;
-      device.addEventListener('uncapturederror', event => report((event as GPUUncapturedErrorEvent).error.message));
+      this.errorListener = event => report((event as GPUUncapturedErrorEvent).error.message);
+      device.addEventListener('uncapturederror', this.errorListener);
       void device.lost.then(info => { if (info.reason !== 'destroyed') report(`GPU device lost: ${info.message}`); });
     }
 
@@ -330,8 +335,7 @@ export class GpuParticleSimulation {
     this.velocityB = makeBuffer(this.byteLength, storageUsage);
     this.paramsBuffer = makeBuffer(PARAMS_BYTES, GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST);
     this.cameraBuffer = makeBuffer(CAMERA_BYTES, GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST);
-    // Readback is only needed for `checksum()`; keep it small and off the hot path.
-    this.readbackBuffer = makeBuffer(this.byteLength, GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST);
+    // Allocate readback lazily: normal animation never reads particle positions on the CPU.
 
     this.params = new Float32Array(new ArrayBuffer(PARAMS_BYTES));
     this.paramsBits = new Uint32Array(this.params.buffer);
@@ -353,7 +357,7 @@ export class GpuParticleSimulation {
     const computeModule = device.createShaderModule({ code: COMPUTE_SHADER, label: 'particle integrate' });
     this.computePipeline = device.createComputePipeline({
       layout: 'auto',
-      compute: { module: computeModule, entryPoint: 'integrate' },
+      compute: { module: computeModule, entryPoint: 'integrate', constants: { mode: this.paramsBits[3] } },
     });
 
     const renderModule = device.createShaderModule({ code: RENDER_SHADER, label: 'particle sprites' });
@@ -405,15 +409,24 @@ export class GpuParticleSimulation {
     if (!Number.isInteger(substeps) || substeps < 1 || substeps > 64) {
       throw new Error('Particle substeps must be an integer between 1 and 64');
     }
+    this.encodeSteps(encoder,substeps);
+  }
+
+  private encodeSteps(encoder:GPUCommandEncoder,substeps:number,querySet?:GPUQuerySet):void {
+    // Dispatch boundaries provide storage synchronization within a compute pass. Keep all
+    // substeps in one pass to avoid repeated pass setup and pipeline binding.
+    const timestampWrites = querySet
+      ? { querySet, beginningOfPassWriteIndex: 0, endOfPassWriteIndex: 1 }
+      : undefined;
+    const pass = encoder.beginComputePass({ timestampWrites });
+    pass.setPipeline(this.computePipeline);
     for (let index = 0; index < substeps; index += 1) {
-      const pass = encoder.beginComputePass();
-      pass.setPipeline(this.computePipeline);
       pass.setBindGroup(0, this.current === 'a' ? this.computeAtoB : this.computeBtoA);
       pass.dispatchWorkgroups(this.workgroups);
-      pass.end();
       this.current = this.current === 'a' ? 'b' : 'a';
-      this.stepCount += 1;
     }
+    pass.end();
+    this.stepCount += substeps;
   }
 
   /**
@@ -453,27 +466,23 @@ export class GpuParticleSimulation {
    */
   async measure(iterations = 32): Promise<number | null> {
     this.assertLive();
-    if (!this.supportsTiming) return null;
     if (!Number.isInteger(iterations) || iterations < 1 || iterations > 1024) {
       throw new Error('Measurement iterations must be an integer between 1 and 1024');
     }
+    if (!this.supportsTiming) return null;
     const querySet = this.device.createQuerySet({ type: 'timestamp', count: 2 });
     const resolve = this.device.createBuffer({ size: 16, usage: GPUBufferUsage.QUERY_RESOLVE | GPUBufferUsage.COPY_SRC });
     const readback = this.device.createBuffer({ size: 16, usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST });
     try {
-      const encoder = this.device.createCommandEncoder() as TimestampEncoder;
-      encoder.writeTimestamp(querySet, 0);
-      this.step(encoder, iterations);
-      encoder.writeTimestamp(querySet, 1);
+      const encoder = this.device.createCommandEncoder();
+      // Timestamp the whole dispatch batch. Pass timestamps are expressed in nanoseconds.
+      this.encodeSteps(encoder, iterations, querySet);
       encoder.resolveQuerySet(querySet, 0, 2, resolve, 0);
       encoder.copyBufferToBuffer(resolve, 0, readback, 0, 16);
       this.device.queue.submit([encoder.finish()]);
       await readback.mapAsync(GPUMapMode.READ);
       const stamps = new BigUint64Array(readback.getMappedRange());
-      // Timestamps are nanoseconds unless the browser reports a tick period (Chrome does not).
-      const queue = this.device.queue as TimestampQueue;
-      const period = typeof queue.getTimestampPeriod === 'function' ? queue.getTimestampPeriod() : 1;
-      const nanoseconds = Number(stamps[1] - stamps[0]) * period;
+      const nanoseconds = Number(stamps[1] - stamps[0]);
       this.timingError = null;
       return nanoseconds / 1e6 / iterations;
     } catch (error) {
@@ -494,26 +503,36 @@ export class GpuParticleSimulation {
    */
   async checksum(): Promise<number> {
     this.assertLive();
-    const encoder = this.device.createCommandEncoder();
-    encoder.copyBufferToBuffer(this.current === 'a' ? this.positionA : this.positionB, 0, this.readbackBuffer, 0, this.byteLength);
-    this.device.queue.submit([encoder.finish()]);
-    await this.readbackBuffer.mapAsync(GPUMapMode.READ);
-    const bytes = new Uint8Array(this.readbackBuffer.getMappedRange());
-    let hash = 2166136261;
-    for (let index = 0; index < bytes.length; index += 1) {
-      hash ^= bytes[index];
-      hash = Math.imul(hash, 16777619);
+    if (this.reading) throw new Error('A particle checksum is already in progress');
+    this.reading = true;
+    const readback = this.readbackBuffer ??= this.device.createBuffer({
+      size: this.byteLength, usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST,
+    });
+    try {
+      const encoder = this.device.createCommandEncoder();
+      encoder.copyBufferToBuffer(this.current === 'a' ? this.positionA : this.positionB, 0, readback, 0, this.byteLength);
+      this.device.queue.submit([encoder.finish()]);
+      await readback.mapAsync(GPUMapMode.READ);
+      const bytes = new Uint8Array(readback.getMappedRange());
+      let hash = 2166136261;
+      for (let index = 0; index < bytes.length; index += 1) {
+        hash ^= bytes[index];
+        hash = Math.imul(hash, 16777619);
+      }
+      return hash >>> 0;
+    } finally {
+      if (readback.mapState === 'mapped') readback.unmap();
+      this.reading = false;
     }
-    this.readbackBuffer.unmap();
-    return hash >>> 0;
   }
 
   destroy(): void {
     if (this.destroyed) return;
     this.destroyed = true;
     for (const buffer of [this.positionA, this.positionB, this.velocityA, this.velocityB, this.paramsBuffer, this.cameraBuffer, this.readbackBuffer]) {
-      buffer.destroy();
+      buffer?.destroy();
     }
+    if (this.errorListener) this.device.removeEventListener('uncapturederror', this.errorListener);
     if (this.owned) this.device.destroy();
   }
 

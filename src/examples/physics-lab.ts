@@ -16,7 +16,9 @@ const status = get('status'), stats = get('stats');
 const pauseButton = get<HTMLButtonElement>('pause'), replayButton = get<HTMLButtonElement>('replay');
 const views: WebGPUView[] = [], labels: LabelLayer[] = [], timelines: Timeline[] = [], updates: ((delta: number, seconds: number) => void)[] = [];
 const samples: number[] = [];
-let frame = 0, disposed = false, last = 0, timer = 0, started = 0, nbodyTimer = 0;
+let frame = 0, disposed = false, last = 0, timer = 0, elapsedSeconds = 0;
+const cleanups:(()=>void)[]=[];
+const visibleCanvases=new Set<HTMLCanvasElement>();
 let paused = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 function report(message: string) {
@@ -135,13 +137,16 @@ async function initialize() {
   keplerTimeline.add({ start: .5, duration: 1.3, update: p => { planetGroup.opacity = p; } });
   keplerTimeline.add({ start: 1.1, duration: 1.3, update: p => { planetGroup.scale = [p, p, p]; } });
   timelines.push(keplerTimeline);
-  get('kepler-reset').addEventListener('click', () => { kepler.reset(); started = performance.now(); });
+  let keplerRemainder=0;
+  get('kepler-reset').addEventListener('click', () => { kepler.reset(); keplerRemainder=0;elapsedSeconds=0; });
   get('kepler-dt').addEventListener('input', event => { get('kepler-dt-value').textContent = Number((event.target as HTMLInputElement).value).toFixed(3); });
   updates.push((delta, seconds) => {
-    if (!paused) {
+    if (!paused&&visibleCanvases.has(keplerView.canvas)) {
       const step = Number(get<HTMLInputElement>('kepler-dt').value);
       // Run simulation time faster than wall time so a full orbit reads in a few seconds.
-      const count = Math.min(64, Math.max(1, Math.round(delta * 1.5 / step)));
+      // Carry fractional steps forward instead of rounding every frame (refresh-rate dependent).
+      keplerRemainder=Math.min(keplerRemainder+delta*1.5,step*64);
+      const count = Math.floor(keplerRemainder/step);keplerRemainder-=count*step;
       for (let i = 0; i < count; i += 1) {
         kepler.step(step, (_index, position) => {
           const r = Math.max(Math.hypot(position[0], position[1], position[2]), .04);
@@ -165,27 +170,48 @@ async function initialize() {
   nbodyContext.configure({ device: keplerView.device, format: nbodyFormat, alphaMode: 'opaque' });
   const nbodyCamera = new OrbitCamera();
   nbodyCamera.projection = 'perspective'; nbodyCamera.yaw = .9; nbodyCamera.pitch = .45; nbodyCamera.distance = 3.6;
-  nbodyCamera.attach(nbodyCanvas);
+  cleanups.push(nbodyCamera.attach(nbodyCanvas));
   const bodiesSelect = get<HTMLSelectElement>('bodies'), nbodyTiming = get('nbody-timing');
   let nbodySize: [number, number] = [nbodyCanvas.clientWidth, nbodyCanvas.clientHeight];
   // Read layout on resize only: the frame loop must not force a reflow.
-  new ResizeObserver(() => { nbodySize = [nbodyCanvas.clientWidth, nbodyCanvas.clientHeight]; }).observe(nbodyCanvas);
+  const nbodyObserver=new ResizeObserver(() => { nbodySize = [nbodyCanvas.clientWidth, nbodyCanvas.clientHeight]; });
+  nbodyObserver.observe(nbodyCanvas);cleanups.push(()=>nbodyObserver.disconnect());
   const nbodyOptions = (count: number) => ({
     device: keplerView.device, format: nbodyFormat, count, mode: 'nbody' as const, layout: 'disc' as const,
     orbitPeriod: 9, pointSize: 2.1, color: [.6, .82, 1, .95] as [number, number, number, number], onError: report,
   });
   let nbody = await GpuParticleSimulation.create(nbodyOptions(Number(bodiesSelect.value)));
+  if(disposed){nbody.destroy();return;}
+  cleanups.push(()=>{nbody.destroy();nbodyContext.unconfigure();});
+  let generation=0;
+  async function measureNbody(current:GpuParticleSimulation):Promise<void>{
+    nbodyTiming.textContent='Measuring GPU integration…';
+    // measure() advances its target. A disposable copy prevents timing from changing the
+    // experiment, and runs only on creation/count changes rather than periodically.
+    let probe:GpuParticleSimulation|undefined;
+    try{
+      probe=await GpuParticleSimulation.create(nbodyOptions(current.count));
+      if(disposed||current!==nbody)return;
+      const ms=await probe.measure(20);
+      if(disposed||current!==nbody)return;
+      nbodyTiming.textContent=ms===null?`GPU timing unavailable${probe.timingError?` (${probe.timingError})`:''}`
+        :`${current.count.toLocaleString()} bodies · GPU step ${ms.toFixed(3)} ms · ${Math.round(1000/Math.max(ms,.000001)).toLocaleString()} steps/s`;
+    }catch(error){if(!disposed&&current===nbody)nbodyTiming.textContent=`GPU timing unavailable: ${String(error)}`;}
+    finally{probe?.destroy();}
+  }
+  void measureNbody(nbody);
   const nbodyLabels = new LabelLayer(get('nbody-labels'), nbodyCamera);
   nbodyLabels.add('spiral arms', () => [1.25, .1, .55], '#8f8f99');
   labels.push(nbodyLabels);
   bodiesSelect.addEventListener('change', () => {
-    const count = Number(bodiesSelect.value), previous = nbody;
+    const count = Number(bodiesSelect.value), request=++generation;
     void GpuParticleSimulation.create(nbodyOptions(count))
-      .then(next => { if (disposed) { next.destroy(); return; } nbody = next; previous.destroy(); })
+      .then(next => { if (disposed||request!==generation) { next.destroy(); return; } const previous=nbody;nbody = next; previous.destroy();void measureNbody(next); })
       .catch(e => report(String(e)));
   });
   get('nbody-reset').addEventListener('click', () => nbody.reset());
   updates.push(delta => {
+    if(!visibleCanvases.has(nbodyCanvas))return;
     const dpr = Math.min(maxDpr, window.devicePixelRatio || 1);
     const width = Math.max(1, Math.round(nbodySize[0] * dpr)), height = Math.max(1, Math.round(nbodySize[1] * dpr));
     if (!nbodySize[0] || !nbodySize[1]) return;
@@ -259,7 +285,7 @@ async function initialize() {
   pendulumAngle.addEventListener('input', () => {
     get('pendulum-angle-value').textContent = `${pendulumAngle.value}°`;
     buildPendulum();
-    started = performance.now();
+    elapsedSeconds=0;
   });
 
   /* ── 04 · The Lorenz attractor ────────────────────────────────────────────────────────── */
@@ -297,7 +323,7 @@ async function initialize() {
   rhoInput.addEventListener('input', () => {
     get('rho-value').textContent = rhoInput.valueAsNumber.toFixed(1);
     buildLorenz(rhoInput.valueAsNumber);
-    started = performance.now();
+    elapsedSeconds=0;
   });
 
   /* ── 05 · Two-source interference as a height field ──────────────────────────────────── */
@@ -370,35 +396,35 @@ async function initialize() {
   drumN.addEventListener('change', rebuildDrum);
   nodeToggle.addEventListener('change', () => { nodeGroup.visible = nodeToggle.checked; });
 
+  const labelViews:[LabelLayer,HTMLCanvasElement][]=[
+    [keplerLabels,keplerView.canvas],[nbodyLabels,nbodyCanvas],[pendulumLabels,pendulumView.canvas],
+    [waveLabels,waveView.canvas],[drumLabels,drumView.canvas],
+  ];
+  const visibility=new IntersectionObserver(entries=>{
+    for(const entry of entries){const canvas=entry.target as HTMLCanvasElement;
+      if(entry.isIntersecting)visibleCanvases.add(canvas);else visibleCanvases.delete(canvas);}
+  },{rootMargin:'100px'});
+  for(const canvas of [...views.map(v=>v.canvas),nbodyCanvas]){visibleCanvases.add(canvas);visibility.observe(canvas);}
+  cleanups.push(()=>visibility.disconnect());
+
   if (paused) for (const timeline of timelines) timeline.seek(timeline.duration);
   animate(performance.now());
 
   function animate(now: number) {
     if (disposed) return;
-    const delta = last ? Math.min((now - last) / 1000, .1) : 0; last = now;
-    if (!started) started = now;
-    const seconds = (now - started) / 1000;
+    const delta = last ? Math.max(0,Math.min((now - last) / 1000, .1)) : 0; last = now;
+    if(!paused)elapsedSeconds+=delta;
+    const seconds = elapsedSeconds;
     if (!paused) {
       for (const timeline of timelines) timeline.seek(Math.min(timeline.duration, seconds));
       // tick()/play() rather than an absolute seek: a looping vibration for the drumhead.
       drumTimeline.tick(delta);
       if (!drumTimeline.playing) drumTimeline.play();
       lorenzGroup.rotation += delta * .12;
-      nbodyTimer += delta;
-      if (nbodyTimer > 1.2) {
-        nbodyTimer = 0;
-        const current = nbody;
-        void current.measure(20).then(ms => {
-          if (disposed || current !== nbody) return;
-          nbodyTiming.textContent = ms === null
-            ? `GPU timing unavailable${current.timingError ? ` (${current.timingError})` : ''}`
-            : `${current.count.toLocaleString()} bodies · GPU step ${ms.toFixed(3)} ms · ${Math.round(1000 / ms).toLocaleString()} steps/s`;
-        });
-      }
     }
     for (const update of updates) update(delta, seconds);
-    for (const layer of labels) layer.update();
-    for (const v of views) v.render();
+    for (const [layer,canvas] of labelViews) if(visibleCanvases.has(canvas))layer.update();
+    for (const v of views) if(visibleCanvases.has(v.canvas))v.render();
     samples.push(delta * 1000); if (samples.length > 120) samples.shift();
     timer += delta;
     if (timer >= .25) {
@@ -418,11 +444,12 @@ function toggle() {
 pauseButton.addEventListener('click', toggle);
 pauseButton.textContent = paused ? 'Resume motion' : 'Pause motion';
 pauseButton.setAttribute('aria-pressed', String(paused));
-replayButton.addEventListener('click', () => { started = performance.now(); });
+replayButton.addEventListener('click', () => { elapsedSeconds=0;for(const timeline of timelines)timeline.seek(0); });
 document.addEventListener('visibilitychange', () => { last = 0; });
 
 function shutdown() {
   disposed = true; cancelAnimationFrame(frame);
+  for(const cleanup of cleanups)cleanup();
   for (const layer of labels) layer.dispose();
   for (const view of [...views].reverse()) view.dispose();
 }

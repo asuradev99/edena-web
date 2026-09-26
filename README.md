@@ -15,6 +15,7 @@ Open [http://localhost:5173/](http://localhost:5173/). The landing page is an in
 
 Dedicated demos:
 
+- [Academy](academy.html): follow the mathematics into the implementation, with interactive experiments and companion [source-reading chapters](docs/academy/README.md).
 - [Basics](basics.html): start here. Twenty-five small demos, one library idea each — the 3D coordinate
   system and its projected labels, interpolation with a seekable `Timeline`, solids with transparent
   sides, the geometry primitives and `merge`, groups with nested transforms, typeset maths riding a
@@ -241,17 +242,39 @@ pass.end();
 simulation.device.queue.submit([encoder.finish()]);
 ```
 
-`mode: 'nbody'` runs direct all-pairs gravity with softening and an optional disc layout. It is intentionally a raw O(N²) reference path: on the development GPU, 8,192 bodies take about 0.5 ms/step, 32,768 about 3.7 ms/step, and 50,000 about 8 ms/step. The simple oscillator mode reaches 50,000 particles at 60 FPS in the benchmark page.
+`mode: 'nbody'` runs direct all-pairs gravity with softening and an optional disc layout. It is intentionally a raw O(N²) reference path: on the development GPU, 8,192 bodies take about 0.25 ms/step and 32,768 about 3.1 ms/step. Counts above 32,768 are rejected. The simple oscillator mode reaches 50,000 particles at 60 FPS in the benchmark page.
 
 ## Rendering behavior
 
 Opaque geometry writes depth, so front surfaces occlude rear surfaces regardless of submission order. Transparent objects render afterward, test against solid depth, and blend back-to-front by projected object origin. Intersecting transparent meshes still need a more advanced transparency technique; use opaque materials for solid scientific plots.
 
-The renderer is intentionally unlit at this stage. Color ramps, geometry, camera motion, antialiasing, and DOM-projected labels provide the visual language. `GpuParticleSimulation` uses its own no-depth sprite path because 50,000 soft, unsorted particles should not hard-occlude one another.
+The renderer is intentionally unlit at this stage. Color ramps, geometry, camera motion, antialiasing, and depth-tested labels provide the visual language. `GpuParticleSimulation` uses its own no-depth sprite path because 50,000 soft, unsorted particles should not hard-occlude one another.
+
+Unchanged transforms reuse cached world matrices. Instance buffers remain on the GPU: static batches
+need no repeat uploads, camera motion updates only uniforms, and sparse transform changes upload only
+the changed buffer interval. Mutating a node's position, scale or orientation array still works; no
+manual dirty flag is required. Public `World.flatten()` continues to return independent snapshots.
+
+Scene labels use browser text and MathML layout, cached as glyph textures at the view's pixel ratio.
+The glyphs are drawn through the same depth buffer as geometry, so a solid can cover part of a word.
+Text is rasterized again only when its content, styling, size or pixel ratio changes. Its DOM copy
+remains available to accessibility tools. Use `occlude: false` for a deliberate overlay caption;
+a camera without a view also uses DOM projection. Hidden hosts and `display`/`opacity` changes are
+supported. Dispose the layer to release its observers and GPU resources.
+
+Unchanged scenes submit no GPU work. Camera, transform, material, text and visibility changes trigger
+a redraw automatically; `view.render(true)` forces a fresh submission when needed. Views sharing a
+device share pipelines, and replacement geometry reuses suitably sized buffers retired from the
+previous frame. Transparent instances are sorted before adjacent matching materials are batched.
+
+GPU timing uses standard [compute-pass timestamp writes](https://gpuweb.github.io/types/interfaces/GPUComputePassTimestampWrites.html)
+when supported. `GpuParticleSimulation.measure(n)` advances its target by `n` steps, so benchmark a
+separate instance when measuring a live experiment. The physics laboratory does this on creation or
+body-count changes instead of periodically injecting extra integration steps into its displayed system.
 
 ## Performance and limits
 
-Measurements were taken on Chrome Beta with Vulkan and an AMD RX 6700 XT. They are guidance, not guarantees.
+Measurements were taken on Chrome Beta with Vulkan and an AMD RX 6700 XT. They are guidance, not guarantees. See [the performance report](docs/performance.md) for reproducible CPU, rendering and text benchmarks.
 
 | Workload | Result |
 | --- | --- |
@@ -259,7 +282,7 @@ Measurements were taken on Chrome Beta with Vulkan and an AMD RX 6700 XT. They a
 | Crystal symmetry viewer | Painted in ~0.2 s; 60 FPS from 1×1×1 to a 1,600-atom cell; a 400-atom POSCAR loads in ~0.5 s and a 1,600-atom one in ~1.1 s; choosing an operation rebuilds in ~4 ms, ~30 ms at 3×3×3 |
 | Physics laboratory | 60 FPS, six views, about 54K triangles |
 | GPU oscillator | 50,000 particles, about 0.022 ms GPU integration per step |
-| GPU direct n-body | 8,192 bodies ≈ 0.5 ms/step; 32,768 ≈ 3.7 ms/step |
+| GPU direct n-body | 8,192 bodies ≈ 0.25 ms/step; 32,768 ≈ 3.1 ms/step |
 | Isosurface extraction | 250,000 sample budget; 48³ two-ball field ≈ 110 ms CPU extraction |
 
 Default budgets throw when exceeded: isosurfaces allow 250,000 grid samples, surfaces allow 250,000 quads, curves allow 100,000 samples, and polylines allow 100,000 points. CPU field extraction blocks the frame that requests it, so precompute or lower resolution for interactive controls.
@@ -278,14 +301,19 @@ npm run build
 
 WebGPU rendering requires a compatible browser with hardware acceleration. Chrome Beta on Vulkan is the verification path used for the demos. Use `?dpr=1` or `?samples=1` on the showcase when testing a slower adapter.
 
-Four checks, three of which drive a live page over the DevTools protocol and assert on what it draws
-rather than trusting the code that drew it:
+Checks cover source links, browser health, visual behavior, and actual GPU work:
 
 ```sh
 node scripts/check-links.mjs           # every page's links, scripts and route to the tour — no browser
 node scripts/check-pages.mjs [port]    # every page loads, draws every canvas, and stays quiet
 node scripts/check-basics.mjs [port]   # the basics tour: twenty-five demos, every control, every assertion
 node scripts/check-depth.mjs [port]    # renderer depth and the crystal viewer, pixel by pixel
+node scripts/check-renderer.mjs [port] # buffer reuse, idle frames, sparse uploads, labels, resize
+node scripts/check-text-depth.mjs [port] # partial text occlusion, MathML, styling, texture reuse
+node scripts/check-transparency.mjs [port] # alpha ordering, instancing and wireframe separation
+node scripts/check-particles.mjs [port] # GPU results against CPU force reference
+node scripts/benchmark.mjs [port]     # rendering, text and GPU medians
+node scripts/benchmark-geometry.mjs   # geometry generation and isosurface medians
 ```
 
 `check-basics` captures from the compositor and measures the regions back inside the page, because a

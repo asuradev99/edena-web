@@ -103,6 +103,28 @@ export function checkStep(step: DerivationStep, where = 'step'): void {
   }
 }
 
+/**
+ * Split a cancellation's tokens into the runs that neighbour each other in `order`.
+ *
+ * A cancel mark is drawn as a line through the tokens it names, so the runs matter: cancelling the
+ * two `x²` terms of `(x+h)² − x²` must not draw one line through the `2xh + h²` between them, which
+ * would read as though those had gone too. Each returned run is a contiguous slice of the line, in
+ * the line's own order, and a token named but not present is ignored (the DOM half filters them the
+ * same way). Pure, so the rule can be unit-tested without a browser.
+ */
+export function strikeRuns(order: string[], ids: string[]): string[][] {
+  const named = new Set(ids);
+  const runs: string[][] = [];
+  let lastIndex = -2;
+  for (let index = 0; index < order.length; index++) {
+    if (!named.has(order[index])) continue;
+    if (runs.length && index === lastIndex + 1) runs[runs.length - 1].push(order[index]);
+    else runs.push([order[index]]);
+    lastIndex = index;
+  }
+  return runs;
+}
+
 /* --------------------------------------------------------------------------------------------
  * The styles. Injected once per document; a page can override any of the custom properties.
  * ------------------------------------------------------------------------------------------ */
@@ -112,9 +134,13 @@ const STYLES = `
 .dvn{--dvn-font:${MATH_FONT_STACK};--dvn-ink:#e9f2fa;--dvn-muted:#7d8a9c;--dvn-accent:#f7d681;
   --dvn-bracket:#9db0c2;--dvn-wash:#f7d68122;--dvn-gap:.5em;
   display:flex;flex-direction:column;gap:.7em;font-family:var(--dvn-font);font-size:19px;line-height:1.5;color:var(--dvn-ink)}
+/* The UA stylesheet specifies font-family: math on <math>, and a specified value beats an inherited
+   one — so the stack on .dvn never reached the tokens. State it on the math elements too, or a
+   derivation renders in the browser's default maths face whatever the page asked for. */
+.dvn math{font-family:var(--dvn-font)}
 .dvn-line{display:flex;align-items:center;gap:1.1em;min-height:2.4em;opacity:.3;transform:scale(.99);transform-origin:left center;transition:opacity .55s ease,transform .55s ease}
 .dvn-line.is-current{opacity:1;transform:none}
-.dvn-row{position:relative;display:flex;align-items:center;flex-wrap:wrap;row-gap:1.1em;column-gap:.16em}
+.dvn-row{position:relative;display:flex;align-items:baseline;flex-wrap:wrap;row-gap:1.1em;column-gap:.16em}
 .dvn-tok{position:relative;display:inline-block;color:var(--dvn-colour,var(--dvn-ink));transition:color .5s ease,opacity .45s ease,transform .45s ease}
 .dvn-tok.is-entering{opacity:0;transform:translateY(-.3em)}
 .dvn-tok.is-cancelled{color:var(--dvn-muted)}
@@ -389,14 +415,19 @@ export class Derivation {
       case 'cancel': {
         const marked = spans(mark.ids);
         for (const span of marked) span.classList.add('is-cancelled');
-        const strike = line.element.ownerDocument.createElement('div');
-        strike.className = 'dvn-strike';
-        if (mark.colour) strike.style.setProperty('--dvn-strike', mark.colour);
-        strike.dataset.ids = mark.ids.join(',');
-        line.row.append(strike);
-        line.strikes.push(strike);
-        if (!animate) strike.classList.add('is-in');
-        else void line.element.ownerDocument.defaultView?.requestAnimationFrame(() => strike.classList.add('is-in'));
+        const doc = line.element.ownerDocument;
+        // One strike per contiguous run of tokens (see `strikeRuns`): a single line from the first
+        // named token to the last would cross every term between them when they are not neighbours.
+        for (const run of strikeRuns(line.order.map(token => token.id), mark.ids)) {
+          const strike = doc.createElement('div');
+          strike.className = 'dvn-strike';
+          if (mark.colour) strike.style.setProperty('--dvn-strike', mark.colour);
+          strike.dataset.ids = run.join(',');
+          line.row.append(strike);
+          line.strikes.push(strike);
+          if (!animate) strike.classList.add('is-in');
+          else void doc.defaultView?.requestAnimationFrame(() => strike.classList.add('is-in'));
+        }
         break;
       }
       case 'bracket': {
@@ -449,6 +480,9 @@ export class Derivation {
         const first = spans[0], last = spans[spans.length - 1];
         strike.style.left = `${first.offsetLeft - 4}px`;
         strike.style.width = `${last.offsetLeft + last.offsetWidth - first.offsetLeft + 8}px`;
+        // Sit on the struck tokens, not on the middle of the row: a neighbour carrying an
+        // under-script (a limit) or a taller fraction otherwise pushes the line off the terms.
+        strike.style.top = `${first.offsetTop + first.offsetHeight / 2 - 1}px`;
       }
     }
   }
