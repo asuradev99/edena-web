@@ -139,3 +139,16 @@ test('a physics-scale expression round-trips as one coherent tree', () => {
   }
   assert.deepEqual(stack, []);
 });
+
+// Supplementary Unicode letters must remain one identifier, with one script attachment.
+test('Unicode mathematical letters and Greek retain identifier spacing and scripts', () => {
+  assert.match(latexFragment('𝔸_i'), /<msub><mi>𝔸<\/mi><mi>i<\/mi><\/msub>/);
+  assert.match(latexFragment('Ω^2'), /<msup><mi>Ω<\/mi><mn>2<\/mn><\/msup>/);
+  assert.match(latexFragment('α+β'), /<mi>α<\/mi><mo>\+<\/mo><mi>β<\/mi>/);
+});
+
+test('upright math disables automatic italic and TeX variant names keep their glyphs', () => {
+  assert.match(latexFragment('\\mathrm{d}'), /<mi mathvariant="normal">d<\/mi>/);
+  assert.match(latexFragment('\\Gamma'), /<mi mathvariant="normal">Γ<\/mi>/);
+  assert.match(latexFragment('\\epsilon \\varepsilon \\phi \\varphi'), /<mi>ϵ<\/mi><mi>ε<\/mi><mi>ϕ<\/mi><mi>φ<\/mi>/);
+});

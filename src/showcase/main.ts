@@ -1,4 +1,4 @@
-import { WebGPUView, LabelLayer, Group, Visual, plotFrame, axes3d, boundsBox, functionCurve, colorMappedSurface, viridis, plasma, isosurface, rgba, smooth, mathml, mi, mn, mo, msub, msup, frac, row, mtext, hat, summation, type Vec3 } from '../index.js';
+import { WebGPUView, LabelLayer, PlotLayer, Group, Visual, plotFrame, axes3d, boundsBox, functionCurve, colorMappedSurface, viridis, plasma, isosurface, rgba, smooth, mathml, mi, mn, mo, msub, msup, frac, row, mtext, hat, summation, type Vec3 } from '../index.js';
 import { sphere, wireSphere, circle, arrow, polyline, merge, Timeline, parametricSurface } from '../index.js';
 
 const get = <T extends HTMLElement>(id: string) => { const node = document.getElementById(id); if (!node) throw new Error(`Missing ${id}`); return node as T; };
@@ -17,6 +17,7 @@ const visibility=new IntersectionObserver(entries=>{
 // Diagnostics: ?samples=1 drops MSAA, ?dpr=1 caps resolution — useful when a slow GPU backend is suspected.
 const params = new URLSearchParams(location.search);
 const msaa = params.get('samples') === '1' ? 1 : 4;
+const antialias = msaa === 4 && params.get('quality') === 'high' ? 'high' : msaa === 4;
 const maxDpr = params.has('dpr') ? Number(params.get('dpr')) : 2;
 let renderer = '';
 
@@ -27,9 +28,9 @@ function report(message: string) {
 
 async function initialize() {
   // One device, three views: the later two borrow and are disposed before their owner.
-  const curveView = await WebGPUView.create(get<HTMLCanvasElement>('curve'), { interactive: false, samples: msaa, maxDpr, onError: report });
-  const surfaceView = await WebGPUView.create(get<HTMLCanvasElement>('surface'), { device: curveView.device, samples:msaa,maxDpr,onError: report });
-  const fieldView = await WebGPUView.create(get<HTMLCanvasElement>('field'), { device: curveView.device, samples:msaa,maxDpr,onError: report });
+  const curveView = await WebGPUView.create(get<HTMLCanvasElement>('curve'), { interactive: false, samples: msaa, antialias, maxDpr, onError: report });
+  const surfaceView = await WebGPUView.create(get<HTMLCanvasElement>('surface'), { device: curveView.device, samples:msaa,antialias,maxDpr,onError: report });
+  const fieldView = await WebGPUView.create(get<HTMLCanvasElement>('field'), { device: curveView.device, samples:msaa,antialias,maxDpr,onError: report });
   if (disposed) { fieldView.dispose(); surfaceView.dispose(); curveView.dispose(); return; }
   views.push(curveView, surfaceView, fieldView);
   const info = curveView.adapterInfo, name = info?.description || info?.device || info?.architecture || info?.vendor || '';
@@ -44,20 +45,16 @@ async function initialize() {
   const chart = plotFrame([-4, 4], [-1.6, 1.6], { xTicks: 8, yTicks: 4 });
   curve = new Visual(functionCurve(x => Math.sin(x), [-4, 4], 640, .018), rgba('#ffff00'));
   curve.reveal = 0;
-  triangles += (chart.grid.vertices.length + chart.ticks.vertices.length + chart.axes.vertices.length + curve.geometry.vertices.length) / 9;
-  curveView.world.add(new Visual(chart.grid, rgba('#eeeeee', .14)), new Visual(chart.ticks, rgba('#eeeeee', .45)), new Visual(chart.axes, rgba('#eeeeee', .8)), curve);
+  triangles += (chart.axes.vertices.length + curve.geometry.vertices.length) / 9
+    + [chart.grid, chart.minorGrid, chart.ticks, chart.minor].reduce((sum, geometry) => sum + (geometry.segments?.length ?? 0) / 3, 0);
+  curveView.world.add(curve);
   curveMarker = new Visual(circle(.055, 24, 'xy', .03), rgba('#ffffff'));
   curveMarker.reveal = 0;
   curveView.world.add(curveMarker);
   get('curve-equation').innerHTML = mathml(row(mi('f'), mo('('), mi('x'), mo(')'), mo('='), mi('sin'), mo('('), mi('x'), mo(')')), 'block');
+  curveView.camera.mode = '2d';
   const curveLabels = new LabelLayer(get('curve-labels'), curveView.camera);
-  for (const anchor of chart.labels){
-    const yTick=anchor.position[1]!==chart.labels[0].position[1];
-    const label=curveLabels.addHTML(mathml(anchor.math??mtext(anchor.text)),()=>anchor.position,'#9db0c2','math-label',yTick?'right':'center');
-    // Plot coordinates scale with the viewport; text does not. Keep a CSS-pixel gap from
-    // the spine so long/negative tick labels remain legible on a narrow screen.
-    if(yTick)label.style.marginLeft='-6px';else label.style.marginTop='8px';
-  }
+  new PlotLayer(curveView.world, curveLabels, chart);
   labels.push(curveLabels);
 
   // 2D — a height surface colored by its own value: one draw call, per-vertex colors.
@@ -67,7 +64,7 @@ async function initialize() {
   triangles += surface.geometry.vertices.length / 9;
   surfaceSpin = new Group().add(surface);
   surfaceView.world.add(new Visual(axes3d(1.7, .008), rgba('#eeeeee', .4)), surfaceSpin);
-  const surfaceLabels = new LabelLayer(get('surface-labels'), surfaceView.camera);
+  const surfaceLabels = new LabelLayer(get('surface-labels'), surfaceView.camera, { faceCamera: true });
   surfaceLabels.addHTML(mathml(mi('x')), () => [1.95, 0, 0], '#c9c9d2', 'math-label');
   surfaceLabels.addHTML(mathml(row(mi('f'), mo('('), mi('x'), mo(','), mi('y'), mo(')'))), () => [0, 1.95, 0], '#c9c9d2', 'math-label');
   surfaceLabels.addHTML(mathml(mi('y')), () => [0, 0, 1.95], '#c9c9d2', 'math-label');
@@ -82,7 +79,7 @@ async function initialize() {
   triangles += level.geometry.vertices.length / 9;
   fieldSpin = new Group().add(level, new Visual(boundsBox(min, max, .004), rgba('#eeeeee', .16)));
   fieldView.world.add(fieldSpin, new Visual(axes3d(1.1, .007), rgba('#eeeeee', .5)));
-  const fieldLabels = new LabelLayer(get('field-labels'), fieldView.camera);
+  const fieldLabels = new LabelLayer(get('field-labels'), fieldView.camera, { faceCamera: true });
   fieldLabels.addHTML(mathml(mi('x')), () => [1.26, -.05, 0], '#c9c9d2', 'math-label');
   fieldLabels.addHTML(mathml(mi('y')), () => [-.05, 1.26, 0], '#c9c9d2', 'math-label');
   fieldLabels.addHTML(mathml(mi('z')), () => [-.05, -.05, 1.26], '#c9c9d2', 'math-label');
@@ -126,7 +123,7 @@ async function initialize() {
     fieldView.camera.height=3.5;
   });
 
-  const latticeView = await WebGPUView.create(get<HTMLCanvasElement>('lattice'),{device:curveView.device,samples:msaa,maxDpr,onError:report});
+  const latticeView = await WebGPUView.create(get<HTMLCanvasElement>('lattice'),{device:curveView.device,samples:msaa,antialias,maxDpr,onError:report});
   views.push(latticeView);
   latticeView.camera.height=5.8;
   const atomMesh=sphere(.095), atoms=new Group(), bonds=new Group();
@@ -143,7 +140,7 @@ async function initialize() {
   const construction=new Timeline(6).add({start:0,duration:2,update:p=>{atoms.scale=[p,p,p];atoms.opacity=p;}}).add({start:2,duration:2,update:p=>{bonds.opacity=p;}}).add({start:4,duration:2,update:p=>{reference.opacity=p;}});
   construction.seek(6);
   get('build-lattice').addEventListener('input',event=>construction.seek(Number((event.target as HTMLInputElement).value)));
-  const latticeLabels=new LabelLayer(get('lattice-labels'),latticeView.camera);
+  const latticeLabels=new LabelLayer(get('lattice-labels'),latticeView.camera,{faceCamera:true});
   latticeLabels.addHTML(mathml(row(mi('a'),msub(mn('1'),mn('1')))),()=>[.5,-1.15,1],'#c9c9d2','math-label');
   latticeLabels.addHTML(mathml(hat(mi('y'))),()=>[0,2.5,0],'#ffff00','math-label');
   labels.push(latticeLabels);

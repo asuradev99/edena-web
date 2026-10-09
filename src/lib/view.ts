@@ -5,12 +5,15 @@ import { OrbitCamera } from './camera.js';
 import { RenderList, type SceneEntry } from './render-list.js';
 import { FrameState } from './frame-state.js';
 import { viewPipelines } from './view-pipelines.js';
+import { Text } from './text.js';
 import { TextRenderer } from './text-renderer.js';
+import { LineRenderer } from './line-renderer.js';
 import { VIEW_OF_CAMERA } from './view-registry.js';
 export { viewFor } from './view-registry.js';
 export { LabelLayer, type LabelAnchor, type LabelOptions, type LabelFlags } from './labels.js';
 
-type Buffers = { positions: GPUBuffer; colors?: GPUBuffer; outline?: GPUBuffer };
+type Buffers = { positions: GPUBuffer; colors?: GPUBuffer };
+type TranslucentOrder = { entry: SceneEntry; material: string; depth: number };
 type Batch = {
   matrices: Float32Array[];
   instances: GPUBuffer;
@@ -39,7 +42,9 @@ export type WebGPUViewOptions = {
   device?: GPUDevice;
   interactive?: boolean;
   maxDpr?: number;
-  /** Multisample count: 4 (default, antialiased) or 1 (no MSAA, roughly 4x less fill work). */
+  /** 4× MSAA by default; 'high' also renders at twice the pixel density for finer distant geometry. */
+  antialias?: boolean | 'high';
+  /** Multisample count: 4 (default) or 1. Overrides the MSAA count, not 'high' supersampling. */
   samples?: number;
   /** `premultiplied` (default) lets the page show through; `opaque` skips canvas compositing and is faster. */
   alphaMode?: GPUCanvasAlphaMode;
@@ -67,8 +72,10 @@ export class WebGPUView {
   private pipelineColored:GPURenderPipeline;
   private translucent:GPURenderPipeline;
   private translucentColored:GPURenderPipeline;
-  /** Line-list over the same vertices, for the wireframe a flat-shaded mesh gets. */
-  private pipelineWire:GPURenderPipeline;
+  private lineRenderer?: LineRenderer;
+  private get lines(): LineRenderer {
+    return this.lineRenderer ??= new LineRenderer(this.device, this.bindGroupLayout, this.format, this.samples);
+  }
   private bindGroupLayout:GPUBindGroupLayout;
   private format:GPUTextureFormat;
   private depth?:GPUTexture;
@@ -98,6 +105,7 @@ export class WebGPUView {
   private dpr=0;
   private cleanup:()=>void;
   private observer:ResizeObserver;
+  private visibility:IntersectionObserver;
   /**
    * Called when the canvas changes size, with the new size in CSS pixels, so a demo can re-fit its
    * camera. A plot that frames its domain at one aspect ratio clips at another, and the panels here
@@ -108,13 +116,15 @@ export class WebGPUView {
   private renderList=new RenderList();
   private frameState = new FrameState();
   private frameMaterials: string[] = [];
+  private translucentEntries: TranslucentOrder[] = [];
+  private translucentPool: TranslucentOrder[] = [];
   private frameValid = false;
   private textRenderer?: TextRenderer;
   /** Internal text registration shared by label layers using this camera. */
   get text(): TextRenderer {
     return this.textRenderer ??= new TextRenderer(this.device, this.format, this.samples);
   }
-  private constructor(readonly canvas:HTMLCanvasElement,readonly device:GPUDevice,private ownsDevice:boolean,onError:(message:string)=>void,interactive:boolean,private maxDpr:number,private samples:number,private alphaMode:GPUCanvasAlphaMode) {
+  private constructor(readonly canvas:HTMLCanvasElement,readonly device:GPUDevice,private ownsDevice:boolean,onError:(message:string)=>void,interactive:boolean,private maxDpr:number,private samples:number,private alphaMode:GPUCanvasAlphaMode,private resolutionScale:number) {
     const context=canvas.getContext('webgpu'); if(!context)throw new Error('Could not create WebGPU canvas');
     this.context=context;
     this.format=navigator.gpu.getPreferredCanvasFormat();
@@ -125,16 +135,17 @@ export class WebGPUView {
     this.pipelineColored = pipelines.pipelineColored;
     this.translucent = pipelines.translucent;
     this.translucentColored = pipelines.translucentColored;
-    this.pipelineWire = pipelines.pipelineWire;
     this.cleanup=interactive?this.camera.attach(canvas):()=>{};
     // ResizeObserver marks the view dirty; render() only reads canvas size when it actually changed.
     this.observer=new ResizeObserver(()=>{this.pendingResize=true;this.onResize?.(canvas.clientWidth,canvas.clientHeight);});this.observer.observe(canvas);
+    this.visibility=new IntersectionObserver(entries=>{if(!entries[0].isIntersecting)this.releaseRenderTargets();});
+    this.visibility.observe(canvas);
     this.resize();
     void device.lost.then(info=>{if(!this.stopped){this.stopped=true;onError(`GPU device lost: ${info.message || info.reason}. Reload to reconnect.`);}});
   }
   static async create(canvas:HTMLCanvasElement,options:WebGPUViewOptions={}):Promise<WebGPUView> {
     if(!navigator.gpu)throw new Error('WebGPU is unavailable. Open this page on localhost or HTTPS in a WebGPU-capable browser.');
-    const samples=options.samples??4;
+    const samples=options.samples??(options.antialias === false ? 1 : 4);
     if(samples!==1&&samples!==4)throw new Error('samples must be 1 or 4');
     // Prefer the discrete GPU; fall back to whatever adapter exists.
     const adapter=options.device?undefined:(await navigator.gpu.requestAdapter({powerPreference:'high-performance'}))??await navigator.gpu.requestAdapter();
@@ -144,31 +155,42 @@ export class WebGPUView {
     // feature the request is unchanged and timing helpers report "unsupported".
     const features: GPUFeatureName[] = adapter?.features.has('timestamp-query') ? ['timestamp-query'] : [];
     const device=options.device??await adapter!.requestDevice({requiredFeatures:features});
-    const view=new WebGPUView(canvas,device,!options.device,options.onError??console.error,options.interactive??true,clampDpr(options.maxDpr??2),samples,options.alphaMode??'premultiplied');
+    const view=new WebGPUView(canvas,device,!options.device,options.onError??console.error,options.interactive??true,clampDpr(options.maxDpr??2),samples,options.alphaMode??'premultiplied',options.antialias==='high'?2:1);
     VIEW_OF_CAMERA.set(view.camera,view);
     if(adapter){view.adapterInfo=adapter.info;view.isFallbackAdapter=!!(adapter as GPUAdapter & {isFallbackAdapter?:boolean}).isFallbackAdapter;}
     return view;
   }
   resize():void {
     if(this.stopped)return;
-    this.pendingResize=false;this.dpr=Math.min(devicePixelRatio||1,this.maxDpr);
+    this.pendingResize=false;this.dpr=Math.min(devicePixelRatio||1,this.maxDpr)*this.resolutionScale;
     const limit=this.device.limits.maxTextureDimension2D;
     const width=Math.min(limit,Math.max(1,Math.round(this.canvas.clientWidth*this.dpr))),height=Math.min(limit,Math.max(1,Math.round(this.canvas.clientHeight*this.dpr)));
-    if(this.depth&&width===this.canvas.width&&height===this.canvas.height)return;
+    if(width===this.canvas.width&&height===this.canvas.height)return;
     this.frameValid = false;
-    this.canvas.width=width;this.canvas.height=height;this.depth?.destroy();this.msaa?.destroy();
-    this.depth=this.device.createTexture({size:[width,height],format:'depth24plus',sampleCount:this.samples,usage:GPUTextureUsage.RENDER_ATTACHMENT});
-    // Without MSAA we render straight into the canvas texture, skipping the resolve pass entirely.
-    this.msaa=this.samples>1?this.device.createTexture({size:[width,height],format:this.format,sampleCount:this.samples,usage:GPUTextureUsage.RENDER_ATTACHMENT}):undefined;
+    this.canvas.width=width;this.canvas.height=height;
+    this.releaseRenderTargets();
+  }
+  /** Release viewport-sized targets while retaining reusable scene buffers and glyphs. */
+  releaseRenderTargets():void {
+    this.depth?.destroy();this.msaa?.destroy();this.depth=undefined;this.msaa=undefined;
+    this.frameValid=false;
+  }
+  private ensureRenderTargets():void {
+    if(this.depth)return;
+    const size:[number,number]=[this.canvas.width,this.canvas.height];
+    this.depth=this.device.createTexture({size,format:'depth24plus',sampleCount:this.samples,usage:GPUTextureUsage.RENDER_ATTACHMENT});
+    this.msaa=this.samples>1?this.device.createTexture({size,format:this.format,sampleCount:this.samples,usage:GPUTextureUsage.RENDER_ATTACHMENT}):undefined;
   }
   /** Draw changed scene state. Force a submission when capturing a fresh canvas texture. */
   render(force = false):void {
     if(this.stopped)return;
+    if(this.canvas.dataset.mode!==this.camera.mode)this.canvas.dataset.mode=this.camera.mode;
     // Reading devicePixelRatio is layout-free; canvas.clientWidth is only read when the observer fired.
-    if(this.pendingResize||Math.min(devicePixelRatio||1,this.maxDpr)!==this.dpr)this.resize();
+    if(this.pendingResize||Math.min(devicePixelRatio||1,this.maxDpr)*this.resolutionScale!==this.dpr)this.resize();
     const camera = this.camera.matrix(this.canvas.width / this.canvas.height);
-    const entries = this.renderList.collect(this.world);
+    const entries = this.renderList.collect(this.world, camera);
     this.lastScene = entries;
+    if (this.textRenderer || entries.some(entry => entry.node instanceof Text)) this.text.sync(entries);
     for (let i = 0; i < entries.length; i++) {
       const node = entries[i].node;
       let id = this.geometryIds.get(node.geometry);
@@ -179,7 +201,9 @@ export class WebGPUView {
     const sceneChanged = this.frameState.changed(camera, entries, this.frameMaterials);
     const textChanged = this.textRenderer?.prepare(this.dpr, camera, this.canvas.width / this.dpr, this.canvas.height / this.dpr);
     if (!force && this.frameValid && !sceneChanged && !textChanged) return;
+    this.ensureRenderTargets();
     const encoder=this.device.createCommandEncoder();
+    this.textRenderer?.prepareMipmaps(encoder);
     const target=this.context.getCurrentTexture().createView();
     const clearValue={r:0,g:0,b:0,a:this.alphaMode==='opaque'?1:0};
     const colorAttachment:GPURenderPassColorAttachment=this.samples>1
@@ -191,7 +215,8 @@ export class WebGPUView {
       geometry: Geometry; color: Color; wireColor: Color; instances: SceneEntry[];
       transparent: boolean; wire: boolean;
     }>();
-    const translucent: { entry: SceneEntry; material: string; depth: number }[] = [];
+    const translucent = this.translucentEntries;
+    let translucentCount = 0;
     const append = (entry: SceneEntry, key: string, transparent: boolean) => {
       let group = groups.get(key);
       if (!group) {
@@ -207,23 +232,32 @@ export class WebGPUView {
       const { node, matrix, opacity } = entry;
       const geometry = node.geometry;
       const alpha = node.color[3] * opacity * node.reveal;
-      if (alpha <= .001 || !geometry.vertices.length) continue;
+      if (alpha <= .001 || (!geometry.vertices.length && !geometry.segments?.length)) continue;
       usedGeometry.add(geometry);
       const material = this.frameMaterials[index];
       if (alpha >= 1) append(entry, material, false);
       else {
         const z = camera[2] * matrix[12] + camera[6] * matrix[13] + camera[10] * matrix[14] + camera[14];
         const w = camera[3] * matrix[12] + camera[7] * matrix[13] + camera[11] * matrix[14] + camera[15];
-        translucent.push({ entry, material, depth: z / (w || 1) });
+        let order = this.translucentPool[translucentCount];
+        if (!order) this.translucentPool[translucentCount] = order = { entry, material, depth: 0 };
+        order.entry = entry;
+        order.material = material;
+        order.depth = z / (w || 1);
+        translucent[translucentCount++] = order;
       }
     }
+    translucent.length = translucentCount;
+    this.translucentPool.length = translucentCount;
+    this.lineRenderer?.begin(usedGeometry);
     // Sort individual translucent objects before batching adjacent matching materials. Instances
     // retain this order, so one draw can blend thousands of identical meshes correctly.
     translucent.sort((a, b) => b.depth - a.depth);
     let previous = '', run = 0;
-    for (const item of translucent) {
-      if (item.material !== previous) { run++; previous = item.material; }
-      append(item.entry, `${item.material}:t${run}`, true);
+    for (const order of translucent) {
+      const { entry, material } = order;
+      if (material !== previous) { run++; previous = material; }
+      append(entry, `${material}:t${run}`, true);
     }
     // Geometry rebuilt by an animation can reuse the previous frame's retired buffers.
     // Queue ordering keeps earlier draws ahead of these writes, without a CPU/GPU wait.
@@ -231,7 +265,6 @@ export class WebGPUView {
     for (const [geometry, buffers] of this.geometry) if (!usedGeometry.has(geometry)) {
       spareGeometry.push(buffers.positions);
       if (buffers.colors) spareGeometry.push(buffers.colors);
-      if (buffers.outline) spareGeometry.push(buffers.outline);
       this.geometry.delete(geometry);
     }
     // A tint animation changes the material key every frame. Reassign retired batches before
@@ -249,8 +282,7 @@ export class WebGPUView {
       if(!buffers){
         const positions = this.uploadGeometry(g.vertices, spareGeometry);
         const colors = g.colors ? this.uploadGeometry(g.colors, spareGeometry) : undefined;
-        const outline = g.outline && !g.colors ? this.uploadGeometry(g.outline, spareGeometry) : undefined;
-        buffers={positions,colors,outline};this.geometry.set(g,buffers);
+        buffers={positions,colors};this.geometry.set(g,buffers);
       }
       let batch=this.batches.get(key);
       const count=group.instances.length,needed=count*17;
@@ -295,27 +327,29 @@ export class WebGPUView {
         pass.setBindGroup(0,batch.bind);
         pass.setVertexBuffer(0,buffers.positions);pass.setVertexBuffer(1,batch.instances);
       }
-      pass.draw(Math.floor(g.vertices.length/3),count);usedBatches.add(key);
+      if (g.vertices.length) pass.draw(Math.floor(g.vertices.length/3),count);
+      if (g.segments?.length) this.lines.draw(pass, g, false, batch.bind, batch.instances, count,
+        group.transparent, this.canvas.width, this.canvas.height, this.dpr);
+      usedBatches.add(key);
       // Contours for a mesh drawn in one flat colour: the faces are the same shade everywhere, so
       // without a line a box and a ball are both flat silhouettes. Only opaque flat meshes get it — a
       // translucent solid is deliberately see-through (and usually carries its own outline), and
       // per-vertex-coloured geometry already varies across its surface. White by default, because the
       // meshes here are mid-tone and a white grid reads on all of them.
-      if(!group.transparent&&group.wire&&!buffers.colors&&buffers.outline&&g.outline){
+      if(!group.transparent&&group.wire&&!buffers.colors&&g.outline){
         const [wr,wg,wb,wa]=group.wireColor;
         this.uniforms.set(camera,0);this.uniforms.set([wr,wg,wb,wa],16);
         if(this.uniforms.some((value,index)=>value!==batch.wireData[index])){
           batch.wireData.set(this.uniforms);this.device.queue.writeBuffer(batch.wireUniform,0,batch.wireData);
         }
-        pass.setPipeline(this.pipelineWire);
-        pass.setBindGroup(0,batch.wireBind);
-        pass.setVertexBuffer(0,buffers.outline);pass.setVertexBuffer(1,batch.instances);
-        pass.draw(Math.floor(g.outline.length/3),count);
+        this.lines.draw(pass, g, true, batch.wireBind, batch.instances, count, false,
+          this.canvas.width, this.canvas.height, this.dpr);
       }
     }
     if (!textDrawn) drawText();
     pass.end();this.device.queue.submit([encoder.finish()]);
     this.frameValid = true;
+    this.lineRenderer?.finish();
     for(const batch of spareBatches){destroyBatch(batch);}
     for(const [key,batch] of this.batches)if(!usedBatches.has(key)){destroyBatch(batch);this.batches.delete(key);}
     for (const buffer of spareGeometry) buffer.destroy();
@@ -340,10 +374,10 @@ export class WebGPUView {
   dispose():void {
     VIEW_OF_CAMERA.delete(this.camera);
     this.textRenderer?.dispose();
-    this.stopped=true;this.cleanup();this.observer.disconnect();this.depth?.destroy();this.msaa?.destroy();
-    for(const b of this.geometry.values()){b.positions.destroy();b.colors?.destroy();b.outline?.destroy();}
+    this.lineRenderer?.dispose();
+    this.stopped=true;this.cleanup();this.observer.disconnect();this.visibility.disconnect();this.releaseRenderTargets();
+    for(const b of this.geometry.values()){b.positions.destroy();b.colors?.destroy();}
     for(const batch of this.batches.values()){destroyBatch(batch);}
     this.geometry.clear();this.batches.clear();this.context.unconfigure();if(this.ownsDevice)this.device.destroy();
   }
 }
-

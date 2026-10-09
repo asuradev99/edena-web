@@ -1,4 +1,4 @@
-import { Geometry, arrow, merge, polyline } from './geometry.js';
+import { Geometry, arrow, merge, polyline, lineSegments } from './geometry.js';
 import { clamp, type Vec3 } from './math.js';
 import { number as mathNumber, type M } from './mathtext.js';
 
@@ -9,7 +9,8 @@ import { number as mathNumber, type M } from './mathtext.js';
  * which is what a maths-aware caller should prefer — a real minus sign and proper exponents instead
  * of an ASCII approximation.
  */
-export type Anchor = { text: string; position: Vec3; math?: M };
+export type Anchor = { text: string; position: Vec3; math?: M;
+  anchor?: 'left' | 'center' | 'right'; vertical?: 'top' | 'center' | 'bottom'; offset?: [number, number] };
 
 /** Smallest round step (1, 2 or 5 times a power of ten) fitting `count` intervals into `span`. */
 export function niceStep(span: number, count: number): number {
@@ -57,6 +58,8 @@ export type PlotFrameOptions = {
   width?: number;
   tickSize?: number;
   grid?: boolean;
+  /** Grid/tick stroke width in CSS pixels, independent of camera zoom and DPR. Default 1.8. */
+  gridWidth?: number;
   /** Divisions between major ticks; `false` turns them off. Five reads well on decimal steps. */
   minor?: number | false;
   /**
@@ -78,7 +81,7 @@ export type PlotFrame = {
 
 /** Cartesian axes, ticks, an optional grid, and text anchors for a y = f(x) plot. */
 export function plotFrame(x: [number, number], y: [number, number], options: PlotFrameOptions = {}): PlotFrame {
-  const { xTicks = 6, yTicks = 5, width = .008, tickSize = .05, grid = true, minor = 5, xTitle, yTitle } = options;
+  const { xTicks = 6, yTicks = 5, width = .008, tickSize = .05, grid = true, gridWidth = 1.8, minor = 5, xTitle, yTitle } = options;
   if (![...x, ...y].every(Number.isFinite) || x[1] <= x[0] || y[1] <= y[0]) throw new Error('Plot frame needs finite increasing ranges');
   if (!(width > 0) || !(tickSize > 0)) throw new Error('Invalid plot frame line width or tick size');
   if (minor !== false && (!Number.isInteger(minor) || minor < 2)) throw new Error('Minor ticks take an integer division of at least 2');
@@ -86,19 +89,17 @@ export function plotFrame(x: [number, number], y: [number, number], options: Plo
   const xStep = niceStep(x[1] - x[0], xTicks), yStep = niceStep(y[1] - y[0], yTicks);
   const originX = clamp(0, x[0], x[1]), originY = clamp(0, y[0], y[1]);
   const axes = merge(arrow([x[0], originY, 0], [x[1], originY, 0], width), arrow([originX, y[0], 0], [originX, y[1], 0], width));
-  const ticks = merge(
-    ...xs.map(v => polyline([[v, originY - tickSize, 0], [v, originY + tickSize, 0]], width)),
-    ...ys.map(v => polyline([[originX - tickSize, v, 0], [originX + tickSize, v, 0]], width)),
-  );
-  const grid2d = grid
-    ? merge(
-      ...xs.map(v => polyline([[v, y[0], 0], [v, y[1], 0]], width * .5)),
-      ...ys.map(v => polyline([[x[0], v, 0], [x[1], v, 0]], width * .5)),
-    )
-    : new Geometry([]);
+  const ticks = lineSegments([
+    ...xs.flatMap(v => [[v, originY - tickSize, 0], [v, originY + tickSize, 0]] as Vec3[]),
+    ...ys.flatMap(v => [[originX - tickSize, v, 0], [originX + tickSize, v, 0]] as Vec3[]),
+  ], gridWidth);
+  const grid2d = lineSegments(grid ? [
+    ...xs.filter(v => v !== originX).flatMap(v => [[v, y[0], 0], [v, y[1], 0]] as Vec3[]),
+    ...ys.filter(v => v !== originY).flatMap(v => [[x[0], v, 0], [x[1], v, 0]] as Vec3[]),
+  ] : [], gridWidth);
   // Minor marks are the divisions a reader counts by: they subdivide the major step exactly, stop
   // short of the major marks, and skip the majors themselves.
-  const minorMarks: Geometry[] = [], minorLines: Geometry[] = [];
+  const minorMarks: Vec3[] = [], minorLines: Vec3[] = [];
   if (minor !== false) {
     const spine = tickSize * .55;
     const subdivide = (values: number[], step: number, origin: number, horizontal: boolean) => {
@@ -109,23 +110,23 @@ export function plotFrame(x: [number, number], y: [number, number], options: Plo
         const value = low + (index * step) / minor;
         if (value > high + 1e-9) break;
         if (values.some(major => Math.abs(major - value) < step * 1e-6)) continue;
-        minorMarks.push(horizontal
-          ? polyline([[value, origin - spine, 0], [value, origin + spine, 0]], width * .7)
-          : polyline([[origin - spine, value, 0], [origin + spine, value, 0]], width * .7));
+        minorMarks.push(...(horizontal
+          ? [[value, origin - spine, 0], [value, origin + spine, 0]]
+          : [[origin - spine, value, 0], [origin + spine, value, 0]]) as Vec3[]);
         if (!grid) continue;
-        minorLines.push(horizontal
-          ? polyline([[value, y[0], 0], [value, y[1], 0]], width * .35)
-          : polyline([[x[0], value, 0], [x[1], value, 0]], width * .35));
+        minorLines.push(...(horizontal
+          ? [[value, y[0], 0], [value, y[1], 0]]
+          : [[x[0], value, 0], [x[1], value, 0]]) as Vec3[]);
       }
     };
     subdivide(xs, xStep, originY, true);
     subdivide(ys, yStep, originX, false);
   }
   const labels: Anchor[] = [
-    ...xs.map(v => ({ text: formatTick(v, xStep), math: tickMath(v, xStep), position: [v, originY - tickSize * 1.9, 0] as Vec3 })),
+    ...xs.map(v => ({ text: formatTick(v, xStep), math: tickMath(v, xStep), position: [v, originY - tickSize, 0] as Vec3, vertical: 'top' as const, offset: [0, 5] as [number, number] })),
     // The origin already carries an x label, so skip a second one on the y axis to avoid overlap.
-    ...ys.filter(v => !(v === originY && xs.includes(originY)))
-      .map(v => ({ text: formatTick(v, yStep), math: tickMath(v, yStep), position: [originX - tickSize * 1.9, v, 0] as Vec3 })),
+    ...ys.filter(v => !(v === originY && xs.includes(originX)))
+      .map(v => ({ text: formatTick(v, yStep), math: tickMath(v, yStep), position: [originX - tickSize, v, 0] as Vec3, anchor: 'right' as const, offset: [-5, 0] as [number, number] })),
   ];
   const titles: Anchor[] = [];
   const title = (value: string, position: Vec3): Anchor => ({
@@ -135,14 +136,14 @@ export function plotFrame(x: [number, number], y: [number, number], options: Plo
   });
   // A title sits clear of the tick labels: the x title below the right end of the axis, the y title
   // to the left of its top, which is where a reader looks for them.
-  if (xTitle) titles.push(title(xTitle, [x[1], originY - tickSize * 4.2, 0]));
+  if (xTitle) titles.push({ ...title(xTitle, [x[1], originY - tickSize, 0]), anchor: 'right', vertical: 'top', offset: [0, 28] });
   // Above the arrow tip: the tick labels are to the left of the axis, so anything at the top of the
   // axis column would collide with them.
-  if (yTitle) titles.push(title(yTitle, [originX, y[1] + tickSize * 5.2, 0]));
+  if (yTitle) titles.push({ ...title(yTitle, [originX, y[1] + tickSize, 0]), vertical: 'bottom', offset: [0, -8] });
   return {
     axes, ticks, grid: grid2d, labels, titles,
-    minor: merge(...minorMarks),
-    minorGrid: merge(...minorLines),
+    minor: lineSegments(minorMarks, gridWidth),
+    minorGrid: lineSegments(minorLines, gridWidth),
   };
 }
 
@@ -201,4 +202,28 @@ export function boundsBox(min: Vec3, max: Vec3, width = .004): Geometry {
   if (![...min, ...max].every(Number.isFinite) || max.some((v, i) => v <= min[i]) || !(width > 0)) throw new Error('Invalid bounds or width');
   const corners: Vec3[] = Array.from({ length: 8 }, (_, i) => [i & 1 ? max[0] : min[0], i & 2 ? max[1] : min[1], i & 4 ? max[2] : min[2]]);
   return merge(...[[0, 1], [2, 3], [4, 5], [6, 7], [0, 2], [1, 3], [4, 6], [5, 7], [0, 4], [1, 5], [2, 6], [3, 7]].map(([a, b]) => polyline([corners[a], corners[b]], width)));
+}
+
+/** Sample a function throughout its domain, including interior extrema missed by endpoint checks. */
+export function functionRange(fn: (x: number) => number, domain: [number, number], samples = 128): [number, number] {
+  if (!domain.every(Number.isFinite) || domain[1] <= domain[0] || !Number.isInteger(samples) || samples < 1 || samples > 100_000)
+    throw new Error('Function range needs a finite increasing domain and 1–100000 samples');
+  let low = Infinity, high = -Infinity;
+  for (let i = 0; i <= samples; i++) {
+    const value = fn(domain[0] + (domain[1] - domain[0]) * i / samples);
+    if (Number.isFinite(value)) { low = Math.min(low, value); high = Math.max(high, value); }
+  }
+  if (low === Infinity) throw new Error('Function has no finite samples');
+  return [low, high];
+}
+
+/** A planar grid made of antialiased screen-space strokes. */
+export function gridPlane(x: [number, number], y: [number, number],
+  options: { plane?: 'xy' | 'xz' | 'yz'; offset?: number; ticks?: number; width?: number } = {}): Geometry {
+  const { plane = 'xy', offset = 0, ticks = 10, width = 1.8 } = options;
+  const point = (u: number, v: number): Vec3 => plane === 'xy' ? [u, v, offset] : plane === 'xz' ? [u, offset, v] : [offset, u, v];
+  const points: Vec3[] = [];
+  for (const value of tickValues(...x, ticks)) points.push(point(value, y[0]), point(value, y[1]));
+  for (const value of tickValues(...y, ticks)) points.push(point(x[0], value), point(x[1], value));
+  return lineSegments(points, width);
 }

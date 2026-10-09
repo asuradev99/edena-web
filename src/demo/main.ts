@@ -32,8 +32,8 @@ for(const [i,chapter] of chapters.entries()) {
 function report(message:string){console.error(message);error.textContent=message;error.hidden=false;get('loading').hidden=true;timeline.pause();play.disabled=true;restart.disabled=true;radiusInput.disabled=true;scrubber.disabled=true;for(const button of buttons)button.disabled=true;ready=false;}
 
 async function initialize(){
-  view=await WebGPUView.create(canvas,{onError:report});
-  plot=await WebGPUView.create(graphCanvas,{device:view.device,interactive:false,onError:report});
+  view=await WebGPUView.create(canvas,{antialias: new URLSearchParams(location.search).get('quality') === 'high' ? 'high' : true,onError:report});
+  plot=await WebGPUView.create(graphCanvas,{device:view.device,interactive:false,antialias: new URLSearchParams(location.search).get('quality') === 'high' ? 'high' : true,onError:report});
   if(disposed){plot.dispose();view.dispose();return;}
   view.camera.height=4.8;
   plot.camera.yaw=0;plot.camera.pitch=0;plot.camera.target=[1.36,.54,0];plot.camera.height=1.64;
@@ -77,7 +77,7 @@ async function initialize(){
   const fieldLines=new Visual(merge(...traced.flatMap(line=>line.length>1?[polyline(line,.007),arrow(line[Math.max(0,line.length-3)],line[line.length-1],.012)]:[])),rgba(yellow,.5));
   const equipotential=new Visual(merge(wireSphere(.55,10,6,.006),wireSphere(1.5,10,6,.006)),rgba(green,.3));
   scene.add(fill,ball,silhouette,charges,shell,gaussian,axis,radiusR,radiusLine,sourceRadius,connection,theta,center,source,mirror,observer,component1,component2,net,arrows,wedge,wedgeOutline,edgeR,edgeT,edgeP,phiRing,fieldLines,equipotential);
-  labels=new LabelLayer(get('labels'),view.camera);
+  labels=new LabelLayer(get('labels'),view.camera,{faceCamera:true});
   const labelR=labels.addHTML(mathml(mi('R')),()=>[-.49,-.42,0],blue,'math-label'),labelQ=labels.addHTML(mathml(row(mo('+'),mi('Q'))),()=>[-.78,.9,0],blue,'math-label');
   const labelr=labels.addHTML(mathml(mi('r')),()=>[observer.position[0]/2,-.13,0],yellow,'math-label'),labelP=labels.addHTML(mathml(mi('P')),()=>[observer.position[0],.14,0],yellow,'math-label');
   const labeldq=labels.addHTML(mathml(row(mi('d'),mi('q'))),()=>[source.position[0]+.02,source.position[1]+.14,source.position[2]],pink,'math-label');
@@ -97,6 +97,7 @@ async function initialize(){
   const plotDot=new Visual(circle(.025,32,'xy',.02),rgba(white));
   const dotGuide=new Visual(polyline([[0,0,0],[0,1,0]],.004),rgba(white,.4));
   plot.world.add(axes,ticks,guide,inside,outside,dotGuide,plotDot);
+  plot.camera.mode='2d';
   graphLabels=new LabelLayer(get('graph-labels'),plot.camera);
   const gl=[graphLabels.add('0',()=>[-.045,-.085,0]),graphLabels.add('R',()=>[1,-.09,0],blue),graphLabels.add('2R',()=>[2,-.09,0]),graphLabels.add('r',()=>[2.96,-.07,0]),graphLabels.add('E(r) / E(R)',()=>[.1,1.31,0]),graphLabels.add('1',()=>[-.09,1,0]),graphLabels.add('∝ r',()=>[.45,.75,0],blue),graphLabels.add('∝ 1/r²',()=>[1.92,.63,0],yellow)];
   const movingValue=graphLabels.add('',()=>[plotDot.position[0],plotDot.position[1]+.14,0]);

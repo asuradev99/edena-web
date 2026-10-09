@@ -577,7 +577,7 @@ function rebuild(): void {
 
   // Labels: lattice vectors, the symmetry element, and (optionally) element symbols.
   labels?.dispose();
-  labels = new LabelLayer($('labels'), view.camera);
+  labels = new LabelLayer($('labels'), view.camera, { faceCamera: true });
   // The vector labels mark the cell's own axes, so they follow the cell toggle.
   if (showCell) for (const [name, direction] of [['a', 0], ['b', 1], ['c', 2]] as [string, number][]) {
     const point = sub(times(big.lattice[direction], 1.06), pivot);
@@ -932,7 +932,7 @@ async function loadUnknown(file: File): Promise<void> {
 }
 
 async function init(): Promise<void> {
-  view = await WebGPUView.create(canvas, { onError: message => setStatus(message, 'error') });
+  view = await WebGPUView.create(canvas, { antialias: new URLSearchParams(location.search).get('quality') === 'high' ? 'high' : true, onError: message => setStatus(message, 'error') });
   if (disposed) { view.dispose(); return; }
   view.camera.yaw = .62; view.camera.pitch = .38;
   // Re-fit when the stage changes shape, so a narrow window cannot clip the box and a resize cannot

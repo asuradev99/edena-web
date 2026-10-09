@@ -67,16 +67,19 @@ export function colorMappedSurface(
     for (const row of values) for (const value of row) if (Number.isFinite(value)) { if (value < lo) lo = value; if (value > hi) hi = value; }
     if (!Number.isFinite(lo) || hi <= lo) { lo = 0; hi = lo + 1; }
   }
-  const positions: number[] = [], colors: number[] = [];
+  // Cache each grid sample's color once instead of recomputing it for every adjacent triangle.
+  const sampledColors = values.map(row => row.map(value => Number.isFinite(value) ? colorOf((value-lo)/(hi-lo)) : [0,0,0]));
+  const positions = new Float32Array(nu*nv*18), colors = new Float32Array(positions.length);
+  let offset=0;
   const vertex = (i: number, j: number) => {
-    const value = values[j][i], [r, g, b] = colorOf((value - lo) / (hi - lo));
-    positions.push(xs[i], value, ys[j]);
-    colors.push(r, g, b);
+    positions[offset]=xs[i];positions[offset+1]=values[j][i];positions[offset+2]=ys[j];
+    const color=sampledColors[j][i];
+    colors[offset]=color[0];colors[offset+1]=color[1];colors[offset+2]=color[2];offset+=3;
   };
   for (let i = 0; i < nu; i++) for (let j = 0; j < nv; j++) {
-    if (![values[j][i], values[j + 1][i], values[j][i + 1], values[j + 1][i + 1]].every(Number.isFinite)) continue;
+    if (!Number.isFinite(values[j][i]) || !Number.isFinite(values[j+1][i]) || !Number.isFinite(values[j][i+1]) || !Number.isFinite(values[j+1][i+1])) continue;
     vertex(i, j); vertex(i + 1, j); vertex(i, j + 1);
     vertex(i + 1, j); vertex(i + 1, j + 1); vertex(i, j + 1);
   }
-  return new Geometry(positions, colors);
+  return new Geometry(positions.subarray(0,offset), colors.subarray(0,offset));
 }

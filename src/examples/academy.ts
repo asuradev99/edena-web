@@ -9,11 +9,11 @@
  * point a reader at.
  */
 import {
-  WebGPUView, LabelLayer, Group, Visual,
+  WebGPUView, LabelLayer, PlotLayer, Group, Visual,
   box, boxEdges, polyline, arrow, shadedSphere, wireSphere,
   functionSurface, functionCurve, colorMappedSurface, ramp, viridis, plasma, rgba,
   createParticleState, stepParticles,
-  axes3d, plotFrame, niceStep, tickValues, formatTick,
+  axes3d, plotFrame, functionRange, niceStep, tickValues, formatTick,
   Timeline, tween, smooth, lerp, applyMatrix, sphere, parametricSurface,
   isosurface, streamlines, sphereSeeds,
   mathml, mi, mn, mo, mtext, row, number, matrix, brackets, frac, msup, msub, subsup, sqrt, mroot,
@@ -39,6 +39,7 @@ const status = $('status');
 const stats = $('stats');
 const params = new URLSearchParams(location.search);
 const msaa = params.get('samples') === '1' ? 1 : 4;
+const antialias = msaa === 4 && params.get('quality') === 'high' ? 'high' : msaa === 4;
 const maxDpr = params.has('dpr') ? Number(params.get('dpr')) : 2;
 const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
@@ -87,7 +88,7 @@ const FIELDS: Record<string, (x: number, y: number) => number> = {
  * ------------------------------------------------------------------------------------------ */
 
 function projectionDemo(view: WebGPUView): Demo {
-  const labels = new LabelLayer($('projection-labels'), view.camera);
+  const labels = new LabelLayer($('projection-labels'), view.camera, { faceCamera: true });
   const camera = view.camera;
   camera.projection = 'orthographic';
   // Yawed, not head-on: a rail straight down the view axis collapses to a single bar and hides the
@@ -178,7 +179,7 @@ function projectionDemo(view: WebGPUView): Demo {
  * ------------------------------------------------------------------------------------------ */
 
 function meshDemo(view: WebGPUView): Demo {
-  const labels = new LabelLayer($('mesh-labels'), view.camera);
+  const labels = new LabelLayer($('mesh-labels'), view.camera, { faceCamera: true });
   {
     const camera = view.camera;
     camera.projection = 'orthographic';
@@ -243,7 +244,7 @@ function meshDemo(view: WebGPUView): Demo {
  * ------------------------------------------------------------------------------------------ */
 
 function colourDemo(view: WebGPUView): Demo {
-  const labels = new LabelLayer($('colour-labels'), view.camera);
+  const labels = new LabelLayer($('colour-labels'), view.camera, { faceCamera: true });
   {
     const camera = view.camera;
     camera.projection = 'orthographic';
@@ -300,6 +301,7 @@ function colourDemo(view: WebGPUView): Demo {
 
 function integrationDemo(view: WebGPUView): Demo {
   const labels = new LabelLayer($('integration-labels'), view.camera);
+  view.camera.mode = '2d';
   const domain: [number, number] = [0, 2];
   const yRange: [number, number] = [0, 1.12];
   const rate = 1;
@@ -318,15 +320,7 @@ function integrationDemo(view: WebGPUView): Demo {
     xTicks: 4, yTicks: 5, minor: 5,
     xTitle: mi('t'), yTitle: row(mi('y'), mo('('), mi('t'), mo(')')),
   });
-  view.world.add(
-    new Visual(chart.minorGrid, rgba('#e8f0f6', .06)),
-    new Visual(chart.grid, rgba('#e8f0f6', .11)),
-    new Visual(chart.minor, rgba('#e8f0f6', .28)),
-    new Visual(chart.ticks, rgba('#e8f0f6', .42)),
-    new Visual(chart.axes, rgba('#e8f0f6', .8)),
-  );
-  for (const anchor of chart.labels) labels.addHTML(mathml(anchor.math ?? mtext(anchor.text)), () => anchor.position, '#93a6b8', 'math-label');
-  for (const anchor of chart.titles) labels.addHTML(mathml(anchor.math ?? mtext(anchor.text)), () => anchor.position, '#cfe4ea', 'math-label');
+  new PlotLayer(view.world, labels, chart);
 
   const exact = new Visual(functionCurve(t => Math.exp(-rate * t), domain, 160, .02), rgba('#e8f0f6', .95));
   const euler = new Visual(polyline([[0, 1, 0], [2, Math.exp(-2), 0]], .022), rgba('#ff9a9a'));
@@ -374,7 +368,7 @@ function integrationDemo(view: WebGPUView): Demo {
  * ------------------------------------------------------------------------------------------ */
 
 function simulationDemo(view: WebGPUView): Demo {
-  const labels = new LabelLayer($('simulation-labels'), view.camera);
+  const labels = new LabelLayer($('simulation-labels'), view.camera, { faceCamera: true });
   const camera = view.camera;
   camera.projection = 'orthographic';
   camera.yaw = .55;
@@ -473,7 +467,7 @@ function simulationDemo(view: WebGPUView): Demo {
  * ------------------------------------------------------------------------------------------ */
 
 function symmetryDemo(view: WebGPUView): Demo {
-  const labels = new LabelLayer($('symmetry-labels'), view.camera);
+  const labels = new LabelLayer($('symmetry-labels'), view.camera, { faceCamera: true });
   const camera = view.camera;
   camera.projection = 'orthographic';
   camera.yaw = .62;
@@ -619,7 +613,7 @@ function transformDemo(view: WebGPUView): Demo {
  * ------------------------------------------------------------------------------------------ */
 
 function timeDemo(view: WebGPUView): Demo {
-  const labels = new LabelLayer($('time-labels'), view.camera);
+  const labels = new LabelLayer($('time-labels'), view.camera, { faceCamera: true });
   look(view, .32, .3, 9.5);
   view.camera.target = [0, .5, 0];
   view.world.add(new Visual(polyline([[-3.3, 0, 0], [3.3, 0, 0]], .02, 6), rgba('#5c6f83')));
@@ -674,6 +668,7 @@ function timeDemo(view: WebGPUView): Demo {
 
 function curveDemo(view: WebGPUView): Demo {
   const labels = new LabelLayer($('curve-labels'), view.camera);
+  view.camera.mode = '2d';
   view.camera.projection = 'orthographic'; view.camera.yaw = 0; view.camera.pitch = 0;
   view.camera.target = [0, 0, 0]; view.camera.height = 6.4;
 
@@ -728,7 +723,7 @@ function curveDemo(view: WebGPUView): Demo {
  * ------------------------------------------------------------------------------------------ */
 
 function surfaceDemo(view: WebGPUView): Demo {
-  const labels = new LabelLayer($('surface-labels'), view.camera);
+  const labels = new LabelLayer($('surface-labels'), view.camera, { faceCamera: true });
   look(view, .6, .45, 9);
   const resolution = $<HTMLInputElement>('surface-resolution');
   const readout = $('surface-readout');
@@ -778,7 +773,7 @@ function surfaceDemo(view: WebGPUView): Demo {
  * ------------------------------------------------------------------------------------------ */
 
 function fieldDemo(view: WebGPUView): Demo {
-  const labels = new LabelLayer($('field-labels'), view.camera);
+  const labels = new LabelLayer($('field-labels'), view.camera, { faceCamera: true });
   look(view, .7, .4, 7.5);
   const melt = $<HTMLInputElement>('field-melt');
   const resolution = $<HTMLInputElement>('field-resolution');
@@ -816,7 +811,7 @@ function fieldDemo(view: WebGPUView): Demo {
  * ------------------------------------------------------------------------------------------ */
 
 function streamlineDemo(view: WebGPUView): Demo {
-  const labels = new LabelLayer($('streamline-labels'), view.camera);
+  const labels = new LabelLayer($('streamline-labels'), view.camera, { faceCamera: true });
   look(view, .55, .38, 8);
   const step = $<HTMLInputElement>('streamline-step');
   const readout = $('streamline-readout');
@@ -864,6 +859,7 @@ function streamlineDemo(view: WebGPUView): Demo {
 
 function plotFrameDemo(view: WebGPUView): Demo {
   const labels = new LabelLayer($('plotframe-labels'), view.camera);
+  view.camera.mode = '2d';
   const fit = (): void => {
     const canvas = $<HTMLCanvasElement>('plotframe-canvas');
     const aspect = canvas.clientWidth / Math.max(1, canvas.clientHeight);
@@ -876,20 +872,11 @@ function plotFrameDemo(view: WebGPUView): Demo {
   const domain: [number, number] = [-4.5, 4.5], range: [number, number] = [-1.6, 1.6];
   const x = (value: number): number => 1.2 * Math.sin(value) * Math.exp(-value * value / 22);
 
-  let chart = plotFrame(domain, range, { xTicks: Number(ticks.value), yTicks: 4, minor: 5, xTitle: mi('x'), yTitle: mi('f') });
+  const plot = new PlotLayer(view.world, labels, plotFrame(domain, range));
   const curve = new Visual(functionCurve(x, domain, 320, .02), rgba('#f7d681'));
-  let tickNodes: HTMLSpanElement[] = [], titleNodes: HTMLSpanElement[] = [];
   const rebuild = (): void => {
     const count = Number(ticks.value);
-    chart = plotFrame(domain, range, { xTicks: count, yTicks: 4, minor: 5, xTitle: mi('x'), yTitle: mi('f') });
-    view.world.add(
-      new Visual(chart.minorGrid, rgba('#e8f0f6', .05)), new Visual(chart.grid, rgba('#e8f0f6', .1)),
-      new Visual(chart.minor, rgba('#e8f0f6', .28)), new Visual(chart.ticks, rgba('#e8f0f6', .42)),
-      new Visual(chart.axes, rgba('#e8f0f6', .78)),
-    );
-    for (const node of [...tickNodes, ...titleNodes]) node.remove();
-    tickNodes = chart.labels.map(anchor => labels.addHTML(mathml(anchor.math ?? mtext(anchor.text)), () => anchor.position, '#93a6b8', 'math-label'));
-    titleNodes = chart.titles.map(anchor => labels.addHTML(mathml(anchor.math ?? mtext(anchor.text)), () => anchor.position, '#cfe4ea', 'math-label'));
+    plot.update(plotFrame(domain, range, { xTicks: count, yTicks: 4, minor: 5, xTitle: mi('x'), yTitle: mi('f') }));
     const step = niceStep(domain[1] - domain[0], count);
     readout.textContent = `${count} requested → niceStep picks ${formatTick(step, step)} · `
       + `ticks ${tickValues(domain[0], domain[1], count).join(', ')} · minor marks subdivide each step by 5`;
@@ -1032,7 +1019,7 @@ function derivationDemo(): Demo {
  * ------------------------------------------------------------------------------------------ */
 
 function pickingDemo(view: WebGPUView): Demo {
-  const labels = new LabelLayer($('picking-labels'), view.camera);
+  const labels = new LabelLayer($('picking-labels'), view.camera, { faceCamera: true });
   look(view, .55, .42, 9);
   view.world.add(new Visual(boxEdges([-2, -2, -2], [2, 2, 2], .006), rgba('#dbe9f5', .16)));
   view.world.add(new Visual(axes3d(1.5, .005), rgba('#dbe9f5', .2)));
@@ -1085,7 +1072,7 @@ function pickingDemo(view: WebGPUView): Demo {
  * ------------------------------------------------------------------------------------------ */
 
 function depthDemo(view: WebGPUView): Demo {
-  const labels = new LabelLayer($('depth-labels'), view.camera);
+  const labels = new LabelLayer($('depth-labels'), view.camera, { faceCamera: true });
   look(view, .6, .35, 10);
   const order = $<HTMLSelectElement>('depth-order');
   // Three nested translucent shells around one opaque core. Opaque geometry writes depth first;
@@ -1119,7 +1106,7 @@ function depthDemo(view: WebGPUView): Demo {
  * ------------------------------------------------------------------------------------------ */
 
 function instancingDemo(view: WebGPUView): Demo {
-  const labels = new LabelLayer($('instancing-labels'), view.camera);
+  const labels = new LabelLayer($('instancing-labels'), view.camera, { faceCamera: true });
   look(view, .62, .5, 12);
   const count = $<HTMLInputElement>('instancing-count');
   const readout = $('instancing-readout');
@@ -1166,7 +1153,7 @@ function instancingDemo(view: WebGPUView): Demo {
  * ------------------------------------------------------------------------------------------ */
 
 function crystalDemo(view: WebGPUView): Demo {
-  const labels = new LabelLayer($('crystal-labels'), view.camera);
+  const labels = new LabelLayer($('crystal-labels'), view.camera, { faceCamera: true });
   look(view, .6, .35, 9);
   const source = $<HTMLSelectElement>('crystal-source');
   const readout = $('crystal-readout');
@@ -1238,6 +1225,7 @@ translations:
 
 function elementsDemo(view: WebGPUView): Demo {
   const labels = new LabelLayer($('elements-labels'), view.camera);
+  view.camera.mode = '2d';
   view.camera.projection = 'orthographic'; view.camera.yaw = 0; view.camera.pitch = 0;
   view.camera.target = [0, 0, 0]; view.camera.height = 7.4;
   const group = $<HTMLSelectElement>('elements-group');
@@ -1253,7 +1241,7 @@ function elementsDemo(view: WebGPUView): Demo {
   let labelNodes: HTMLSpanElement[] = [];
   const rebuild = (): void => {
     for (const node of nodes) view.world.remove(node);
-    for (const node of labelNodes) node.remove();
+    labels.remove(...labelNodes);
     nodes = []; labelNodes = [];
     const symbols = groups[group.value];
     symbols.forEach((symbol, index) => {
@@ -1282,6 +1270,7 @@ function elementsDemo(view: WebGPUView): Demo {
 
 function areaDemo(view: WebGPUView): Demo {
   const labels = new LabelLayer($('area-labels'), view.camera);
+  view.camera.mode = '2d';
   const shape = $<HTMLSelectElement>('area-shape');
   const steps = $<HTMLInputElement>('area-steps');
   const readout = $('area-readout');
@@ -1305,23 +1294,18 @@ function areaDemo(view: WebGPUView): Demo {
 
   let strips = new Visual(areaUnder(shapes[shape.value].f, shapes[shape.value].domain, { baseline: 0, samples: Number(steps.value) }), rgba('#7fe3ef', .3));
   let curve = new Visual(functionCurve(shapes[shape.value].f, shapes[shape.value].domain, 240, .018), rgba('#f7d681'));
-  let axesNodes: Visual[] = [];
-  let labelNodes: HTMLSpanElement[] = [];
+  const plot = new PlotLayer(view.world, labels, plotFrame([0, 1], [0, 1]));
   view.world.add(strips, curve);
 
   const rebuild = (): void => {
     const entry = shapes[shape.value];
     const samples = Number(steps.value);
-    view.world.remove(strips, curve, ...axesNodes);
+    view.world.remove(strips, curve);
     strips = new Visual(areaUnder(entry.f, entry.domain, { baseline: 0, samples }), rgba('#7fe3ef', .3));
     curve = new Visual(functionCurve(entry.f, entry.domain, 240, .018), rgba('#f7d681'));
-    const chart = plotFrame(entry.domain, [0, Math.max(...entry.domain.map(entry.f)) * 1.15 || 1], { xTicks: 5, yTicks: 3, minor: 4 });
-    axesNodes = [
-      new Visual(chart.grid, rgba('#e8f0f6', .1)), new Visual(chart.ticks, rgba('#e8f0f6', .4)), new Visual(chart.axes, rgba('#e8f0f6', .7)),
-    ];
-    for (const node of labelNodes) node.remove();
-    labelNodes = chart.labels.map(anchor => labels.addHTML(mathml(anchor.math ?? mtext(anchor.text)), () => anchor.position, '#93a6b8', 'math-label'));
-    view.world.add(strips, curve, ...axesNodes);
+    const [, maximum] = functionRange(entry.f, entry.domain);
+    plot.update(plotFrame(entry.domain, [0, maximum * 1.15 || 1], { xTicks: 5, yTicks: 3, minor: 4 }));
+    view.world.add(strips, curve);
     // The strips *are* the trapezoid rule: a quad per interval between two samples. So the estimate
     // is that sum, and the error against the closed form is a fact about this picture.
     const width = (entry.domain[1] - entry.domain[0]) / samples;
@@ -1349,6 +1333,7 @@ function areaDemo(view: WebGPUView): Demo {
 
 function limitDemo(view: WebGPUView): Demo {
   const labels = new LabelLayer($('limit-labels'), view.camera);
+  view.camera.mode = '2d';
   const hControl = $<HTMLInputElement>('limit-h');
   const readout = $('limit-readout');
   const f = (x: number) => Math.sin(x) + .35 * x * x;
@@ -1367,10 +1352,9 @@ function limitDemo(view: WebGPUView): Demo {
   // f ranges from about -0.19 at the left edge to 2.88 at the right, so the frame has to hold
   // [-0.4, 3.0] or the curve leaves the top of the picture.
   const chart = plotFrame(domain, [-.4, 3], { xTicks: 5, yTicks: 4, minor: 4 });
-  const labelNodes = chart.labels.map(anchor => labels.addHTML(mathml(anchor.math ?? mtext(anchor.text)), () => anchor.position, '#93a6b8', 'math-label'));
+  const plot = new PlotLayer(view.world, labels, chart);
+  const labelNodes = plot.tickLabels;
   view.world.add(
-    new Visual(chart.grid, rgba('#e8f0f6', .09)), new Visual(chart.ticks, rgba('#e8f0f6', .38)),
-    new Visual(chart.axes, rgba('#e8f0f6', .7)),
     new Visual(functionCurve(f, domain, 260, .018), rgba('#f7d681')),
     // The tangent is fixed: it is what the secants are converging to, drawn once so the reader can
     // see the approach rather than being told the answer.
@@ -1424,47 +1408,46 @@ function limitDemo(view: WebGPUView): Demo {
  * ------------------------------------------------------------------------------------------ */
 
 async function initialize(): Promise<void> {
-  const canvases = [
-    'projection-canvas', 'mesh-canvas', 'colour-canvas', 'integration-canvas', 'simulation-canvas', 'symmetry-canvas',
-    'transform-canvas', 'time-canvas', 'curve-canvas', 'surface-canvas', 'field-canvas', 'streamline-canvas', 'plotframe-canvas',
-    'picking-canvas', 'depth-canvas', 'instancing-canvas', 'crystal-canvas', 'elements-canvas',
-    'area-canvas', 'limit-canvas',
+  const projects = [
+    {id:'projection-canvas',create:projectionDemo},
+    {id:'mesh-canvas',create:meshDemo},
+    {id:'colour-canvas',create:colourDemo},
+    {id:'integration-canvas',create:integrationDemo},
+    {id:'simulation-canvas',create:simulationDemo},
+    {id:'symmetry-canvas',create:symmetryDemo},
+    {id:'transform-canvas',create:transformDemo},
+    {id:'time-canvas',create:timeDemo},
+    {id:'curve-canvas',create:curveDemo},
+    {id:'surface-canvas',create:surfaceDemo},
+    {id:'field-canvas',create:fieldDemo},
+    {id:'streamline-canvas',create:streamlineDemo},
+    {id:'plotframe-canvas',create:plotFrameDemo},
+    {id:'picking-canvas',create:pickingDemo},
+    {id:'depth-canvas',create:depthDemo},
+    {id:'instancing-canvas',create:instancingDemo},
+    {id:'crystal-canvas',create:crystalDemo},
+    {id:'elements-canvas',create:elementsDemo},
+    {id:'area-canvas',create:areaDemo},
+    {id:'limit-canvas',create:limitDemo},
   ];
-  const first = await WebGPUView.create($<HTMLCanvasElement>(canvases[0]), { samples: msaa, maxDpr, onError: report });
+  const chosen=params.get('project');
+  const active=chosen?projects.filter(project=>project.id===chosen):projects;
+  if(!active.length)throw new Error('Unknown project');
+  const canvases=active.map(project=>project.id),factories=active.map(project=>project.create);
+  const first = await WebGPUView.create($<HTMLCanvasElement>(canvases[0]), { samples: msaa, antialias, maxDpr, onError: report });
   views.push(first);
   if (disposed) { first.dispose(); return; }
-  for (const id of canvases.slice(1)) views.push(await WebGPUView.create($<HTMLCanvasElement>(id), { device: first.device, onError: report, samples: msaa, maxDpr }));
+  for (const id of canvases.slice(1)) views.push(await WebGPUView.create($<HTMLCanvasElement>(id), { device: first.device, onError: report, samples: msaa, antialias, maxDpr }));
 
-  panels.push(
-    { demo: projectionDemo(views[0]), view: views[0] },
-    { demo: meshDemo(views[1]), view: views[1] },
-    { demo: colourDemo(views[2]), view: views[2] },
-    { demo: integrationDemo(views[3]), view: views[3] },
-    { demo: simulationDemo(views[4]), view: views[4] },
-    { demo: symmetryDemo(views[5]), view: views[5] },
-    { demo: transformDemo(views[6]), view: views[6] },
-    { demo: timeDemo(views[7]), view: views[7] },
-    { demo: curveDemo(views[8]), view: views[8] },
-    { demo: surfaceDemo(views[9]), view: views[9] },
-    { demo: fieldDemo(views[10]), view: views[10] },
-    { demo: streamlineDemo(views[11]), view: views[11] },
-    { demo: plotFrameDemo(views[12]), view: views[12] },
-    { demo: typesetDemo() },
-    { demo: derivationDemo() },
-    { demo: pickingDemo(views[13]), view: views[13] },
-    { demo: depthDemo(views[14]), view: views[14] },
-    { demo: instancingDemo(views[15]), view: views[15] },
-    { demo: crystalDemo(views[16]), view: views[16] },
-    { demo: elementsDemo(views[17]), view: views[17] },
-    { demo: areaDemo(views[18]), view: views[18] },
-    { demo: limitDemo(views[19]), view: views[19] },
-  );
+  panels.push(...factories.map((factory,index)=>({demo:factory(views[index]),view:views[index]})));
+  if(!params.has('project'))panels.push({demo:typesetDemo()},{demo:derivationDemo()});
 
   const byCanvas = new Map<Element, WebGPUView>(views.map((view, index) => [document.getElementById(canvases[index]) as Element, view]));
-  // Seed the drawing set with every view. IntersectionObserver is not guaranteed to deliver an entry
-  // (Firefox can stop delivering them entirely), and a page whose canvases never render is worse than
-  // one that draws a few off-screen views. The observer still prunes them where it works.
-  for (const view of views) onScreen.add(view);
+  // Start only the visible panels; the observer tracks subsequent scrolling.
+  for (const view of views) {
+    const bounds=view.canvas.getBoundingClientRect();
+    if(bounds.bottom>=-150 && bounds.top<=innerHeight+150)onScreen.add(view);
+  }
   observer = new IntersectionObserver(entries => {
     for (const entry of entries) {
       const view = byCanvas.get(entry.target);

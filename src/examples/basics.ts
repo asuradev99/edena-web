@@ -6,8 +6,8 @@
  * which is how a page with several views is normally put together.
  */
 import {
-  WebGPUView, LabelLayer, Group, Visual, Timeline, tween,
-  axes3d, boundsBox, box, boxEdges, cylinder, polyline, arrow, circle, sphere, shadedSphere, wireSphere, isosurface,
+  WebGPUView, LabelLayer, MathText, PlotLayer, Group, Visual, Timeline, tween,
+  axes3d, boundsBox, gridPlane, lineSegments, box, boxEdges, cylinder, polyline, arrow, circle, sphere, shadedSphere, wireSphere, isosurface,
   parametricSurface, functionSurface, functionCurve, colorMappedSurface, ramp, merge, rgba, lerp, smooth, transform, applyMatrix,
   createParticleState, stepParticles, streamlines, sphereSeeds, type VectorField, type ParticleAcceleration,
   type M, type DerivationStep, type DerivationPosition,
@@ -27,6 +27,7 @@ const stats = $('stats');
 /** ?samples=1 and ?dpr=1 drop MSAA and cap resolution for slow backends and headless checks. */
 const params = new URLSearchParams(location.search);
 const msaa = params.get('samples') === '1' ? 1 : 4;
+const antialias = msaa === 4 && params.get('quality') === 'high' ? 'high' : msaa === 4;
 const maxDpr = params.has('dpr') ? Number(params.get('dpr')) : 2;
 /** Demos that move start still for a reader who asked for less motion. */
 const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -68,7 +69,6 @@ function look(view: WebGPUView, yaw: number, pitch: number, distance: number): v
 /** Upright text through the math typesetter, so labels share one style and one renderer. */
 const tag = (text: string): string => mathml(mtext(text));
 /** `t = 1.24` — the one label the helix rewrites as its marker moves. */
-const timeLabel = (value: number): string => mathml(row(mi('t'), mo('='), mn(value.toFixed(2))));
 
 /** Kept as an explicit marker at each call: a running tally would count every rebuild again. */
 const count = (geometry: Geometry): Geometry => geometry;
@@ -78,29 +78,23 @@ function drawnTriangles(): number {
   let total = 0;
   for (const view of views) {
     if (!onScreen.has(view)) continue;
-    for (const { node } of view.world.flatten()) total += node.geometry.vertices.length / 9;
+    for (const { node } of view.world.flatten()) total += node.geometry.vertices.length / 9 + (node.geometry.segments?.length ?? 0) / 3;
   }
   return total;
 }
 
 /* --------------------------------------------------------------------------------------------
- * 01 · The 3D coordinate system: axes3d, boundsBox, tickValues, a grid, and projected labels.
+ * 01 · The 3D coordinate system: axes3d, boundsBox, gridPlane, lineSegments, tickValues, a grid, and projected labels.
  * ------------------------------------------------------------------------------------------ */
 
 function coordinateDemo(view: WebGPUView): Demo {
   look(view, .64, .33, 5.9);
-  const labels = new LabelLayer($('coordinates-labels'), view.camera);
+  const labels = new LabelLayer($('coordinates-labels'), view.camera, { faceCamera: true });
   // Look slightly above the origin: the marker rides up to y = 2.4 with a label over it.
   view.camera.target = [0, .35, 0];
   const extent = 1.9;
 
-  // A grid floor at z = -1, one merged visual: lines are tubes, so they keep their width in 3D.
-  const gridLines: Geometry[] = [];
-  for (let value = -extent; value <= extent + 1e-9; value += .4) {
-    gridLines.push(polyline([[value, -1, -extent], [value, -1, extent]], .003));
-    gridLines.push(polyline([[-extent, -1, value], [extent, -1, value]], .003));
-  }
-  const grid = new Visual(count(merge(...gridLines)), rgba('#7fb7d0', .16));
+  const grid = new Visual(gridPlane([-extent, extent], [-extent, extent], { plane: 'xz', offset: -1 }), rgba('#7fb7d0', .2));
 
   const axes = new Visual(count(axes3d(extent, .012)), rgba('#dbe9f5', .9));
   const cage = new Visual(count(boundsBox([-1, -1, -1], [1, 1, 1], .005)), rgba('#9fe7ff', .45));
@@ -185,7 +179,7 @@ function coordinateDemo(view: WebGPUView): Demo {
 
 function interpolationDemo(view: WebGPUView): Demo {
   look(view, .85, .5, 7.6);
-  const labels = new LabelLayer($('interpolation-labels'), view.camera);
+  const labels = new LabelLayer($('interpolation-labels'), view.camera, { faceCamera: true });
   const radius = 2.2, turn = Math.PI * 2;
 
   const marker = (colour: string, y: number, text: string): Visual => {
@@ -247,7 +241,7 @@ function interpolationDemo(view: WebGPUView): Demo {
 
 function transparencyDemo(view: WebGPUView): Demo {
   look(view, .74, .34, 4.9);
-  const labels = new LabelLayer($('transparency-labels'), view.camera);
+  const labels = new LabelLayer($('transparency-labels'), view.camera, { faceCamera: true });
   const spin = new Group();
 
   // A glass case with a glass ball and a glass rod inside it: three solids, three opacities, and a
@@ -323,7 +317,7 @@ function spinPoint(point: Vec3, angle: number): Vec3 {
 
 function shapesDemo(view: WebGPUView): Demo {
   look(view, .32, .26, 6.6);
-  const labels = new LabelLayer($('shapes-labels'), view.camera);
+  const labels = new LabelLayer($('shapes-labels'), view.camera, { faceCamera: true });
   const shelf = new Group();
 
   const primitives: { name: string; geometry: Geometry; colour: string }[] = [
@@ -459,7 +453,7 @@ function groupsDemo(view: WebGPUView): Demo {
 
 function labelDemo(view: WebGPUView): Demo {
   look(view, .5, .26, 6.8);
-  const labels = new LabelLayer($('labels-stage-labels'), view.camera);
+  const labels = new LabelLayer($('labels-stage-labels'), view.camera, { faceCamera: true });
   const radius = 1.15, rise = .8;
   let turns = Number($<HTMLInputElement>('labels-turns').value);
 
@@ -478,7 +472,9 @@ function labelDemo(view: WebGPUView): Demo {
 
   // Two labels: one static equation beside the helix, one number that follows the marker.
   labels.addHTML(mathml(row(mo('('), mi('cos'), mtext(' '), mi('t'), mo(','), mtext(' '), mn('0.80'), mi('t'), mo(','), mtext(' '), mi('sin'), mtext(' '), mi('t'), mo(')'))), () => [radius + .85, rise * turns / 2 + .7, 0], '#8fa2b8', 'math-label');
-  const live = labels.addHTML(timeLabel(0), () => [marker.position[0], marker.position[1] + .3, marker.position[2]], '#f7d681', 'math-label');
+  const live = new MathText('t = 0', { height: .3, color: rgba('#f7d681') });
+  live.element.id = 'labels-time';
+  view.world.add(live);
 
   const turnsInput = $<HTMLInputElement>('labels-turns');
   turnsInput.addEventListener('input', () => {
@@ -504,7 +500,9 @@ function labelDemo(view: WebGPUView): Demo {
       marker.position = [radius * Math.cos(t), rise * t / (Math.PI * 2) - rise * turns / 2, radius * Math.sin(t)];
       // Rewriting the label only when its rounded value changes keeps the DOM out of the frame loop.
       const value = Math.round(t * 100) / 100;
-      if (value !== shown) { shown = value; live.innerHTML = timeLabel(value); }
+      if (value !== shown) { shown = value; live.setMath(`t = ${value.toFixed(2)}`); }
+      live.position = [marker.position[0], marker.position[1] + .3, marker.position[2]];
+      live.orientation = [0, t, 0];
     },
   };
 }
@@ -515,7 +513,7 @@ function labelDemo(view: WebGPUView): Demo {
 
 function colourDemo(view: WebGPUView): Demo {
   look(view, .52, .34, 6.4);
-  const labels = new LabelLayer($('colour-labels'), view.camera);
+  const labels = new LabelLayer($('colour-labels'), view.camera, { faceCamera: true });
   const paletteSelect = $<HTMLSelectElement>('colour-palette');
   const amplitudeInput = $<HTMLInputElement>('colour-amplitude');
   const group = new Group();
@@ -592,7 +590,7 @@ function colourDemo(view: WebGPUView): Demo {
 function contrastDemo(view: WebGPUView): Demo {
   // The domains are a few units across, so the camera has to stand well back to see one whole.
   look(view, .58, .46, 14);
-  const labels = new LabelLayer($('contrast-labels'), view.camera);
+  const labels = new LabelLayer($('contrast-labels'), view.camera, { faceCamera: true });
   const spin = new Group();
   view.world.add(spin, new Visual(count(axes3d(1.2, .005)), rgba('#dbe9f5', .2)));
 
@@ -707,7 +705,7 @@ function measureDemo(view: WebGPUView): Demo {
   const build = (): void => {
     turning.clear();
     // Labels live in the DOM, so a rebuild has to take the old ones with it.
-    for (const node of attached) node.remove();
+    labels.remove(...attached);
     attached = [];
     const pointB: Vec3 = [across, up, 0];
     const dx = pointB[0] - pointA[0], dy = pointB[1] - pointA[1];
@@ -736,10 +734,10 @@ function measureDemo(view: WebGPUView): Demo {
     // Anchors ride the same group transform as the geometry (see `spin`), so the letters, the
     // distance and the angle stay on the marks however far the figure has turned.
     attached.push(
-      labels.addHTML(mathml(mtext('A')), () => spin([pointA[0] - .1, pointA[1] - .42, 0]), '#58c4dd', 'math-label'),
-      labels.addHTML(mathml(mtext('B')), () => spin([pointB[0], pointB[1] + .42, 0]), '#f7d681', 'math-label'),
-      labels.addHTML(mathml(mtext(`|AB| = ${distance.toFixed(2)}`)), () => spin([(pointA[0] + pointB[0]) / 2, (pointA[1] + pointB[1]) / 2 + .28, 0]), '#f7d681', 'math-label'),
-      labels.addHTML(mathml(row(mo('\u03b8'), mo('='), mn(`${angle.toFixed(0)}\u00b0`))), () => spin([pointA[0] + 1.35, pointA[1] + .35, 0]), '#9db0c2', 'math-label'),
+      labels.addHTML(mathml(mtext('A')), () => [pointA[0] - .1, pointA[1] - .42, 0], '#58c4dd', 'math-label', 'center', { parent: turning }),
+      labels.addHTML(mathml(mtext('B')), () => [pointB[0], pointB[1] + .42, 0], '#f7d681', 'math-label', 'center', { parent: turning }),
+      labels.addHTML(mathml(mtext(`|AB| = ${distance.toFixed(2)}`)), () => [(pointA[0] + pointB[0]) / 2, (pointA[1] + pointB[1]) / 2 + .28, 0], '#f7d681', 'math-label', 'center', { parent: turning }),
+      labels.addHTML(mathml(row(mo('\u03b8'), mo('='), mn(`${angle.toFixed(0)}\u00b0`))), () => [pointA[0] + 1.35, pointA[1] + .35, 0], '#9db0c2', 'math-label', 'center', { parent: turning }),
     );
   };
   const button = (): void => {
@@ -848,7 +846,7 @@ function transformDemo(view: WebGPUView): Demo {
 
 function followDemo(view: WebGPUView): Demo {
   look(view, .6, .38, 9.5);
-  const labels = new LabelLayer($('follow-labels'), view.camera);
+  const labels = new LabelLayer($('follow-labels'), view.camera, { faceCamera: true });
   const scene = new Group();
   view.world.add(scene, new Visual(count(axes3d(1.4, .006)), rgba('#dbe9f5', .18)));
 
@@ -934,7 +932,8 @@ function barDemo(view: WebGPUView): Demo {
   const barMesh = box([-.3, 0, -.3], [.3, 1, .3]);
   let bars: Visual[] = [];
   let gridLines: Visual | undefined;
-  let axisLabels: HTMLElement[] = [];
+  let axisLabels: HTMLSpanElement[] = [];
+  const caption = labels.addHTML('', () => [0, -1.3, 0], '#9db0c2', 'math-label');
 
   const scale = (values: number[]): number => Math.max(...values) * 1.15;
   const paint = (): void => {
@@ -949,8 +948,7 @@ function barDemo(view: WebGPUView): Demo {
   const build = (): void => {
     const values = series[kind].values;
     targets = rank ? [...values].sort((a, b) => b - a) : [...values];
-    heights = rank ? [...values] : [...values];
-    if (!rank) heights = [...values];
+    heights = [...values];
     const maximum = scale(targets);
     spin.clear();
     bars = [];
@@ -958,11 +956,16 @@ function barDemo(view: WebGPUView): Demo {
     const ticks = tickValues(0, maximum, 5);
     const lines: Geometry[] = [polyline([[-(slots - 1) / 2 * gap - .7, 0, 0], [(slots - 1) / 2 * gap + .7, 0, 0]], .006)];
     spin.add(new Visual(count(merge(...lines)), rgba('#9db0c2', .5)));
-    const gridGeometry: Geometry[] = ticks.filter(value => value > 0).map(value => polyline([[-(slots - 1) / 2 * gap - .7, value / maximum * 7, 0], [(slots - 1) / 2 * gap + .7, value / maximum * 7, 0]], .003));
-    gridLines = new Visual(count(merge(...gridGeometry)), rgba('#9db0c2', .2));
+    const gridPoints = ticks.filter(value => value > 0).flatMap(value => [
+      [-(slots - 1) / 2 * gap - .7, value / maximum * 7, 0],
+      [(slots - 1) / 2 * gap + .7, value / maximum * 7, 0],
+    ] as Vec3[]);
+    gridLines = new Visual(lineSegments(gridPoints), rgba('#9db0c2', .25));
     spin.add(gridLines);
-    for (const label of axisLabels) label.remove();
-    axisLabels = ticks.map(value => labels.addHTML(mathml(mn(value.toFixed(value < 1 && value > 0 ? 2 : 0))), () => [-(slots - 1) / 2 * gap - 1, value / maximum * 7, 0], '#8b98a8', 'math-label'));
+    labels.remove(...axisLabels);
+    axisLabels = ticks.map(value => labels.addHTML(mathml(mn(formatTick(value, niceStep(maximum, 5)))),
+      () => [-(slots - 1) / 2 * gap - .7, value / maximum * 7, 0],
+      '#8b98a8', 'math-label', 'right', { offset: [-6, 0], parent: spin }));
     for (let index = 0; index < slots; index++) {
       // `viridis` returns components in [0, 1] — for per-vertex colours, and for a solid once they
       // are written as hex.
@@ -974,7 +977,7 @@ function barDemo(view: WebGPUView): Demo {
     paint();
     const text = `${series[kind].name} · max ${Math.max(...values).toFixed(values === series.moons.values ? 0 : 1)}`;
     $('bars-readout').textContent = text;
-    labels.addHTML(mathml(mtext(text)), () => [0, -1.3, 0], '#9db0c2', 'math-label');
+    caption.innerHTML = mathml(mtext(text));
   };
 
   const seriesSelect = $<HTMLSelectElement>('bars-series');
@@ -1027,7 +1030,7 @@ function barDemo(view: WebGPUView): Demo {
 
 function layerDemo(view: WebGPUView): Demo {
   look(view, .62, .3, 7.6);
-  const labels = new LabelLayer($('layers-labels'), view.camera);
+  const labels = new LabelLayer($('layers-labels'), view.camera, { faceCamera: true });
   const spin = new Group();
   const axes = new Group(), bonds = new Group(), atoms = new Group();
   spin.add(axes, bonds, atoms);
@@ -1091,7 +1094,7 @@ function layerDemo(view: WebGPUView): Demo {
 
 function normalDemo(view: WebGPUView): Demo {
   look(view, .58, .4, 7.6);
-  const labels = new LabelLayer($('normals-labels'), view.camera);
+  const labels = new LabelLayer($('normals-labels'), view.camera, { faceCamera: true });
   const spin = new Group();
   view.world.add(spin, new Visual(count(axes3d(1.3, .006)), rgba('#dbe9f5', .25)));
 
@@ -1165,7 +1168,7 @@ function normalDemo(view: WebGPUView): Demo {
 
 function pathDemo(view: WebGPUView): Demo {
   look(view, .5, .3, 9.2);
-  const labels = new LabelLayer($('path-labels'), view.camera);
+  const labels = new LabelLayer($('path-labels'), view.camera, { faceCamera: true });
   const world = new Group();
   view.world.add(world, new Visual(count(axes3d(1.1, .005)), rgba('#dbe9f5', .2)));
 
@@ -1273,7 +1276,7 @@ function pathDemo(view: WebGPUView): Demo {
 
 function vectorDemo(view: WebGPUView): Demo {
   look(view, .55, .26, 8);
-  const labels = new LabelLayer($('vectors-labels'), view.camera);
+  const labels = new LabelLayer($('vectors-labels'), view.camera, { faceCamera: true });
   const spin = new Group();
   view.world.add(spin, new Visual(count(axes3d(1.05, .005)), rgba('#dbe9f5', .22)));
   const readout = labels.addHTML(mathml(mn('')), () => [-2.6, -2.35, 0], '#9db0c2', 'math-label');
@@ -1347,7 +1350,7 @@ function vectorDemo(view: WebGPUView): Demo {
 
 function storyDemo(view: WebGPUView): Demo {
   look(view, .62, .3, 8.4);
-  const labels = new LabelLayer($('story-labels'), view.camera);
+  const labels = new LabelLayer($('story-labels'), view.camera, { faceCamera: true });
   const frame = new Group(), bonds = new Group(), atoms = new Group();
   view.world.add(frame, bonds, atoms);
 
@@ -1429,7 +1432,7 @@ function storyDemo(view: WebGPUView): Demo {
 
 function streamlineDemo(view: WebGPUView): Demo {
   look(view, .6, .33, 9);
-  const labels = new LabelLayer($('streamlines-labels'), view.camera);
+  const labels = new LabelLayer($('streamlines-labels'), view.camera, { faceCamera: true });
   const spin = new Group();
   view.world.add(spin, new Visual(count(boundsBox([-3, -3, -3], [3, 3, 3], .003)), rgba('#9fe7ff', .14)), new Visual(count(axes3d(1.1, .005)), rgba('#dbe9f5', .22)));
 
@@ -1528,7 +1531,7 @@ function streamlineDemo(view: WebGPUView): Demo {
 
 function fieldDemo(view: WebGPUView): Demo {
   look(view, .7, .34, 6.2);
-  const labels = new LabelLayer($('field-labels'), view.camera);
+  const labels = new LabelLayer($('field-labels'), view.camera, { faceCamera: true });
   const min: Vec3 = [-1.6, -1.6, -1.6], max: Vec3 = [1.6, 1.6, 1.6];
   const spin = new Group();
   view.world.add(spin, new Visual(count(boundsBox(min, max, .004)), rgba('#9fe7ff', .22)), new Visual(count(axes3d(1.2, .005)), rgba('#dbe9f5', .24)));
@@ -1595,7 +1598,7 @@ function fieldDemo(view: WebGPUView): Demo {
 
 function simulationDemo(view: WebGPUView): Demo {
   look(view, .5, .3, 12);
-  const labels = new LabelLayer($('simulation-labels'), view.camera);
+  const labels = new LabelLayer($('simulation-labels'), view.camera, { faceCamera: true });
   const cloud = new Group();
   // A deliberately cheap mesh: hundreds of these are drawn every frame, and the default sphere is
   // a couple of thousand triangles each. At this size the difference is invisible.
@@ -1699,7 +1702,7 @@ function simulationDemo(view: WebGPUView): Demo {
 
 function cameraDemo(view: WebGPUView): Demo {
   look(view, .5, .3, 8);
-  const labels = new LabelLayer($('camera-labels'), view.camera);
+  const labels = new LabelLayer($('camera-labels'), view.camera, { faceCamera: true });
 
   // Something worth moving around: a ring of solids on a floor, lit by nothing but their own colours.
   const scene = new Group();
@@ -1764,7 +1767,7 @@ function cameraDemo(view: WebGPUView): Demo {
 
 function instancesDemo(view: WebGPUView): Demo {
   look(view, .66, .38, 8.6);
-  const labels = new LabelLayer($('instances-labels'), view.camera);
+  const labels = new LabelLayer($('instances-labels'), view.camera, { faceCamera: true });
   const grid = new Group();
   view.world.add(grid);
   // One mesh for every copy. Nothing below rebuilds geometry.
@@ -1842,7 +1845,7 @@ function instancesDemo(view: WebGPUView): Demo {
 
 function depthDemo(view: WebGPUView): Demo {
   look(view, .62, .32, 7.4);
-  const labels = new LabelLayer($('depth-labels'), view.camera);
+  const labels = new LabelLayer($('depth-labels'), view.camera, { faceCamera: true });
   const spin = new Group();
   view.world.add(spin);
 
@@ -1899,6 +1902,7 @@ function depthDemo(view: WebGPUView): Demo {
 
 function plotDemo(view: WebGPUView): Demo {
   const labels = new LabelLayer($('plot-labels'), view.camera);
+  view.camera.mode = '2d';
   const domain: [number, number] = [-4.4, 4.4];
   const yRange: [number, number] = [-1.6, 1.6];
   /**
@@ -1920,15 +1924,8 @@ function plotDemo(view: WebGPUView): Demo {
     xTicks: 8, yTicks: 4, minor: 5,
     xTitle: mi('x'), yTitle: row(mi('f'), mo('('), mi('x'), mo(')')),
   });
-  view.world.add(
-    new Visual(count(chart.minorGrid), rgba('#e8f0f6', .05)),
-    new Visual(count(chart.grid), rgba('#e8f0f6', .1)),
-    new Visual(count(chart.minor), rgba('#e8f0f6', .28)),
-    new Visual(count(chart.ticks), rgba('#e8f0f6', .42)),
-    new Visual(count(chart.axes), rgba('#e8f0f6', .78)),
-  );
-  const tickNodes = chart.labels.map(anchor => labels.addHTML(mathml(anchor.math ?? mtext(anchor.text)), () => anchor.position, '#93a6b8', 'math-label'));
-  for (const anchor of chart.titles) labels.addHTML(mathml(anchor.math ?? mtext(anchor.text)), () => anchor.position, '#cfe4ea', 'math-label', 'center');
+  const plot = new PlotLayer(view.world, labels, chart);
+  const tickNodes = plot.tickLabels;
 
   const functions: Record<string, (x: number) => number> = {
     sine: x => Math.sin(x),
@@ -2031,6 +2028,7 @@ function plotDemo(view: WebGPUView): Demo {
 
 function secantDemo(view: WebGPUView): Demo {
   const labels = new LabelLayer($('secant-labels'), view.camera);
+  view.camera.mode = '2d';
   const domain: [number, number] = [-2.7, 2.7];
   const square = (x: number): number => x * x;
   const yRange: [number, number] = [-.7, 7.6];
@@ -2044,9 +2042,8 @@ function secantDemo(view: WebGPUView): Demo {
     view.camera.projection = 'orthographic';
     view.camera.yaw = 0;
     view.camera.pitch = 0;
-    // The parabola sits right of centre so the derivation has the left of the frame to itself; when
-    // the derivation drops below, the parabola moves up to keep out of its way.
-    view.camera.target = cramped ? [0, 4.6, 0] : [-1.35, 3.1, 0];
+    // Controls and the derivation have a separate column, so center the plot in its viewport.
+    view.camera.target = [0, 3.45, 0];
     view.camera.height = Math.max(yRange[1] - yRange[0] + 1, (domain[1] - domain[0] + .6) / aspect);
     for (const node of [labelA, labelB, deltaX, deltaY]) node.style.display = cramped ? 'none' : '';
     // The y title would sit on top of the readout once the picture is this small, and every other
@@ -2059,16 +2056,9 @@ function secantDemo(view: WebGPUView): Demo {
     xTicks: 6, yTicks: 5, minor: 5,
     xTitle: mi('x'), yTitle: row(mi('f'), mo('('), mi('x'), mo(')'), mo('='), msup(mi('x'), mn('2'))),
   });
-  view.world.add(
-    new Visual(count(chart.minorGrid), rgba('#e8f0f6', .05)),
-    new Visual(count(chart.grid), rgba('#e8f0f6', .09)),
-    new Visual(count(chart.minor), rgba('#e8f0f6', .24)),
-    new Visual(count(chart.ticks), rgba('#e8f0f6', .36)),
-    new Visual(count(chart.axes), rgba('#e8f0f6', .7)),
-    new Visual(count(functionCurve(square, domain, 320, .022)), rgba('#8fd0ff', .95)),
-  );
-  const tickNodes = chart.labels.map(anchor => labels.addHTML(mathml(anchor.math ?? mtext(anchor.text)), () => anchor.position, '#8b9cae', 'math-label'));
-  const titleNodes = chart.titles.map(anchor => labels.addHTML(mathml(anchor.math ?? mtext(anchor.text)), () => anchor.position, '#cfe4ea', 'math-label'));
+  const plot = new PlotLayer(view.world, labels, chart);
+  view.world.add(new Visual(count(functionCurve(square, domain, 320, .022)), rgba('#8fd0ff', .95)));
+  const tickNodes = plot.tickLabels, titleNodes = plot.titleLabels;
 
   let x = 1.15, h = 1.3, targetH: number | undefined;
   const areaVisual = new Visual(count(areaUnder(square, [x, x + h], { baseline: 0, samples: 40 })), rgba('#8fd0ff', .16));
@@ -2102,6 +2092,7 @@ function secantDemo(view: WebGPUView): Demo {
   labels.addMath("f'(x) = \\lim_{h\\to 0}\\frac{f(x+h)-f(x)}{h}", () => [domain[0] + .35, 7.3, 0], '#cfe4ea', 'math-label', 'left');
   fit();
 
+  const [textA, textB, textDX, textDY, textReadout] = [labelA, labelB, deltaX, deltaY, readout].map(element => labels.object(element));
   /** Redraw the picture for the current x and h. */
   const draw = (): void => {
     const yA = square(x), yB = square(x + h);
@@ -2116,16 +2107,16 @@ function secantDemo(view: WebGPUView): Demo {
     ));
     dotA.position = [x, yA, 0];
     dotB.position = [x + h, yB, 0];
-    labelA.innerHTML = mathml(row(mi('A'), mo('='), paren(row(number(x, 2), mo(','), space('.3em'), number(yA, 2)))));
-    labelB.innerHTML = mathml(row(mi('B'), mo('='), paren(row(number(x + h, 2), mo(','), space('.3em'), number(yB, 2)))));
-    deltaX.innerHTML = mathml(row(mi('\u0394'), mi('x'), mo('='), mi('h'), mo('='), number(h, 2)));
-    deltaY.innerHTML = mathml(row(mi('\u0394'), mi('y'), mo('='), number(yB - yA, 2)));
-    readout.innerHTML = mathml(row(
+    textA.setHTML(mathml(row(mi('A'), mo('='), paren(row(number(x, 2), mo(','), space('.3em'), number(yA, 2))))));
+    textB.setHTML(mathml(row(mi('B'), mo('='), paren(row(number(x + h, 2), mo(','), space('.3em'), number(yB, 2))))));
+    textDX.setHTML(mathml(row(mi('\u0394'), mi('x'), mo('='), mi('h'), mo('='), number(h, 2))));
+    textDY.setHTML(mathml(row(mi('\u0394'), mi('y'), mo('='), number(yB - yA, 2))));
+    textReadout.setHTML(mathml(row(
       frac(row(mi('\u0394'), mi('y')), row(mi('\u0394'), mi('x'))), mo('='), number(chordSlope, 2), space('1.2em'),
-      // `prime` sets the mark as an accent on the f; a superscript prime floats off it.
+      // A prime shares the base glyph’s superscript layout.
       prime(mi('f')), mo('('), mi('x'), mo(')'), mo('='), number(tangentSlope, 2), space('1.2em'),
       mtext('gap'), space('.4em'), number(Math.abs(chordSlope - tangentSlope), 2),
-    ));
+    )));
   };
   draw();
 
@@ -2300,49 +2291,52 @@ function secantDemo(view: WebGPUView): Demo {
  * ------------------------------------------------------------------------------------------ */
 
 async function initialize(): Promise<void> {
-  const canvases = ['coordinates-canvas', 'interpolation-canvas', 'transparency-canvas', 'shapes-canvas', 'groups-canvas', 'labels-canvas', 'colour-canvas', 'plot-canvas', 'depth-canvas', 'instances-canvas', 'camera-canvas', 'simulation-canvas', 'field-canvas', 'streamlines-canvas', 'story-canvas', 'vectors-canvas', 'path-canvas', 'normals-canvas', 'layers-canvas', 'bars-canvas', 'follow-canvas', 'transform-canvas', 'measure-canvas', 'contrast-canvas', 'secant-canvas'];
-  const first = await WebGPUView.create($<HTMLCanvasElement>(canvases[0]), { samples: msaa, maxDpr, onError: report });
+  const projects = [
+    {id:'coordinates-canvas',create:coordinateDemo},
+    {id:'interpolation-canvas',create:interpolationDemo},
+    {id:'transparency-canvas',create:transparencyDemo},
+    {id:'shapes-canvas',create:shapesDemo},
+    {id:'groups-canvas',create:groupsDemo},
+    {id:'labels-canvas',create:labelDemo},
+    {id:'colour-canvas',create:colourDemo},
+    {id:'plot-canvas',create:plotDemo},
+    {id:'depth-canvas',create:depthDemo},
+    {id:'instances-canvas',create:instancesDemo},
+    {id:'camera-canvas',create:cameraDemo},
+    {id:'simulation-canvas',create:simulationDemo},
+    {id:'field-canvas',create:fieldDemo},
+    {id:'streamlines-canvas',create:streamlineDemo},
+    {id:'story-canvas',create:storyDemo},
+    {id:'vectors-canvas',create:vectorDemo},
+    {id:'path-canvas',create:pathDemo},
+    {id:'normals-canvas',create:normalDemo},
+    {id:'layers-canvas',create:layerDemo},
+    {id:'bars-canvas',create:barDemo},
+    {id:'follow-canvas',create:followDemo},
+    {id:'transform-canvas',create:transformDemo},
+    {id:'measure-canvas',create:measureDemo},
+    {id:'contrast-canvas',create:contrastDemo},
+    {id:'secant-canvas',create:secantDemo},
+  ];
+  const chosen=params.get('project');
+  const active=chosen?projects.filter(project=>project.id===chosen):projects;
+  if(!active.length)throw new Error('Unknown project');
+  const canvases=active.map(project=>project.id),factories=active.map(project=>project.create);
+  const first = await WebGPUView.create($<HTMLCanvasElement>(canvases[0]), { samples: msaa, antialias, maxDpr, onError: report });
   views.push(first);
   if (disposed) { first.dispose(); return; }
   for (const id of canvases.slice(1)) {
-    views.push(await WebGPUView.create($<HTMLCanvasElement>(id), { device: first.device, onError: report, samples: msaa, maxDpr }));
+    views.push(await WebGPUView.create($<HTMLCanvasElement>(id), { device: first.device, onError: report, samples: msaa, antialias, maxDpr }));
   }
-  demos.push(
-    coordinateDemo(views[0]),
-    interpolationDemo(views[1]),
-    transparencyDemo(views[2]),
-    shapesDemo(views[3]),
-    groupsDemo(views[4]),
-    labelDemo(views[5]),
-    colourDemo(views[6]),
-    plotDemo(views[7]),
-    depthDemo(views[8]),
-    instancesDemo(views[9]),
-    cameraDemo(views[10]),
-    simulationDemo(views[11]),
-    fieldDemo(views[12]),
-    streamlineDemo(views[13]),
-    storyDemo(views[14]),
-    vectorDemo(views[15]),
-    pathDemo(views[16]),
-    normalDemo(views[17]),
-    layerDemo(views[18]),
-    barDemo(views[19]),
-    followDemo(views[20]),
-    transformDemo(views[21]),
-    measureDemo(views[22]),
-    contrastDemo(views[23]),
-    secantDemo(views[24]),
-  );
+  demos.push(...factories.map((factory,index)=>factory(views[index])));
 
-  // Visibility gates only the draw: the simulation and geometry updates below keep running for every
-  // panel, so a demo is where it should be when the reader scrolls back to it. The observer adds and
-  // removes views from the drawing set as they cross the fold.
+  // Visibility gates both simulation updates and drawing.
   const byCanvas = new Map<Element, WebGPUView>(views.map((view, index) => [document.getElementById(canvases[index]) as Element, view]));
-  // Seed the drawing set with every view. IntersectionObserver is not guaranteed to deliver an entry
-  // (Firefox with hardware acceleration disabled never does), and a page whose canvases never render is
-  // worse than one that draws a few off-screen views. The observer still prunes them where it works.
-  for (const view of views) onScreen.add(view);
+  // Seed from actual bounds so initialization does not allocate targets for all 25 canvases.
+  for (const view of views) {
+    const bounds=view.canvas.getBoundingClientRect();
+    if(bounds.bottom>=-150 && bounds.top<=innerHeight+150)onScreen.add(view);
+  }
   observer = new IntersectionObserver(entries => {
     for (const entry of entries) {
       const view = byCanvas.get(entry.target);
@@ -2368,10 +2362,10 @@ function animate(now: number): void {
   const delta = last ? Math.max(0, Math.min((now - last) / 1000, .1)) : 0;
   last = now;
   clock += delta;
-  // Every demo keeps its own time, on screen or not, so a simulation is still where it should be when
-  // the reader scrolls to it — and the simulations keep running while they are off screen. Only the
-  // draw below is skipped for off-screen views: that is the part that costs a full render pass.
-  for (const demo of demos) {
+  // Pause off-screen simulations and label layout along with their rendering.
+  for (let i = 0; i < demos.length; i++) {
+    if (!onScreen.has(views[i])) continue;
+    const demo = demos[i];
     // One demo throwing must not freeze the others: report it, then leave that one alone.
     try {
       demo.update(delta, clock);

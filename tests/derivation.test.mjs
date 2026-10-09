@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import {
   checkStep, lineOffsets, locate, stepCount, strikeRuns,
   MATH_CSS, MATH_FONT_STACK, number, mroot, abs, limit,
-  mi, mn, mo, paren, brackets, msup, frac, cases, vec, hat, bar, dotAccent, mover, matrix, radialHat,
+  mi, mn, mo, prime, paren, brackets, msup, frac, cases, vec, hat, bar, dotAccent, mover, matrix, radialHat,
 } from '../build/index.js';
 
 test('stepCount and lineOffsets count one position per line plus one per beat', () => {
@@ -136,4 +136,8 @@ test('strikeRuns splits a cancellation at the terms it does not name', () => {
   // …but a real term between them does.
   assert.deepEqual(strikeRuns(['a', 'x', 'b'], ['a', 'ghost', 'b']), [['a'], ['b']]);
   assert.deepEqual(strikeRuns(order, []), []);
+});
+
+test('derivative primes are superscripts, not over-accents', () => {
+  assert.equal(prime(mi('f')), '<msup><mi>f</mi><mo>′</mo></msup>');
 });

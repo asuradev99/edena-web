@@ -1,5 +1,5 @@
 import { Group, Visual } from './world.js';
-import { identity, multiply, transform } from './math.js';
+import { identity, multiply, transform, cameraFacing } from './math.js';
 
 type Node = Group | Visual;
 /** One drawable Visual with the world matrix it is drawn with, and its inherited opacity. */
@@ -16,8 +16,14 @@ export class RenderList {
   private root=identity();
   private entries:Entry[]=[];
   private count=0;
+  private camera?: Float32Array;
+  private cameraVersion=0;
+  private facing=new WeakMap<Node,{world:Float32Array;version:number;matrix:Float32Array}>();
 
-  collect(world:Group):readonly Entry[] {
+  collect(world:Group,camera?:Float32Array):readonly Entry[] {
+    if(camera && (!this.camera || camera.some((value,index)=>value!==this.camera![index]))) {
+      this.camera=new Float32Array(camera);this.cameraVersion++;
+    }
     this.count=0;this.visit(world,this.root,1);
     this.entries.length=this.count;
     return this.entries;
@@ -55,7 +61,14 @@ export class RenderList {
       cache!.world = cache!.identity ? parent : parent === this.root ? cache!.local : multiply(parent, cache!.local);
       cache!.parent = parent;
     }
-    return cache!.world;
+    const world = cache!.world;
+    if (node.mode !== '2d' || !this.camera) return world;
+    let facing = this.facing.get(node);
+    if (!facing || facing.world !== world || facing.version !== this.cameraVersion) {
+      facing = { world, version: this.cameraVersion, matrix: cameraFacing(world, this.camera) };
+      this.facing.set(node, facing);
+    }
+    return facing.matrix;
   }
 
   private visit(node:Node,parent:Float32Array,opacity:number):void {

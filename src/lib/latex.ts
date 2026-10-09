@@ -32,7 +32,11 @@ export type LatexOptions = {
 const escape = (text: string): string => text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 const mrow = (parts: M[]): M => `<mrow>${parts.join('')}</mrow>`;
 /** Upright/bold/script text, spelled the way MathML Core allows it to be spelled. */
-const styled = (body: M, css: string): M => `<mstyle style="${css}">${body}</mstyle>`;
+const styled = (body: M, css: string): M => {
+  // CSS font-style alone does not cancel MathML's Unicode math-auto transform.
+  if (css.includes('font-style:normal')) body = body.replaceAll('<mi>', '<mi mathvariant="normal">');
+  return `<mstyle style="${css}">${body}</mstyle>`;
+};
 
 // ---------------------------------------------------------------------------------------------
 // Symbol tables
@@ -41,12 +45,12 @@ const styled = (body: M, css: string): M => `<mstyle style="${css}">${body}</mst
 /** Greek: LaTeX sets lower case italic and capitals upright. */
 const GREEK: Record<string, [string, boolean]> = {
   alpha: ['α', false], beta: ['β', false], gamma: ['γ', false], delta: ['δ', false],
-  epsilon: ['ε', false], varepsilon: ['ϵ', false], zeta: ['ζ', false], eta: ['η', false],
+  epsilon: ['ϵ', false], varepsilon: ['ε', false], zeta: ['ζ', false], eta: ['η', false],
   theta: ['θ', false], vartheta: ['ϑ', false], iota: ['ι', false], kappa: ['κ', false],
   lambda: ['λ', false], mu: ['μ', false], nu: ['ν', false], xi: ['ξ', false],
   pi: ['π', false], varpi: ['ϖ', false], rho: ['ρ', false], varrho: ['ϱ', false],
   sigma: ['σ', false], varsigma: ['ς', false], tau: ['τ', false], upsilon: ['υ', false],
-  phi: ['φ', false], varphi: ['ϕ', false], chi: ['χ', false], psi: ['ψ', false], omega: ['ω', false],
+  phi: ['ϕ', false], varphi: ['φ', false], chi: ['χ', false], psi: ['ψ', false], omega: ['ω', false],
   Gamma: ['Γ', true], Delta: ['Δ', true], Theta: ['Θ', true], Lambda: ['Λ', true],
   Xi: ['Ξ', true], Pi: ['Π', true], Sigma: ['Σ', true], Upsilon: ['Υ', true],
   Phi: ['Φ', true], Psi: ['Ψ', true], Omega: ['Ω', true],
@@ -128,7 +132,8 @@ const startsWith = (state: State, text: string): boolean => state.src.startsWith
 
 /** Read one token and advance: a `\command`, a `\x` escape, or a single character. */
 function readToken(state: State): string {
-  const ch = state.src[state.at];
+  const point = state.src.codePointAt(state.at);
+  const ch = point === undefined ? undefined : String.fromCodePoint(point);
   if (ch === undefined) return '';
   if (ch === '\\') {
     const match = /^\\([A-Za-z]+|.)/.exec(rest(state));
@@ -136,7 +141,7 @@ function readToken(state: State): string {
     state.at += match[0].length;
     return match[0];
   }
-  state.at += 1;
+  state.at += ch.length;
   return ch;
 }
 
@@ -182,7 +187,7 @@ function plainAtom(state: State, token: string): M {
     while (state.at < state.src.length && /[0-9.]/.test(state.src[state.at] as string)) { digits += state.src[state.at]; state.at++; }
     return mn(digits);
   }
-  if (/[A-Za-z]/.test(token)) return `<mi>${escape(token)}</mi>`;
+  if (/^\p{L}$/u.test(token)) return `<mi>${escape(token)}</mi>`;
   if (token === '-') return mo('−');
   if (token === '*') return mo('∗');
   if (token === "'") return mo('′');

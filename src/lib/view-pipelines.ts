@@ -39,7 +39,6 @@ type Pipelines = {
   pipelineColored: GPURenderPipeline;
   translucent: GPURenderPipeline;
   translucentColored: GPURenderPipeline;
-  pipelineWire: GPURenderPipeline;
 };
 
 const cache = new WeakMap<GPUDevice, Map<string, Pipelines>>();
@@ -79,10 +78,7 @@ export function viewPipelines(device: GPUDevice, format: GPUTextureFormat, sampl
     const transparentDepth={...depthStencil,depthWriteEnabled:false};
     const translucent=device.createRenderPipeline({...plain,depthStencil:transparentDepth});
     const translucentColored=device.createRenderPipeline({...colored,depthStencil:transparentDepth});
-    // The wireframe draws after the solid it belongs to: it must not write depth (the faces already
-    // did), and `less-equal` lets an edge sitting exactly on a face survive the test.
-    const pipelineWire=device.createRenderPipeline({...plain,primitive:{topology:'line-list'},depthStencil:transparentDepth});
-  const pipelines = { bindGroupLayout, pipeline, pipelineColored, translucent, translucentColored, pipelineWire };
+  const pipelines = { bindGroupLayout, pipeline, pipelineColored, translucent, translucentColored };
   variants.set(key, pipelines);
   return pipelines;
 }

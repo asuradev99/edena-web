@@ -85,8 +85,10 @@
   @media(max-width:750px){.masthead{padding:0 16px;height:66px}.wordmark{font-size:23px}.wordmark span{display:none}main{padding:0 16px 40px}footer{padding:0 16px 36px}}
   @media(prefers-reduced-motion:reduce){.stage{scroll-behavior:auto}}
 </style>
+<link rel="stylesheet" href="canvas-ui.css">
+<script src="canvas-ui.js" defer></script>
 </head>
-<body>
+<body data-project-lazy="true">
   <header class="masthead">
     <span class="wordmark">edena<span>/ basics</span></span>
     <nav><a href="index.html">← playground</a><a href="academy.html">academy</a><a href="symmetry.html">crystal symmetry</a><a href="physics-lab.html">physics lab</a></nav>
@@ -105,7 +107,7 @@
       <li><a href="#groups">05 · Groups and nested transforms</a></li>
       <li><a href="#labels">06 · Labels on the scene</a></li>
       <li><a href="#colour">07 · Colour from data</a></li>
-      <li><a href="#plot">08 · A chart in 3D</a></li>
+      <li><a href="#plot">08 · A flat chart</a></li>
       <li><a href="#depth">09 · Depth and draw order</a></li>
       <li><a href="#instances">10 · One mesh, many copies</a></li>
       <li><a href="#camera">11 · A camera move</a></li>
@@ -180,13 +182,13 @@
         </div>
       </section>
 
-      <section class="panel wide" id="labels" aria-label="Projected labels">
-        <div class="panel-head"><span class="index">06</span><div><h2>Labels on the scene</h2><p>LabelLayer.addHTML · mathml · mi · mn · mo · frac · msup</p></div><span class="tag">TEXT</span></div>
+      <section class="panel wide" id="labels" aria-label="Scene text">
+        <div class="panel-head"><span class="index">06</span><div><h2>Labels on the scene</h2><p>MathText · position · orientation · LabelLayer</p></div><span class="tag">TEXT</span></div>
         <div class="stage"><canvas id="labels-canvas" aria-label="A helix with a moving point, labelled with a typeset equation that follows it"></canvas><div class="labels" id="labels-stage-labels"></div></div>
         <div class="controls">
           <label>Helix turns <input id="labels-turns" type="range" min="1" max="5" step="1" value="3"> <output id="labels-turns-value">3</output></label>
           <label><button id="labels-play" aria-pressed="true">Pause</button></label>
-          <p>Text is not drawn into the scene: it is HTML positioned by the projected anchor each frame, so it stays sharp, selectable and styleable. The equation under the marker is real MathML from the library's <code>mathml</code> helpers, and its argument updates as the point moves.</p>
+          <p>Text lives in the scene. The marker’s <code>MathText</code> equation moves and rotates in 3D; orbit or zoom to see its perspective and size change with the helix. Browser MathML lays out the equation, and cached glyph textures render through the same depth buffer as the geometry. Fixed-facing labels are an explicit option.</p>
         </div>
       </section>
 
@@ -201,13 +203,13 @@
       </section>
 
       <section class="panel" id="plot" aria-label="A chart in three dimensions">
-        <div class="panel-head"><span class="index">08</span><div><h2>A chart in 3D, with a probe</h2><p>plotFrame · areaUnder · lineThrough · tickMath · drag to scrub</p></div><span class="tag">PLOT</span></div>
+        <div class="panel-head"><span class="index">08</span><div><h2>A flat chart, with a probe</h2><p>plotFrame · areaUnder · lineThrough · tickMath · drag to scrub</p></div><span class="tag">PLOT</span></div>
         <div class="stage"><canvas id="plot-canvas" aria-label="A function plot with minor ticks, axis titles, a shaded area and a probe that can be dragged along the curve"></canvas><div class="labels" id="plot-labels"></div><div class="hint">drag the picture to move the probe</div></div>
         <div class="controls">
           <label>Function <select id="plot-function"><option value="sine" selected>sin(x)</option><option value="square">square wave</option><option value="damped">damped sine</option><option value="gaussian">Gaussian</option></select></label>
           <label>Probe <input id="plot-probe" type="range" min="-4.4" max="4.4" step="0.02" value="1.2"> <output id="plot-probe-value">1.20</output></label>
           <label>Shade the area <input id="plot-area" type="checkbox" checked></label>
-          <p>A chart is a 3D scene too, so it orbits, zooms and labels with exactly the same machinery as everything else. <code>plotFrame</code> returns the geometry — axes, major and minor ticks, gridlines, the shaded region under the curve — plus anchors that carry both plain text and MathML, which is why the ticks get a real minus sign
+          <p>This plot uses the locked 2D camera: it stays front-facing as you zoom or drag the probe. Its geometry and text still use the shared renderer and depth buffer. <code>plotFrame</code> returns the geometry — axes, major and minor ticks, gridlines, the shaded region under the curve — plus anchors that carry both plain text and MathML, which is why the ticks get a real minus sign
 and the readout lines its digits up; the probe reports <math><mrow><mi>f</mi><mo>(</mo><mi>x</mi><mo>)</mo></mrow></math>,
 <math><mrow><msup><mi>f</mi><mo>′</mo></msup><mo>(</mo><mi>x</mi><mo>)</mo></mrow></math> and the gap between them.</p>
         </div>

@@ -45,7 +45,7 @@
   .stage{position:relative;background:#04080e;aspect-ratio:16/9;container-type:inline-size;margin:8px 24px 0;border-radius:14px;overflow:hidden}
   .stage canvas{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none}
   .labels{position:absolute;inset:0;pointer-events:none;font-family:var(--math-font);
-    font-size:clamp(8.5px,1.5cqw,13.5px);line-height:1.35;text-shadow:0 1px 8px #000,0 0 3px #000}
+    font-size:clamp(8.5px,1.5cqw,13.5px);line-height:1.35}
   .labels span{white-space:nowrap}
   .labels math{font-family:var(--math-font);font-style:normal;font-size:1.02em}
   .labels .math-label{font-style:normal;letter-spacing:.01em}
@@ -77,8 +77,10 @@
     footer{padding:0 16px 36px}}
   @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
 </style>
+<link rel="stylesheet" href="canvas-ui.css">
+<script src="canvas-ui.js" defer></script>
 </head>
-<body>
+<body data-project-lazy="true">
   <header class="masthead">
     <span class="wordmark">edena<span>/ academy</span></span>
     <nav><a href="basics.html">← basics</a><a href="index.html">playground</a><a href="symmetry.html">crystal symmetry</a><a href="physics-lab.html">physics lab</a></nav>
@@ -120,7 +122,7 @@
       <div class="prose">
         <p>The library keeps one right-handed world with +Y up. A <code>Visual</code> holds a position, a scale and a rotation; the renderer multiplies those into a model matrix, then the camera multiplies again into clip space, and only at the very end does the GPU divide by <code>w</code>. An orthographic camera writes <code>w = 1</code>, so that division changes nothing: an object's size on screen is the same at every depth. A perspective camera writes <code>w = depth</code>, so the same division makes an object half as wide when it is twice as far away. That is the whole difference, and it is why <code>OrbitCamera.projection</code> defaults to <code>'orthographic'</code> — it is the more predictable choice, and the one the plots want.</p>
         <p>The lab below draws five identical boxes receding along the view axis and measures the width of the nearest and farthest one <span class="keep">through the real camera</span>, so the readout cannot drift from the picture. Switch the projection, then pull the camera back: under perspective the near/far ratio is exactly the depth ratio; under orthographic it stays 1.00× however far you go, because distance simply is not in the equation.</p>
-        <p><strong>Limits.</strong> Perspective projection has a near plane and a far plane; geometry behind the eye is clipped, and <code>far</code> defaults to 1000 in the library's units. There is no field-of-view slider on the page, but <code>camera.fovY</code> is public. Labels are DOM overlays projected by the same camera, so a point behind the camera cannot be labelled — the label is placed off-canvas rather than mirrored forward.</p>
+        <p><strong>Limits.</strong> Perspective projection has a near plane and a far plane; geometry behind the eye is clipped, and <code>far</code> defaults to 1000 in the library's units. There is no field-of-view slider on the page, but <code>camera.fovY</code> is public. Labels are depth-tested scene text. Camera-facing annotations retain world position and perspective size, and geometry behind the eye is clipped.</p>
       </div>
       <div class="stage" id="projection-stage"><canvas id="projection-canvas" aria-label="Five identical boxes receding down a rail, with a near and far label"></canvas><div class="labels" id="projection-labels"></div><div class="hint">drag to orbit · scroll to zoom</div></div>
       <div class="controls">

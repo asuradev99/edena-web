@@ -53,3 +53,22 @@ export function rgba(hex: string, alpha = 1): Color {
   if (!/^#[0-9a-f]{6}$/i.test(hex)) throw new Error('Color must be #rrggbb');
   const n=parseInt(hex.slice(1),16); return [(n>>16)/255, ((n>>8)&255)/255, (n&255)/255, clamp(alpha)];
 }
+
+/** Orient a world-space plane toward the camera, retaining its origin and axis lengths. */
+export function cameraFacing(matrix: Float32Array, camera: Float32Array): Float32Array {
+  const out = identity();
+  const right = Math.hypot(camera[0], camera[4], camera[8]);
+  const up = Math.hypot(camera[1], camera[5], camera[9]);
+  const sx = Math.hypot(matrix[0], matrix[1], matrix[2]);
+  const sy = Math.hypot(matrix[4], matrix[5], matrix[6]);
+  for (let i = 0; i < 3; i++) {
+    out[i] = camera[i * 4] / right * sx;
+    out[4 + i] = camera[i * 4 + 1] / up * sy;
+    out[12 + i] = matrix[12 + i];
+  }
+  const back = cross([out[0] / (sx || 1), out[1] / (sx || 1), out[2] / (sx || 1)],
+    [out[4] / (sy || 1), out[5] / (sy || 1), out[6] / (sy || 1)]);
+  const sz = Math.hypot(matrix[8], matrix[9], matrix[10]);
+  for (let i = 0; i < 3; i++) out[8 + i] = back[i] * sz;
+  return out;
+}

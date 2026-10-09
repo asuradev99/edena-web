@@ -4,6 +4,8 @@ export type ProjectionMode = 'orthographic' | 'perspective';
 
 /** Orbit camera with an orthographic default for plots and an opt-in perspective mode for 3D scenes. */
 export class OrbitCamera {
+  /** 2D locks the front orthographic view; pointer drag pans and wheel zooms. */
+  mode: '2d' | '3d' = '3d';
   yaw=.38; pitch=.22; height=5.6;
   projection:ProjectionMode='orthographic';
   /** Vertical field of view used by perspective projection. */
@@ -12,14 +14,15 @@ export class OrbitCamera {
   target:Vec3=[0,0,0];
   matrix(aspect:number):Float32Array {
     if(!Number.isFinite(aspect)||aspect<=0)throw new Error('Camera aspect must be positive');
-    const back:Vec3=[Math.sin(this.yaw)*Math.cos(this.pitch),Math.sin(this.pitch),Math.cos(this.yaw)*Math.cos(this.pitch)];
+    const yaw=this.mode==='2d'?0:this.yaw,pitch=this.mode==='2d'?0:this.pitch;
+    const back:Vec3=[Math.sin(yaw)*Math.cos(pitch),Math.sin(pitch),Math.cos(yaw)*Math.cos(pitch)];
     const right=normalize(cross([0,1,0],back)), up=cross(back,right);
     const view=identity();
     for(let i=0;i<3;i++) { view[i*4]=right[i];view[i*4+1]=up[i];view[i*4+2]=back[i]; }
     view[12]=-right.reduce((s,x,i)=>s+x*this.target[i],0);
     view[13]=-up.reduce((s,x,i)=>s+x*this.target[i],0);
     view[14]=-this.distance-back.reduce((s,x,i)=>s+x*this.target[i],0);
-    const proj=this.projection==='perspective'?perspective(this.fovY,aspect,this.near,this.far):orthographic(this.height,aspect);
+    const proj=this.mode==='3d'&&this.projection==='perspective'?perspective(this.fovY,aspect,this.near,this.far):orthographic(this.height,aspect);
     return multiply(proj,view);
   }
   project(point:Vec3, width:number,height:number):[number,number] {
@@ -43,11 +46,12 @@ export class OrbitCamera {
    */
   ray(px:number,py:number,width:number,height:number):{origin:Vec3;direction:Vec3} {
     if(!(width>0)||!(height>0))throw new Error('A picking ray needs a positive viewport');
-    const back:Vec3=[Math.sin(this.yaw)*Math.cos(this.pitch),Math.sin(this.pitch),Math.cos(this.yaw)*Math.cos(this.pitch)];
+    const yaw=this.mode==='2d'?0:this.yaw,pitch=this.mode==='2d'?0:this.pitch;
+    const back:Vec3=[Math.sin(yaw)*Math.cos(pitch),Math.sin(pitch),Math.cos(yaw)*Math.cos(pitch)];
     const right=normalize(cross([0,1,0],back)), up=cross(back,right);
     const eye:Vec3=[this.target[0]+back[0]*this.distance,this.target[1]+back[1]*this.distance,this.target[2]+back[2]*this.distance];
     const ndcX=(px/width)*2-1, ndcY=1-(py/height)*2;
-    if(this.projection==='perspective'){
+    if(this.mode==='3d'&&this.projection==='perspective'){
       const f=1/Math.tan(this.fovY/2), vx=ndcX*(width/height)/f, vy=ndcY/f;
       const direction:Vec3=[right[0]*vx+up[0]*vy-back[0],right[1]*vx+up[1]*vy-back[1],right[2]*vx+up[2]*vy-back[2]];
       return {origin:eye,direction:normalize(direction)};
@@ -62,12 +66,21 @@ export class OrbitCamera {
   attach(canvas:HTMLCanvasElement):()=>void {
     const abort=new AbortController(), opts={signal:abort.signal}; let active=false, x=0,y=0;
     canvas.addEventListener('pointerdown',e=>{if(e.button!==0||this.locked)return; active=true;x=e.clientX;y=e.clientY;try{canvas.setPointerCapture(e.pointerId);}catch{/* synthetic pointers have no capture target */}},opts);
-    canvas.addEventListener('pointermove',e=>{if(!active||this.locked)return;this.yaw-=(e.clientX-x)*.006;this.pitch=clamp(this.pitch+(e.clientY-y)*.006,-1.4,1.4);x=e.clientX;y=e.clientY;},opts);
+    canvas.addEventListener('pointermove',e=>{
+      if(!active||this.locked)return;
+      if(this.mode==='2d'){
+        const unit=this.height/Math.max(1,canvas.clientHeight);
+        this.target[0]-=(e.clientX-x)*unit;this.target[1]+=(e.clientY-y)*unit;
+      }else{
+        this.yaw-=(e.clientX-x)*.006;this.pitch=clamp(this.pitch+(e.clientY-y)*.006,-1.4,1.4);
+      }
+      x=e.clientX;y=e.clientY;
+    },opts);
     const end=()=>{active=false;};
     canvas.addEventListener('pointerup',end,opts);canvas.addEventListener('pointercancel',end,opts);canvas.addEventListener('lostpointercapture',end,opts);
     canvas.addEventListener('wheel',e=>{
       e.preventDefault();
-      if(this.projection==='perspective')this.distance=clamp(this.distance*Math.exp(e.deltaY*.001),.2,1000);
+      if(this.mode==='3d'&&this.projection==='perspective')this.distance=clamp(this.distance*Math.exp(e.deltaY*.001),.2,1000);
       else this.height=clamp(this.height*Math.exp(e.deltaY*.001),.05,1000);
     },{...opts,passive:false});
     return ()=>abort.abort();

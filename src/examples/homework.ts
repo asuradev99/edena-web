@@ -1,4 +1,4 @@
-import {WebGPUView,LabelLayer,Visual,Geometry,polyline,merge,rgba,viridis,plasma,mathml,row,mi,mn,mo,msub,msup,frac,sqrt,matrix,integral,abs,type Vec3} from '../index.js';
+import {WebGPUView,LabelLayer,Visual,Geometry,gridPlane,lineSegments,polyline,merge,rgba,viridis,plasma,mathml,row,mi,mn,mo,msub,msup,frac,sqrt,matrix,integral,abs,type Vec3} from '../index.js';
 import {potential,bands,bandGrids,grid,contours,xBands,xCoefficients,singularDOS,numericalDOS,criticalEnergy,type Grid,type CriticalKind,type Segment} from './homework-model.js';
 import {eigenstates,planeWaveMatrix,xWavefunction,RECIPROCAL} from './homework-model.js';
 
@@ -31,7 +31,7 @@ const bandExtent=()=>zoomX?.12:.5;
 const bandMap=(x:number,y:number,e:number):Vec3=>[x/bandExtent()*2.9,(e-bandCenter())*bandScale(),y/bandExtent()*2.9];
 const bandFloor=-2.2,localFloor=-2.15;
 function plane(size:number):Geometry{return new Geometry([-size,0,-size,size,0,-size,-size,0,size,-size,0,size,size,0,-size,size,0,size]);}
-function resetLabels(index:number,id:string):LabelLayer{layers[index].dispose();layers[index]=new LabelLayer($(id),views[index].camera);return layers[index];}
+function resetLabels(index:number,id:string):LabelLayer{layers[index].dispose();layers[index]=new LabelLayer($(id),views[index].camera,{faceCamera:true});return layers[index];}
 const observer=new IntersectionObserver(entries=>{for(const e of entries){if(e.isIntersecting)visible.add(e.target as HTMLCanvasElement);else visible.delete(e.target as HTMLCanvasElement);}},{rootMargin:'100px'});
 
 function line(points:[number,number][],color:string,width=2,extra=''):string{return `<path d="${points.map(([x,y],i)=>`${i?'L':'M'}${x.toFixed(2)},${y.toFixed(2)}`).join(' ')}" fill="none" stroke="${color}" stroke-width="${width}" ${extra}/>`;}
@@ -42,7 +42,7 @@ function chart(xmin:number,xmax:number,ymin:number,ymax:number,xlabel:string,yla
   let base='';
   for(let i=0;i<=4;i++){
     const a=xmin+(xmax-xmin)*i/4,b=ymin+(ymax-ymin)*i/4;
-    base+=line([[x(a),top],[x(a),bottom]],C.grid,.7)+line([[left,y(b)],[right,y(b)]],C.grid,.7);
+    base+=line([[x(a),top],[x(a),bottom]],C.grid,1.5,'vector-effect="non-scaling-stroke"')+line([[left,y(b)],[right,y(b)]],C.grid,1.5,'vector-effect="non-scaling-stroke"');
     base+=text(x(a),bottom+21,format(a))+text(left-10,y(b)+4,format(b),'end');
   }
   base+=text((left+right)/2,h-5,xlabel)+text(left,14,ylabel,'start');
@@ -53,18 +53,20 @@ function segmentPath(segments:Segment[],x:(v:number)=>number,y:(v:number)=>numbe
   return `<path d="${segments.map(([a,b])=>`M${x(a[0]).toFixed(2)},${y(a[1]).toFixed(2)}L${x(b[0]).toFixed(2)},${y(b[1]).toFixed(2)}`).join('')}" fill="none" stroke="${color}" stroke-width="${width}" stroke-linecap="round"/>`;
 }
 function mesh(g:Grid,map:(x:number,y:number,e:number)=>Vec3,range:[number,number],palette=viridis):Geometry{
-  const positions:number[]=[],colors:number[]=[],{n,min,max,values}=g;
-  const vertex=(i:number,j:number)=>{const e=values[j*(n+1)+i],p=map(min+(max-min)*i/n,min+(max-min)*j/n,e);positions.push(...p);colors.push(...palette((e-range[0])/(range[1]-range[0]||1)));};
+  const {n,min,max,values}=g;
+  const positions=new Float32Array(n*n*18),colors=new Float32Array(positions.length);
+  const samples=Array.from(values,(e,index)=>map(min+(max-min)*(index%(n+1))/n,min+(max-min)*Math.floor(index/(n+1))/n,e));
+  const shades=Array.from(values,e=>palette((e-range[0])/(range[1]-range[0]||1)));
+  let offset=0;
+  const vertex=(i:number,j:number)=>{const index=j*(n+1)+i;const p=samples[index],c=shades[index];for(let axis=0;axis<3;axis++){positions[offset]=p[axis];colors[offset++]=c[axis];}};
   for(let j=0;j<n;j++)for(let i=0;i<n;i++){vertex(i,j);vertex(i+1,j+1);vertex(i+1,j);vertex(i,j);vertex(i,j+1);vertex(i+1,j+1);}
   return new Geometry(positions,colors);
 }
-function contourMesh(segments:Segment[],map:(x:number,y:number)=>Vec3,width=.012):Geometry{
-  return merge(...segments.map(([a,b])=>polyline([map(...a),map(...b)],width,4)));
+function contourMesh(segments:Segment[],map:(x:number,y:number)=>Vec3,width=1.8):Geometry{
+  return lineSegments(segments.flatMap(([a,b])=>[map(...a),map(...b)]),width);
 }
 function floorGrid(size=2.6,y=-.85):Geometry{
-  const parts:Geometry[]=[];
-  for(let i=-4;i<=4;i++){const p=size*i/4;parts.push(polyline([[-size,y,p],[size,y,p]],.005),polyline([[p,y,-size],[p,y,size]],.005));}
-  return merge(...parts);
+  return gridPlane([-size,size],[-size,size],{plane:'xz',offset:y,ticks:8});
 }
 function setScene(view:WebGPUView,surface:Geometry,lines:Geometry[]=[],floorY?:number){
   view.world.clear();view.world.add(new Visual(surface));
@@ -72,11 +74,11 @@ function setScene(view:WebGPUView,surface:Geometry,lines:Geometry[]=[],floorY?:n
   for(const g of lines)view.world.add(new Visual(g,rgba(C.gold)));
 }
 async function createView(id:string,height:number):Promise<WebGPUView>{
-  const view=await WebGPUView.create($<HTMLCanvasElement>(`${id}-canvas`),{device:views[0]?.device,onError:report,maxDpr:2,samples:4});
+  const view=await WebGPUView.create($<HTMLCanvasElement>(`${id}-canvas`),{device:views[0]?.device,onError:report,maxDpr:2,samples:4,antialias: new URLSearchParams(location.search).get('quality') === 'high' ? 'high' : true});
   if(disposed){view.dispose();throw new Error('Page disposed during initialization');}
   view.camera.height=height;view.camera.yaw=.62;view.camera.pitch=.50;
   views.push(view);visible.add(view.canvas);observer.observe(view.canvas);
-  layers.push(new LabelLayer($(`${id}-labels`),view.camera));return view;
+  layers.push(new LabelLayer($(`${id}-labels`),view.camera,{faceCamera:true}));return view;
 }
 function report(error:string){$('status').textContent=error;$('status').hidden=false;}
 function formulas(){
@@ -105,7 +107,7 @@ function drawPotential(){
   setScene(views[0],mesh(g,(x,y,e)=>[x*2.3,e*7,y*2.3],[lo,hi||.001]),[],floor);
   views[0].world.add(new Visual(polyline([[0,floor+.02,0],[2.3,floor+.02,0],[2.3,floor+.02,2.3],[0,floor+.02,2.3],[0,floor+.02,0]],.022),rgba(C.gold)));
   $('potential-range').textContent=`Range ${lo.toFixed(3)} to ${hi.toFixed(3)} E_G · fixed height scale; no hidden amplitude normalization.`;
-  layers[0].dispose();layers[0]=new LabelLayer($('potential-labels'),views[0].camera);
+  layers[0].dispose();layers[0]=new LabelLayer($('potential-labels'),views[0].camera,{faceCamera:true});
   layers[0].add('x/a',()=>[2.55,floor,0],C.teal);layers[0].add('y/a',()=>[0,floor,2.55],C.teal);layers[0].add('U / E_G',()=>[-2.3,Math.max(1,hi*7+.3),-2.3],C.gold);
   layers[0].add('a',()=>[1.15,floor,2.5],C.gold);
   drawReciprocal();
@@ -227,7 +229,7 @@ function drawTransition(){
     if(!localCuts[b])continue;
     const segments=contours(localGrids[b],energy),actual:Segment[]=segments.map(([a,b])=>[[a[0]*.1,a[1]*.25],[b[0]*.1,b[1]*.25]]);
     out+=segmentPath(actual,p.x,p.y,b?C.rose:C.gold,2.5);
-    localCuts[b].geometry=merge(contourMesh(actual,(x,y)=>localMap(x,y,energy+.0008)),contourMesh(actual,(x,y)=>[x/.1*2.25,localFloor+.015,y/.25*2.25],.012));
+    localCuts[b].geometry=merge(contourMesh(actual,(x,y)=>localMap(x,y,energy+.0008)),contourMesh(actual,(x,y)=>[x/.1*2.25,localFloor+.015,y/.25*2.25]));
   }
   localPlane.position[1]=(energy-.25)*10;
   out+=`<circle cx="${p.x(0)}" cy="${p.y(0)}" r="3" fill="${C.rose}"/>`;
@@ -236,19 +238,35 @@ function drawTransition(){
   $('current-title').textContent=state.upper?'Upper-branch energy slice':Math.abs(state.delta)<.005?'At the saddle energy':state.delta<0?'Below the saddle':'Above the saddle';
   $('topology-note').textContent=!state.v1?'No isolated saddle at zero coupling.':state.upper?(state.delta<0?'Below the minimum: no local upper-band contour.':'Above the minimum: a closed contour grows around X.'):'The gold intersection on the 3D surface projects to this curve. Near X, branches open along qₓ below the saddle and along qᵧ above it. The reconnection is a local Lifshitz transition. At larger |q| the exact two-state contours curve away from their quadratic asymptotes.';
 }
+let dosSurface:Visual|undefined;
+let dosSurfaceKey='';
+let dosIntegralKey='';
+let dosIntegral:number[]=[];
 function drawDOS(){
   const {a,b,kind,eta}=state;
   $('a-out').textContent=a.toFixed(2);$('b-out').textContent=b.toFixed(2);$('eta-out').textContent=eta.toFixed(3);
-  const g=grid((x,y)=>criticalEnergy(x,y,a,b,kind),64,-1,1),lo=Math.min(...g.values),hi=Math.max(...g.values);
-  dosGrid=g;dosScale=1.8/Math.max(a+b,1);
-  const map=(x:number,y:number,e:number):Vec3=>[x*2,e*dosScale,y*2];
-  setScene(views[3],mesh(g,map,[lo,hi],plasma),[],-2.1);
-  dosPlane=new Visual(plane(2),rgba(C.gold,.12));dosCut=new Visual(new Geometry([]),rgba(C.gold));views[3].world.add(dosPlane,dosCut);
-  const labels=resetLabels(3,'critical-labels');
-  labels.add('qₓ / G',()=>[0,-2.1,2.45],C.teal);labels.add('qᵧ / G',()=>[-2.45,-2.1,0],C.teal);labels.add('E − E_c',()=>[-2.2,1.9,-2],C.gold);
+  const surfaceKey=`${a}/${b}/${kind}`;
+  if(surfaceKey!==dosSurfaceKey){
+    dosSurfaceKey=surfaceKey;
+    const g=grid((x,y)=>criticalEnergy(x,y,a,b,kind),64,-1,1),lo=Math.min(...g.values),hi=Math.max(...g.values);
+    dosGrid=g;dosScale=1.8/Math.max(a+b,1);
+    const geometry=mesh(g,(x,y,e)=>[x*2,e*dosScale,y*2],[lo,hi],plasma);
+    if(dosSurface)dosSurface.geometry=geometry;
+    else{
+      dosSurface=new Visual(geometry);
+      dosPlane=new Visual(plane(2),rgba(C.gold,.12));dosCut=new Visual(new Geometry([]),rgba(C.gold));
+      views[3].world.add(dosSurface,new Visual(floorGrid(2.6,-2.1),rgba(C.muted,.24)),dosPlane,dosCut);
+      const labels=layers[3];
+      labels.add('qₓ / G',()=>[0,-2.1,2.45],C.teal);labels.add('qᵧ / G',()=>[-2.45,-2.1,0],C.teal);labels.add('E − E_c',()=>[-2.2,1.9,-2],C.gold);
+    }
+  }
   $('critical-heading').textContent=`A ${kind} in momentum space`;
   $('critical-note').textContent=`ε/E_G = ${kind==='maximum'?'−':''}${a.toFixed(2)}(qₓ/G)² ${kind==='minimum'?'+':'−'} ${b.toFixed(2)}(qᵧ/G)². Height rescaled for framing. Effective mass magnitudes: |mₓ|/m = ${(1/a).toFixed(2)}, |mᵧ|/m = ${(1/b).toFixed(2)}.`;
-  const energies=Array.from({length:181},(_,i)=>-.55+1.1*i/180),numeric=numericalDOS(energies,a,b,kind,eta,120);
+  const energies=Array.from({length:181},(_,i)=>-.55+1.1*i/180);
+  // In scaled coordinates curvature changes only the Jacobian, not the sampled integral.
+  const integralKey=`${kind}/${eta}`;
+  if(integralKey!==dosIntegralKey){dosIntegral=numericalDOS(energies,1,1,kind,eta,120);dosIntegralKey=integralKey;}
+  const numeric=dosIntegral.map(value=>value/Math.sqrt(a*b));
   dosValues=numeric;
   const ymax=Math.max(...numeric)*1.35,p=chart(-.55,.55,0,ymax,'(E − E_c) / E_G','ν · E_G / G²');dosChart=p;let out=p.base;
   out+=line(energies.map((e,i)=>[p.x(e),p.y(numeric[i])]),C.teal,2.6);

@@ -124,7 +124,6 @@ export const MATH_FONT_STACK =
 /** The CSS a page needs for maths to look right, ready to paste into a stylesheet. */
 export const MATH_CSS = `math{font-family:${MATH_FONT_STACK};font-style:normal;font-size:1.06em;line-height:1.35}
 math mtext,math mo,math mn{font-style:normal}
-math mi{font-style:italic}
 math .mt-times{font-family:${MATH_FONT_STACK}}
 math[display="block"]{display:block;margin:.6em 0}`;
 
@@ -175,7 +174,7 @@ export const evaluated = (inner: M, lower: M, upper: M): M =>
 /** Colour a subexpression, using MathML's own colour attribute (survives scaling and printing). */
 export const tint = (inner: M, colour: string): M => `<mstyle mathcolor="${escape(colour)}">${inner}</mstyle>`;
 /** A prime, as in f′. */
-export const prime = (base: M): M => mover(base, mo('\u2032'));
+export const prime = (base: M): M => msup(base, mo('\u2032'));
 /** Any accent above a base. */
 export function mover(base: M, accent: M): M {
   return `<mover accent="true">${one(base)}${one(accent)}</mover>`;

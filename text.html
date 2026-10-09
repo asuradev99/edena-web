@@ -1,0 +1,11 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Text in space · Edena</title>
+<link rel="icon" href="favicon.svg">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=STIX+Two+Math&display=swap">
+<link rel="stylesheet" href="canvas-ui.css"><script src="canvas-ui.js" defer></script>
+<style>body{margin:0;color:#dcebf2;font:15px system-ui}a{color:#80d4df}header{padding:20px}.panel-head{padding:16px}.stage{position:relative}canvas{width:100%;height:100%}.controls{padding:16px}label{display:block}#status{font-size:12px;color:#95acba}</style></head>
+<body><header><a href="index.html">← Edena</a> / Text in space · <a href="basics.html">Basics</a> · <a href="src/examples/text.ts">Source</a></header><main><article class="panel"><div class="panel-head"><h2>Text is geometry</h2></div><div class="stage"><canvas id="text-canvas" aria-label="Animated ordinary and mathematical text in three-dimensional space"></canvas></div><div class="controls">
+<label>Notation<select id="notation"><option value="0">Scripts & primes</option><option value="1">Greek & operators</option><option value="2">Fractions & radicals</option><option value="3">Unicode characters</option></select></label>
+<label><input id="playing" type="checkbox" checked> Animate transforms</label><label><input id="facing" type="checkbox"> Face camera</label><label><input id="flat" type="checkbox"> Lock scene to 2D</label>
+<label>Text size<input id="size" type="range" min="0.5" max="1.6" step=".01" value="1"></label><label>Depth<input id="depth" type="range" min="-3" max="3" step=".01" value="0"></label><button id="reset">Reset camera</button>
+<p>Drag to orbit; scroll to zoom. The solid bar occludes text behind it. Compare world orientation with camera-facing text, then zoom out to inspect smooth distant glyphs.</p><p>Ordinary text and MathML share the library’s text planes, transforms and depth buffer. The moving formula is laid out once; its animation only changes transforms.</p><output id="status">Loading…</output></div></article></main><script type="module" src="build/examples/text.js"></script></body></html>

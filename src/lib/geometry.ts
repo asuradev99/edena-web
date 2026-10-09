@@ -1,5 +1,10 @@
 import { cross, normalize, sub, type Vec3 } from './math.js';
 
+function allFinite(values: Float32Array): boolean {
+  for (let i=0;i<values.length;i++) if (!Number.isFinite(values[i])) return false;
+  return true;
+}
+
 /**
  * Unindexed triangles. Immutable geometry is shareable across visual nodes.
  *
@@ -11,6 +16,9 @@ export class Geometry {
   readonly vertices: Float32Array;
   /** Optional per-vertex linear RGB (three floats per vertex, same length as `vertices`). */
   readonly colors?: Float32Array;
+  /** Independent line segments, rendered with an antialiased width in CSS pixels. */
+  readonly segments?: Float32Array;
+  readonly lineWidth: number;
   /**
    * Contour lines for a surface or solid, as a line list (two positions per segment). The renderer
    * draws them over the mesh when it is painted in one flat colour, which is the default look for a
@@ -22,20 +30,32 @@ export class Geometry {
   readonly outline?: Float32Array;
   /** True when this geometry carries contour lines. */
   get wireframe(): boolean { return this.outline !== undefined; }
-  constructor(vertices: number[] | Float32Array, colors?: number[] | Float32Array, outline?: number[] | Float32Array) {
+  constructor(vertices: number[] | Float32Array, colors?: number[] | Float32Array, outline?: number[] | Float32Array,
+    lines: { segments?: number[] | Float32Array; width?: number } = {}) {
+    this.lineWidth = lines.width ?? 1.8;
+    if (!Number.isFinite(this.lineWidth) || this.lineWidth <= 0) throw new Error('Line width must be positive and finite');
+    if (lines.segments !== undefined) {
+      this.segments = new Float32Array(lines.segments);
+      if (this.segments.length % 6 || !allFinite(this.segments)) throw new Error('Lines require finite endpoint pairs');
+    }
     this.vertices = new Float32Array(vertices);
-    if (this.vertices.length % 9 || !this.vertices.every(Number.isFinite)) throw new Error('Geometry requires finite triangle coordinates');
+    if (this.vertices.length % 9 || !allFinite(this.vertices)) throw new Error('Geometry requires finite triangle coordinates');
     if (colors !== undefined) {
       const data = new Float32Array(colors);
-      if (data.length !== this.vertices.length || !data.every(Number.isFinite)) throw new Error('Geometry colors must be finite and match the vertex count');
+      if (data.length !== this.vertices.length || !allFinite(data)) throw new Error('Geometry colors must be finite and match the vertex count');
       this.colors = data;
     }
     if (outline !== undefined) {
       const lines = new Float32Array(outline);
-      if (lines.length % 6 || !lines.every(Number.isFinite)) throw new Error('Geometry outline requires finite line segments');
+      if (lines.length % 6 || !allFinite(lines)) throw new Error('Geometry outline requires finite line segments');
       this.outline = lines;
     }
   }
+}
+
+/** Endpoint pairs with stable screen-space thickness; useful for grids, ticks and guides. */
+export function lineSegments(points: readonly Vec3[], width = 1.8): Geometry {
+  return new Geometry([], undefined, undefined, { segments: points.flat(), width });
 }
 function triangle(out: number[], a: Vec3, b: Vec3, c: Vec3) { out.push(...a,...b,...c); }
 
@@ -94,6 +114,11 @@ export function polyline(points: Vec3[], width = .012, sides = 4): Geometry {
 }
 /** Concatenate geometries. Colors survive a merge; uncolored inputs become white. */
 export function merge(...geometries: Geometry[]): Geometry {
+  const lined = geometries.filter(g => g.segments?.length);
+  if (lined.some(g => g.lineWidth !== lined[0].lineWidth)) throw new Error('Merged screen lines must have the same width');
+  const segments = lined.length ? new Float32Array(lined.reduce((n, g) => n + g.segments!.length, 0)) : undefined;
+  let segmentOffset = 0;
+  for (const g of lined) { segments!.set(g.segments!, segmentOffset); segmentOffset += g.segments!.length; }
   const colored = geometries.some(g => g.colors);
   const total = geometries.reduce((sum, g) => sum + g.vertices.length, 0);
   const vertices = new Float32Array(total), colors = colored ? new Float32Array(total) : undefined;
@@ -117,7 +142,7 @@ export function merge(...geometries: Geometry[]): Geometry {
       lineOffset += geometry.outline!.length;
     }
   }
-  return new Geometry(vertices, colors, outline);
+  return new Geometry(vertices, colors, outline, { segments, width: lined[0]?.lineWidth });
 }
 export function circle(radius = 1, segments = 96, plane: 'xy'|'xz'|'yz' = 'xy', width = .012): Geometry {
   const points:Vec3[]=[];

@@ -47,8 +47,6 @@ const PARAMS_BYTES = 32;
 const CAMERA_BYTES = 96;
 
 const COMPUTE_SHADER = /* wgsl */ `
-override mode: u32;
-
 struct Params {
   dt: f32,
   stiffness: f32,
@@ -73,10 +71,10 @@ fn integrate(@builtin(global_invocation_id) gid: vec3<u32>) {
   var position = inPositions[index].xyz;
   var velocity = inVelocities[index].xyz;
   var acceleration = vec3<f32>(0.0, 0.0, 0.0);
-  if (mode == 0u) {
+  if (params.mode == 0u) {
     // Harmonic oscillator: a = -k p, so the cloud breathes around the origin.
     acceleration = -params.stiffness * position;
-  } else if (mode == 1u) {
+  } else if (params.mode == 1u) {
     // Central attractor: a = -k p / |p|^3, softened so the core stays finite.
     let distance = max(length(position), 0.12);
     acceleration = -params.stiffness * position / (distance * distance * distance);
@@ -86,16 +84,7 @@ fn integrate(@builtin(global_invocation_id) gid: vec3<u32>) {
     // The j == index term is exactly zero, so the self-force needs no branch.
     let epsilonSquared = params.softening * params.softening;
     var total = vec3<f32>(0.0, 0.0, 0.0);
-    // Unroll eight interactions to reduce loop overhead while keeping summation order.
-    var j = 0u;
-    for (; j + 7u < params.count; j += 8u) {
-      ${[0, 1, 2, 3, 4, 5, 6, 7].map(offset => `{
-        let delta = inPositions[j + ${offset}u].xyz - position;
-        let inverse = inverseSqrt(dot(delta, delta) + epsilonSquared);
-        total = total + delta * (inverse * inverse * inverse);
-      }`).join('\n')}
-    }
-    for (; j < params.count; j++) {
+    for (var j: u32 = 0u; j < params.count; j = j + 1u) {
       let delta = inPositions[j].xyz - position;
       let inverse = inverseSqrt(dot(delta, delta) + epsilonSquared);
       total = total + delta * (inverse * inverse * inverse);
@@ -357,7 +346,7 @@ export class GpuParticleSimulation {
     const computeModule = device.createShaderModule({ code: COMPUTE_SHADER, label: 'particle integrate' });
     this.computePipeline = device.createComputePipeline({
       layout: 'auto',
-      compute: { module: computeModule, entryPoint: 'integrate', constants: { mode: this.paramsBits[3] } },
+      compute: { module: computeModule, entryPoint: 'integrate' },
     });
 
     const renderModule = device.createShaderModule({ code: RENDER_SHADER, label: 'particle sprites' });

@@ -1,7 +1,11 @@
 import { Geometry } from './geometry.js';
 import { identity, multiply, transform, type Color, type Vec3 } from './math.js';
 
+export type ElementMode = '3d' | '2d';
+
 export class Visual {
+  /** 2D elements face the camera while retaining world position, scale and depth. */
+  mode: ElementMode = '3d';
   position:Vec3=[0,0,0];
   scale:Vec3=[1,1,1];
   /** Turn about +y. For a full 3D pose, set `orientation` as well. */
@@ -32,6 +36,10 @@ export class Visual {
   get matrix():Float32Array { return transform(this.position,this.scale,this.rotation,this.orientation); }
 }
 export class Group {
+  /** Apply camera-facing 2D orientation to this group and its contents. */
+  mode: ElementMode = '3d';
+  /** Local transform, shared with attached labels and other annotations. */
+  get matrix():Float32Array { return transform(this.position,this.scale,this.rotation,this.orientation); }
   position:Vec3=[0,0,0]; scale:Vec3=[1,1,1]; rotation=0;
   /** Optional Euler rotation in radians, applied x then y then z, before `rotation`. */
   orientation:Vec3|undefined;

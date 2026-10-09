@@ -33,7 +33,7 @@ async function healthy(page) {
       const { resolve } = pending.get(payload.id);
       pending.delete(payload.id);
       resolve(payload.result);
-    } else if (payload.method) events.push(payload);
+    } else if (['Runtime.exceptionThrown', 'Runtime.consoleAPICalled', 'Log.entryAdded'].includes(payload.method)) events.push(payload);
   };
   const call = (method, params = {}, timeout = 30000) => new Promise((resolve, reject) => {
     const id = nextId++;
@@ -58,7 +58,7 @@ async function healthy(page) {
 
     const drawn = await evaluate(`(() => {
       let canvases = 0, painted = 0;
-      for (const canvas of document.querySelectorAll('canvas')) {
+      for (const canvas of [...document.querySelectorAll('canvas'), ...Array.from(document.querySelectorAll('iframe')).flatMap(frame => [...(frame.contentDocument?.querySelectorAll('canvas') ?? [])])]) {
         canvases++;
         const rect = canvas.getBoundingClientRect();
         if (rect.width > 20 && rect.height > 20 && canvas.width > 0 && canvas.height > 0) painted++;

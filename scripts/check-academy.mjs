@@ -32,11 +32,11 @@ const events = [];
 socket.onmessage = event => {
   const message = JSON.parse(event.data);
   if (message.id) pending.get(message.id)?.(message);
-  else events.push(message);
+  else if (['Runtime.exceptionThrown', 'Runtime.consoleAPICalled', 'Log.entryAdded'].includes(message.method)) events.push(message);
 };
 const call = (method, params) => new Promise((resolve, reject) => {
   const key = ++id;
-  const timer = setTimeout(() => reject(new Error(`Browser check timed out on ${method}`)), 30000);
+  const timer = setTimeout(() => reject(new Error(`Browser check timed out on ${method}: ${params?.expression?.slice(0, 120) ?? ''}`)), 30000);
   pending.set(key, message => { clearTimeout(timer); pending.delete(key); message.error ? reject(new Error(JSON.stringify(message.error))) : resolve(message.result); });
   socket.send(JSON.stringify({ id: key, method, params }));
 });
@@ -99,6 +99,7 @@ try {
   await call('Page.enable');
   await call('Network.enable');
   await call('Network.setCacheDisabled', { cacheDisabled: true });
+  await call('Network.disable');
   await call('Page.navigate', { url });
   await wait(4500);
 
@@ -147,7 +148,9 @@ try {
       const r = element.getBoundingClientRect();
       return { x: Math.round(r.x), y: Math.round(r.y), width: Math.round(r.width), height: Math.round(r.height) };
     })()`);
+    await evaluate(`document.querySelectorAll('.canvas-ui').forEach(node=>node.style.visibility='hidden')`);
     const shot = (await call('Page.captureScreenshot', { format: 'png' })).data;
+    await evaluate(`document.querySelectorAll('.canvas-ui').forEach(node=>node.style.visibility='')`);
     return evaluate(`window.__measureRegion(${JSON.stringify(shot)}, ${JSON.stringify(rect)})`);
   };
 

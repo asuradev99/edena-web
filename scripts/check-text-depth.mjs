@@ -30,7 +30,7 @@ try {
     point=[0,0,1];const front=await capture();
     point=[1,0,0];const behind=await capture();
     const clip=element.style.clipPath;
-    view.world.clear();point=[0,0,0];
+    view.world.remove(wall);point=[0,0,0];
     element.style.opacity='0';const faded=await capture();
     element.style.opacity='1';element.style.display='none';const hidden=await capture();
     element.style.display='';element.style.color='#00ff00';
@@ -42,8 +42,13 @@ try {
     let uploads=0;const copy=view.device.queue.copyExternalImageToTexture.bind(view.device.queue);
     view.device.queue.copyExternalImageToTexture=(...args)=>{uploads++;return copy(...args);};
     await settle();const idleUploads=uploads;
+    point=[1e4,0,0];
+    for(let frame=0;frame<8;frame++){layer.update();view.render();await new Promise(resolve=>requestAnimationFrame(resolve));}
+    const offscreenUploads=uploads;
+    point=[0,0,0];
+    await settle();
     view.device.queue.copyExternalImageToTexture=copy;
-    layer.dispose();view.dispose();return {unobscured,partial,front,behind,clip,faded,hidden,recolored,fraction,idleUploads,errors};
+    layer.dispose();view.dispose();return {unobscured,partial,front,behind,clip,faded,hidden,recolored,fraction,idleUploads,offscreenUploads,errors};
   })()`);
   console.log(JSON.stringify(result,null,2));
   assert.deepEqual(result.errors,[]);
@@ -56,5 +61,6 @@ try {
   assert.ok(result.recolored.green>100,'inline color updates rebuild glyphs');
   assert.ok(result.fraction.left+result.fraction.right>50,'MathML fractions rasterize');
   assert.equal(result.idleUploads,0,'static text never rerasterizes');
+  assert.equal(result.offscreenUploads,0,'visibility changes do not rerasterize unchanged glyphs');
   assert.equal(result.clip,'inset(50%)','accessible DOM copy does not overlay depth-tested text');
 } finally {await page.close();}

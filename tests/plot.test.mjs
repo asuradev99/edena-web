@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { isosurface, plotFrame, tickValues, niceStep, formatTick, tickMath, tickDecimals, axes3d, boundsBox, areaUnder, lineThrough, secantSlope, Geometry, merge, ramp, viridis, plasma, colorMappedSurface, functionCurve } from '../build/index.js';
+import { isosurface, plotFrame, tickValues, niceStep, formatTick, tickMath, tickDecimals, axes3d, boundsBox, areaUnder, lineThrough, secantSlope, Geometry, merge, ramp, viridis, plasma, colorMappedSurface, functionCurve, functionRange, lineSegments, gridPlane } from '../build/index.js';
 
 /** Colors round-trip through a Float32Array, so compare with a tolerance. */
 const closeTo = (a, b, eps = 1e-6) => a.length === b.length && a.every((value, index) => Math.abs(value - b[index]) < eps);
@@ -26,7 +26,8 @@ test('tick helpers choose round steps, stay in range, and hide float noise', () 
 
 test('plot frame builds finite axes, ticks, grid, and one label per tick', () => {
   const frame = plotFrame([-2, 2], [-1, 1]);
-  assert.ok([frame.axes, frame.ticks, frame.grid].every(g => g.vertices.length > 0));
+  assert.ok(frame.axes.vertices.length > 0);
+  assert.ok([frame.ticks, frame.grid].every(g => g.segments.length > 0 && g.lineWidth === 1.8));
   assert.ok([frame.axes, frame.ticks, frame.grid].every(g => g.vertices.every(Number.isFinite)));
   const xs = tickValues(-2, 2, 6), ys = tickValues(-1, 1, 5);
   assert.equal(frame.labels.length, xs.length + ys.length - 1); // the origin is labelled once, not twice
@@ -176,11 +177,11 @@ test('tick labels use a real minus sign and hand an exponent to MathML when one 
 
 test('the plot frame gains minor marks that stay inside their spine and titles outside the box', () => {
   const frame = plotFrame([-3, 3], [-2, 4], { xTicks: 6, yTicks: 6, tickSize: .05, xTitle: 'x', yTitle: 'f(x)' });
-  assert.ok(frame.minor.vertices.length > 0, 'minor marks exist');
-  assert.ok(frame.minorGrid.vertices.length > 0, 'minor gridlines exist when the grid is on');
+  assert.ok(frame.minor.segments.length > 0, 'minor marks exist');
+  assert.ok(frame.minorGrid.segments.length > 0, 'minor gridlines exist when the grid is on');
   const originX = 0, originY = 0, spine = .05 * .55 + 1e-6;
-  for (let index = 0; index < frame.minor.vertices.length; index += 3) {
-    const x = frame.minor.vertices[index], y = frame.minor.vertices[index + 1];
+  for (let index = 0; index < frame.minor.segments.length; index += 3) {
+    const x = frame.minor.segments[index], y = frame.minor.segments[index + 1];
     const onVerticalSpine = Math.abs(x - originX) < spine && y >= -2 - 1e-6 && y <= 4 + 1e-6;
     const onHorizontalSpine = Math.abs(y - originY) < spine && x >= -3 - 1e-6 && x <= 3 + 1e-6;
     assert.ok(onVerticalSpine || onHorizontalSpine, `a minor mark strayed from its axis (${x}, ${y})`);
@@ -192,7 +193,7 @@ test('the plot frame gains minor marks that stay inside their spine and titles o
   const xTitle = frame.titles.find(title => title.text === 'x'), yTitle = frame.titles.find(title => title.text === 'f(x)');
   assert.ok(xTitle.position[0] >= 3 && xTitle.position[1] < 0, 'the x title belongs under the right end');
   assert.ok(yTitle.position[1] > 4 && Math.abs(yTitle.position[0]) < 1e-9, 'the y title belongs above the axis top');
-  assert.equal(plotFrame([-1, 1], [-1, 1], { minor: false }).minor.vertices.length, 0, 'minor marks can be switched off');
+  assert.equal(plotFrame([-1, 1], [-1, 1], { minor: false }).minor.segments.length, 0, 'minor marks can be switched off');
   assert.throws(() => plotFrame([-1, 1], [-1, 1], { minor: 1 }), /at least 2/);
 });
 
@@ -243,4 +244,38 @@ test('a line through a point carries its slope, and a secant becomes the derivat
   assert.ok(Math.abs(secantSlope(x => x * x, 2, 2.0001) - 4.0001) < 1e-9, 'as b nears a the secant nears the tangent');
   assert.throws(() => secantSlope(x => x, 1, 1), /distinct/);
   assert.throws(() => lineThrough([1, 1], Number.NaN, [0, 1]), /finite/);
+});
+
+
+test('screen lines validate endpoint pairs and preserve strokes through merges', () => {
+  const a = lineSegments([[0, 0, 0], [1, 0, 0]]);
+  const b = lineSegments([[0, 1, 0], [1, 1, 0]]);
+  assert.equal(a.lineWidth, 1.8);
+  assert.deepEqual([...merge(a, b).segments], [...a.segments, ...b.segments]);
+  assert.throws(() => lineSegments([[0, 0, 0]]), /endpoint/);
+  assert.throws(() => lineSegments([[0, 0, 0], [1, NaN, 0]]), /finite/);
+  assert.throws(() => lineSegments([], Infinity), /width/);
+  assert.throws(() => merge(a, lineSegments([[0,0,0],[1,0,0]], 2)), /same width/);
+  const floor = gridPlane([-1, 1], [-2, 2], { plane: 'xz', offset: -3 });
+  assert.ok(floor.segments.length > 0);
+  assert.ok([...floor.segments].every((value, i) => i % 3 !== 1 || value === -3));
+});
+
+test('plot ticks use axis alignment and screen gaps, including an off-origin intersection', () => {
+  const chart = plotFrame([2, 4], [1, 3], { xTicks: 2, yTicks: 2 });
+  const x = chart.labels.filter(label => label.vertical === 'top');
+  const y = chart.labels.filter(label => label.anchor === 'right');
+  assert.deepEqual(x.map(label => label.position[0]), [2, 3, 4]);
+  assert.deepEqual(y.map(label => label.position[1]), [2, 3]);
+  assert.ok(x.every(label => label.offset[0] === 0 && label.offset[1] > 0));
+  assert.ok(y.every(label => label.offset[0] < 0 && label.offset[1] === 0));
+});
+
+test('function ranges include interior extrema and skip gaps', () => {
+  const range = functionRange(Math.sin, [0, Math.PI]);
+  assert.equal(range[0], 0);
+  assert.equal(range[1], 1);
+  assert.deepEqual(functionRange(x => x < 0 ? NaN : x * x, [-1, 1]), [0, 1]);
+  assert.throws(() => functionRange(() => NaN, [0, 1]), /no finite/);
+  assert.throws(() => functionRange(Math.sin, [1, 0]), /domain/);
 });

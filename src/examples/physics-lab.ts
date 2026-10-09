@@ -58,12 +58,13 @@ function colorize(geometry: Geometry, colorOf: (x: number, y: number, z: number)
 async function initialize() {
   const params = new URLSearchParams(location.search);
   const msaa = params.get('samples') === '1' ? 1 : 4;
+  const antialias = msaa === 4 && params.get('quality') === 'high' ? 'high' : msaa === 4;
   const maxDpr = params.has('dpr') ? Number(params.get('dpr')) : 2;
   // ?alpha=opaque skips premultiplied compositing, which is cheaper when nothing needs to blend
   // with the page behind the canvas.
   const alphaMode: GPUCanvasAlphaMode = params.get('alpha') === 'opaque' ? 'opaque' : 'premultiplied';
 
-  const keplerView = await WebGPUView.create(get<HTMLCanvasElement>('kepler'), { samples: msaa, maxDpr, alphaMode, onError: report });
+  const keplerView = await WebGPUView.create(get<HTMLCanvasElement>('kepler'), { samples: msaa, antialias, maxDpr, alphaMode, onError: report });
   if (disposed) { keplerView.dispose(); return; }
   views.push(keplerView);
   const info = keplerView.adapterInfo, name = info?.description || info?.device || info?.architecture || info?.vendor || '';
@@ -77,7 +78,7 @@ async function initialize() {
     return total;
   };
   const addView = async (id: string) => {
-    const v = await WebGPUView.create(get<HTMLCanvasElement>(id), { device: keplerView.device, onError: report });
+    const v = await WebGPUView.create(get<HTMLCanvasElement>(id), { device: keplerView.device, samples: msaa, antialias, maxDpr, onError: report });
     if (disposed) { v.dispose(); throw new Error('disposed'); }
     views.push(v); return v;
   };
@@ -88,7 +89,7 @@ async function initialize() {
   const PLANET_COLORS = ['#58c4dd', '#ffff00', '#83c167'];
   const orbitVisuals: Visual[] = [], planetVisuals: Visual[] = [];
   const orbitGroup = new Group(), planetGroup = new Group();
-  const keplerLabels = new LabelLayer(get('kepler-labels'), keplerView.camera);
+  const keplerLabels = new LabelLayer(get('kepler-labels'), keplerView.camera, { faceCamera: true });
   const keplerOrbit = (a: number, e: number): Vec3[] => Array.from({ length: 481 }, (_, i) => {
     const theta = i / 480 * Math.PI * 2;
     const r = a * (1 - e * e) / (1 + e * Math.cos(theta));
@@ -277,7 +278,8 @@ async function initialize() {
   pendulumView.world.add(pendulumGroup);
   pendulumTimeline.add({ start: 0, duration: 3.4, update: p => { if (pendulumTrace) pendulumTrace.reveal = p; } });
   timelines.push(pendulumTimeline);
-  const pendulumLabels = new LabelLayer(get('pendulum-labels'), pendulumView.camera);
+  pendulumView.camera.mode = '2d';
+  const pendulumLabels = new LabelLayer(get('pendulum-labels'), pendulumView.camera, { faceCamera: true });
   pendulumLabels.add('released together', () => [-1.9, 1.35, 0], '#fde725');
   pendulumLabels.add('histories split', () => [-2.1, -1.9, 0], '#21918c');
   labels.push(pendulumLabels);
@@ -344,7 +346,7 @@ async function initialize() {
   }
   waveView.world.add(new Visual(counted(axes3d(1.4, .006)), rgba('#eeeeee', .18)));
   buildWave(waveInput.valueAsNumber, waveGap.valueAsNumber);
-  const waveLabels = new LabelLayer(get('wave-labels'), waveView.camera);
+  const waveLabels = new LabelLayer(get('wave-labels'), waveView.camera, { faceCamera: true });
   waveLabels.add('nodes', () => [0, .34, 0], '#8f8f99');
   labels.push(waveLabels);
   waveInput.addEventListener('input', () => {
@@ -388,7 +390,7 @@ async function initialize() {
   drumTimeline.add({ start: 0, duration: 2, update: p => { drumGroup.scale = [1, .22 + .78 * Math.abs(Math.cos(Math.PI * p)), 1]; } });
   drumTimeline.play();
   buildDrum(Number(drumM.value), Number(drumN.value));
-  const drumLabels = new LabelLayer(get('drum-labels'), drumView.camera);
+  const drumLabels = new LabelLayer(get('drum-labels'), drumView.camera, { faceCamera: true });
   drumLabels.add('nodal lines', () => [-1.32, .05, 1.32], '#58c4dd');
   labels.push(drumLabels);
   const rebuildDrum = () => { buildDrum(Number(drumM.value), Number(drumN.value)); nodeGroup.visible = nodeToggle.checked; };

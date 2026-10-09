@@ -9,7 +9,7 @@
 .labels{font-family:"STIX Two Math","Cambria Math","Latin Modern Math","Noto Sans Math","STIX Two Text","STIXGeneral","DejaVu Serif",Georgia,serif}
 .labels math{font-family:"STIX Two Math","STIXGeneral","Cambria Math","DejaVu Serif",serif;font-style:normal;font-size:1.15em}
 .labels .math-label{font-style:normal;letter-spacing:.01em}
-.subtitle{font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;text-shadow:0 1px 5px #000}
+.subtitle{font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
 .equation-panel.wide{left:44%;width:53%;top:20%}
 .equation-panel.wide .eq-line.small{font-size:1.42cqw}
 .equation-panel.wide .eq-line.explain{font-size:1.32cqw}

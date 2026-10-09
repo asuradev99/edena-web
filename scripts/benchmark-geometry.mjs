@@ -1,10 +1,11 @@
 import { performance } from 'node:perf_hooks';
-import { polyline, parametricSurface, merge, box, isosurface, World, Visual } from '../build/index.js';
+import { polyline, parametricSurface, merge, box, isosurface, colorMappedSurface } from '../build/index.js';
 const points=Array.from({length:10000},(_,i)=>[Math.cos(i*.01),Math.sin(i*.01),i*.0001]);
 const cubes=Array.from({length:500},()=>box([-1,-1,-1],[1,1,1]));
 for(const [name,run] of [
   ['polyline-10k',()=>polyline(points)],
   ['surface-100x100',()=>parametricSurface((u,v)=>[u,v,Math.sin(u)*Math.cos(v)],[-3,3],[-3,3],[100,100])],
+  ['colored-surface-96x96',()=>colorMappedSurface((x,y)=>Math.sin(x)*Math.cos(y),[-3,3],[-3,3],undefined,[96,96])],
   ['merge-500-outlined-boxes',()=>merge(...cubes)],
   ['isosurface-48',()=>isosurface((x,y,z)=>x*x+y*y+z*z,{min:[-2,-2,-2],max:[2,2,2]},1,48)],
   ['isosurface-empty-48',()=>isosurface(()=>1,{min:[-2,-2,-2],max:[2,2,2]},0,48)],

@@ -30,11 +30,11 @@ const events = [];
 socket.onmessage = event => {
   const message = JSON.parse(event.data);
   if (message.id) pending.get(message.id)?.(message);
-  else events.push(message);
+  else if (['Runtime.exceptionThrown', 'Runtime.consoleAPICalled', 'Log.entryAdded'].includes(message.method)) events.push(message);
 };
 const call = (method, params) => new Promise((resolve, reject) => {
   const key = ++id;
-  const timer = setTimeout(() => reject(new Error(`Browser check timed out on ${method}`)), 30000);
+  const timer = setTimeout(() => reject(new Error(`Browser check timed out on ${method}: ${params?.expression?.slice(0, 120) ?? ''}`)), 30000);
   pending.set(key, message => { clearTimeout(timer); pending.delete(key); message.error ? reject(new Error(JSON.stringify(message.error))) : resolve(message.result); });
   socket.send(JSON.stringify({ id: key, method, params }));
 });
@@ -63,6 +63,7 @@ try {
   // Always test the current build: a cached bundle once hid a fix from this check.
   await call('Network.enable');
   await call('Network.setCacheDisabled',{cacheDisabled:true});
+  await call('Network.disable');
   await call('Page.navigate', { url });
   await wait(4000);
 
@@ -108,6 +109,7 @@ try {
 
   /** Scroll a demo's stage into view, capture, and measure that region. */
   const region = async stageId => {
+    if (process.env.EDENA_TRACE) console.log('Measure', stageId);
     const rect = await evaluate(`(async () => {
       const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
       const stage = document.getElementById(${JSON.stringify(stageId)}).querySelector('.stage');
@@ -116,7 +118,9 @@ try {
       const r = stage.getBoundingClientRect();
       return { x: Math.round(r.x), y: Math.round(r.y), width: Math.round(r.width), height: Math.round(r.height) };
     })()`);
+    await evaluate(`document.querySelectorAll('.canvas-ui').forEach(node=>node.style.visibility='hidden')`);
     const shot = (await call('Page.captureScreenshot', { format: 'png' })).data;
+    await evaluate(`document.querySelectorAll('.canvas-ui').forEach(node=>node.style.visibility='')`);
     return evaluate(`window.__measureRegion(${JSON.stringify(shot)}, ${JSON.stringify(rect)})`);
   };
 
@@ -184,7 +188,7 @@ try {
     ['measure-y', -1.4, 'measure'],
     ['secant-h', 1.45, 'secant'],
     ['secant-x', -1.4, 'secant'],
-    ['secant-position', 6, 'secant'],
+    ['secant-position', 12, 'secant'],
     ['contrast-field', 'bowl', 'contrast'],
     ['contrast-palette', 'heat', 'contrast'],
     ['contrast-range', 25, 'contrast'],
@@ -277,12 +281,18 @@ try {
   await evaluate(`window.__set('field-resolution', 28)`);
   await wait(600);
 
+  const show = async name => {
+    await evaluate(`document.getElementById(${JSON.stringify(name + '-canvas')}).scrollIntoView({block:'center'})`);
+    await wait(350);
+  };
+  await show('simulation');
   const probeStart = await evaluate(`document.querySelector('#simulation-labels span').textContent`);
   await evaluate(`document.getElementById('simulation-play').click()`);
   await wait(900);
   assert.notEqual(await evaluate(`document.querySelector('#simulation-labels span').textContent`), probeStart, 'the simulation should advance when played');
   await evaluate(`document.getElementById('simulation-play').click()`);
 
+  await show('streamlines');
   // The flow rate is named in the readout, which is a better witness than a few moving dots.
   await evaluate(`window.__set('streamlines-speed', 0.3)`);
   await wait(200);
@@ -302,6 +312,7 @@ try {
 
   // The path's marker reads its position from the same parameter the scrubber sets, and the readout
   // shows the raw parameter beside the eased one.
+  await show('path');
   const alongBefore = await evaluate(`document.getElementById('path-readout').textContent`);
   await evaluate(`document.getElementById('path-play').click()`);
   await wait(700);
@@ -310,6 +321,7 @@ try {
   await evaluate(`{ const node = document.getElementById('path-play'); if (node.textContent === 'Pause') node.click(); }`);
   await wait(200);
 
+  await show('story');
   // The story's clock, chapter readout and play button are the same object: check they agree.
   await evaluate(`window.__set('story-time', 0)`);
   await wait(300);
@@ -324,12 +336,14 @@ try {
   await evaluate(`{ const node = document.getElementById('story-play'); if (node.textContent === 'Pause') node.click(); }`);
 
   // 3. Motion: the helix label advances on its own, and the transport seeks and resumes.
-  const liveTime = () => evaluate(`document.querySelectorAll('#labels-stage-labels span')[1]?.textContent ?? ''`);
+  await show('labels');
+  const liveTime = () => evaluate(`document.querySelector('#labels-time')?.textContent ?? ''`);
   // The control sweep stopped the helix to measure the turn count, so set it going again.
   if (await evaluate(`document.getElementById('labels-play').textContent`) === 'Play') { await evaluate(`document.getElementById('labels-play').click()`); await wait(400); }
   const before = await liveTime();
   await wait(900);
   assert.notEqual(before, await liveTime(), `the helix marker should advance (stuck at ${before})`);
+  await show('interpolation');
   await evaluate(`window.__set('interpolation-time', 1)`);
   await wait(400);
   assert.match(await evaluate(`document.getElementById('interpolation-time-value').textContent`), /^1\.0[0-9] s$/, 'the transport should seek');
@@ -437,13 +451,14 @@ try {
   const narrow = await evaluate(`(() => {
     const panel = document.getElementById('coordinates');
     const stage = panel.querySelector('.stage').getBoundingClientRect();
-    const controls = panel.querySelector('.controls').getBoundingClientRect();
+    const overlay = panel.querySelector('.canvas-tools'); overlay.open = true;
+    const controls = overlay.getBoundingClientRect();
     let overflow = 0;
     for (const canvas of document.querySelectorAll('.stage canvas')) {
       if (canvas.getBoundingClientRect().width > panel.getBoundingClientRect().width + 1) overflow++;
     }
     return {
-      stacked: controls.top >= stage.bottom - 1,
+      stacked: controls.right <= stage.left + 1,
       overflow,
       sideScroll: document.documentElement.scrollWidth - innerWidth,
       quiet: document.getElementById('status').hidden,
@@ -453,7 +468,7 @@ try {
   // accounted for, so the assertion is one-sided.
   assert.ok(narrow.sideScroll <= 0, `a phone viewport must not scroll sideways (${narrow.sideScroll} px)`);
   assert.equal(narrow.overflow, 0, `${narrow.overflow} canvases are wider than their panel at 390 px`);
-  assert.ok(narrow.stacked, 'at 390 px the controls should sit below the stage');
+  assert.ok(narrow.stacked, 'at 390 px controls must stay in a separate side column');
   assert.ok(narrow.quiet, 'the narrow layout should show no error banner');
   const narrowStage = await region('coordinates');
   assert.ok(narrowStage.bright > 60, `the first demo should still draw on a phone (${narrowStage.bright.toFixed(0)} bright pixels)`);

@@ -49,13 +49,13 @@ function applyShape() {
 }
 
 async function initialize() {
-  view = await WebGPUView.create(canvas, { onError: report });
+  view = await WebGPUView.create(canvas, { antialias: new URLSearchParams(location.search).get('quality') === 'high' ? 'high' : true, onError: report });
   if (disposed) { view.dispose(); return; }
   view.camera.height = 4.3; view.camera.yaw = .62; view.camera.pitch = .3;
   spin = new Group();
   spin.add(new Visual(boundsBox(MIN, MAX, .003), rgba('#eeeeee', .16)));
   view.world.add(new Visual(axes3d(1.05, .006), rgba('#eeeeee', .55)), spin);
-  labels = new LabelLayer(host, view.camera);
+  labels = new LabelLayer(host, view.camera, { faceCamera: true });
   for (const [name, point] of [['x', [1.2, -.06, 0]], ['y', [-.04, 1.2, 0]], ['z', [-.06, -.04, 1.2]]] as [string, Vec3][]) {
     labels.addHTML(mathml(mi(name)), () => point, '#c9c9d2', 'math-label');
   }

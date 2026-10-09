@@ -1,4 +1,17 @@
 <p align="center">
+
+The [project workspace](index.html) opens one selected scene with controls in a reserved side column.
+Use the searchable picker to switch among 65 runnable scenes; the Basics and Academy factories create
+only the selected view. The original [gallery](gallery.html), teaching tours and
+[electrostatics film](electrostatics.html) remain available directly.
+
+New: [2D tight binding](tight-binding.html), defaulting to a one-atom hexagonal Bravais lattice,
+one orbital, equal nearest-neighbor hopping and zero onsite energy. Edit lattice vectors, basis sites,
+real or complex bonds, site energies and the k path. Switch the canvas between bands, dispersion,
+Brillouin zone, Fermi-contour evolution, lattice/bonds and DOS. See
+[model conventions and numerical limits](docs/tight-binding.md). Model sampling runs in a worker;
+Fermi-energy changes reuse the samples.
+
   <img src="docs/images/hero.webp" alt="A Viridis colour-mapped surface beside the Fermi surface of a weak periodic potential, both rendered with Edena" width="100%">
 </p>
 
@@ -102,21 +115,18 @@ npm run dev        # build, then serve the gallery on http://localhost:5173
 ```
 
 ```ts
-import { WebGPUView, Visual, functionCurve, plotFrame, rgba } from 'edena-web';
+import { WebGPUView, Visual, LabelLayer, PlotLayer, functionCurve, plotFrame, rgba } from 'edena-web';
 
-const view = await WebGPUView.create(canvas);
+const view = await WebGPUView.create(canvas, { antialias: true });
 view.camera.yaw = 0;
 view.camera.pitch = 0;
 
-const chart = plotFrame([-4, 4], [-1.6, 1.6], { xTicks: 8, yTicks: 4 });
-view.world.add(
-  new Visual(chart.grid, rgba('#eeeeee', .14)),
-  new Visual(chart.ticks, rgba('#eeeeee', .45)),
-  new Visual(chart.axes, rgba('#eeeeee', .8)),
-  new Visual(functionCurve(Math.sin, [-4, 4], 640, .018), rgba('#ffff00')),
-);
+const labels = new LabelLayer(labelHost, view.camera); // positioned over the canvas
+const plot = new PlotLayer(view.world, labels,
+  plotFrame([-4, 4], [-1.6, 1.6], { xTicks: 8, yTicks: 4 }));
+view.world.add(new Visual(functionCurve(Math.sin, [-4, 4], 640, .018), rgba('#ffff00')));
 
-(function frame() { view.render(); requestAnimationFrame(frame); })();
+(function frame() { labels.update(); view.render(); requestAnimationFrame(frame); })();
 ```
 
 A view owns a device, a camera and a `World`. Add `Visual`s, mutate their transforms directly, and call
@@ -154,12 +164,12 @@ Everything is re-exported from `edena-web` (`src/index.ts`).
 
 | Area | Main tools |
 | --- | --- |
-| **Geometry** | `polyline`, `arrow`, `circle`, `sphere`, `shadedSphere`, `wireSphere`, `box`/`boxEdges`, `cylinder` (frustum, cone), `parametricSurface`, `functionCurve`, `functionSurface`, `merge` — closed solids wound outward, so a signed volume is positive |
-| **Plotting** | `plotFrame` (major and minor ticks, gridlines, axis titles, anchors carrying plain text *and* MathML), `areaUnder`, `lineThrough`, `secantSlope`, `axes3d`, `boundsBox`, `niceStep`, `tickValues`, `tickMath`, `formatTick` |
+| **Geometry** | `lineSegments` (antialiased pixel-width strokes), `polyline`, `arrow`, `circle`, `sphere`, `shadedSphere`, `wireSphere`, `box`/`boxEdges`, `cylinder` (frustum, cone), `parametricSurface`, `functionCurve`, `functionSurface`, `merge` — closed solids wound outward, so a signed volume is positive |
+| **Plotting** | `PlotLayer` (frame lifecycle and labels), `gridPlane`, `functionRange`, `plotFrame` (major and minor ticks, gridlines, axis titles, anchors carrying plain text *and* MathML), `areaUnder`, `lineThrough`, `secantSlope`, `axes3d`, `boundsBox`, `niceStep`, `tickValues`, `tickMath`, `formatTick` |
 | **Fields & vectors** | `isosurface` (marching tetrahedra), `streamlines` (RK4), `sphereSeeds` |
 | **Colour** | `ramp`, `viridis`, `plasma`, `colorMappedSurface` |
 | **Scene graph** | `Visual`, `Group`, `World` — visibility, opacity, `remove(...nodes)`, transforms (`position`, `scale`, `rotation`, optional Euler `orientation`), `reveal`, and `orientationMatrix`/`applyMatrix` for the same maths outside the graph |
-| **Camera & view** | Orbit controls, orthographic or perspective projection, MSAA, alpha mode, DPR cap, projected `LabelLayer` text, and `onResize` so a demo can re-fit its camera |
+| **Camera & view** | Orbit controls, orthographic or perspective projection, MSAA, alpha mode, DPR cap, transformable `Text`, `MathText`, and `LabelLayer` text, and `onResize` so a demo can re-fit its camera |
 | **Animation** | Absolute-time `Timeline` and `tween` |
 | **Simulation** | `createParticleState`/`stepParticles`/`ParticleSimulation` (CPU, renderer-agnostic) and `GpuParticleSimulation` (ping-pong storage buffers, compute integration, instanced rendering, timestamps, reset, checksums) |
 | **Crystal** | `parsePOSCAR`, `parsePhonopySymmetry`, `cellFromParameters`, `supercell`, `bonds`, `nearestNeighbours`, `latticePointGroup`, `mapsOntoSelf`, `siteMapping`, `symmetryOrbits`, `operationIsometry`/`isometryPoint`/`isometryTarget` |
@@ -181,7 +191,7 @@ its own world and returns its own `update`, while the page gives them one device
 | 03 | Volume | `box`/`sphere`/`cylinder` faces, per-face alpha, wire outlines, draw-order independence |
 | 04 | Shape | the primitive set, ending in a `parametricSurface` and a 3D tumble |
 | 05 | Hierarchy | `Group.add`, inherited transforms, opacity that multiplies down the tree |
-| 06 | Text | `LabelLayer.addHTML` with MathML, sharp and selectable at any zoom |
+| 06 | Text | `LabelLayer.addHTML` with MathML, transformable MathML scene text |
 | 07 | Colour | per-vertex colour built into a `Geometry`, with `viridis`/`plasma`/`ramp` |
 | 08 | Plotting | `plotFrame`, a `functionCurve`, and equation labels |
 | 09 | Depth | opaque first, then translucent faces sorted back to front |
@@ -264,15 +274,61 @@ the whole fold.
   order. Transparent objects render afterward, test against solid depth, and blend back-to-front by
   projected origin; intersecting transparent meshes still need a more advanced technique, so use
   opaque materials for solid scientific plots.
+Text can be added directly to a scene, without a label host:
+
+```ts
+import { MathText, Group } from 'edena-web';
+
+const equation = new MathText('E = mc^2', { height: .5 });
+const group = new Group().add(equation);
+view.world.add(group);
+group.position = [1, 0, 0];
+group.orientation = [0, Math.PI / 4, 0];
+group.scale = [2, 2, 2];
+```
+
 - **Unchanged scenes submit no GPU work.** Camera, transform, material, text and visibility changes
   trigger a redraw automatically; `view.render(true)` forces one.
 - **Instance data stays on the GPU.** Static batches need no repeat uploads, camera motion updates only
   uniforms, and sparse transform changes upload only the changed interval. Mutating a node's `position`,
   `scale` or `orientation` array works — no dirty flag.
-- **Labels are depth-tested glyph textures.** Scene text is laid out by the browser, cached at the
-  view's pixel ratio, and drawn through the same depth buffer as geometry, so a solid can cover part of
-  a word; its DOM copy stays available to accessibility tools. Use `occlude: false` for a deliberate
-  overlay caption.
+- **Text is a scene object.** `Text` and `MathText` lie in their local XY plane and inherit
+  position, scale, orientation, opacity, and parent transforms like other visuals. Perspective
+  changes their apparent size; geometry can occlude part of a glyph. Browser layout is cached in
+  padded, shadow-free glyph textures whose raster resolution tracks the on-screen density in both
+  directions: the texture is re-rendered when the projected size crosses a half-step bucket, so glyphs
+  stay within a fraction of one texel per screen pixel and read crisply at any zoom, small or large.
+  GPU-generated mipmaps and anisotropic filtering (16×) keep distant and oblique text smooth without
+  rebuilding it as the camera moves.
+  These are textured planes, not tessellated vector outlines. `text.setHTML(...)` and
+  `mathText.setMath(...)` retain glyphs when their content is unchanged.
+  `LabelLayer` also creates world text by default; pass `{ parent: group }` to attach a label to
+  an object, or use `labels.object(element)` to change its scale and orientation.
+  `{ faceCamera: true }` keeps text facing the camera while retaining world size and depth.
+  `Text.faceCamera` can be changed at runtime; it is equivalent to `text.mode = '2d'`.
+  `{ billboard: true }` explicitly keeps a label facing the screen at a fixed pixel size;
+  `occlude: false` makes a DOM overlay. `keepInView` applies to billboards only.
+- **Grid and contour strokes default to 1.8 CSS pixels**, with analytic edge antialiasing that stays
+  consistent while zooming. Use `lineSegments(points, width)` or `gridPlane(x, y, options)` for guides;
+  `plotFrame` accepts `gridWidth`. These strokes live in `Geometry.segments`, separate from triangles.
+- **Whole-canvas 4× MSAA is enabled by default.** `antialias: 'high'` adds 2× supersampling on
+  each axis (four times the pixels). Pass `?quality=high` to opt into supersampling in the demos; viewport-sized render
+  targets are created when needed and released when a canvas leaves the viewport. Set `antialias: false` for the cheaper single-sample
+  path, or specify `samples: 1 | 4` explicitly. The gallery and teaching tours also accept `?samples=1&dpr=1`.
+- **2D is an element mode.** Set `visual.mode = '2d'` or `group.mode = '2d'` to keep the local XY
+  plane facing the camera. The origin, axis lengths, perspective size, opacity and depth remain
+  part of the scene; child transforms still work inside a 2D group. Use `mode = '3d'` for normal
+  world orientation. For a whole flat plot, set `view.camera.mode = '2d'`: this locks a front-facing
+  orthographic view, with drag-to-pan and wheel-to-zoom. The library default remains `'3d'`.
+- **Canvas-first demo controls.** The shared `canvas-ui.js` and `canvas-ui.css` place native,
+  keyboard-accessible controls in reserved side columns beside the drawing viewport. Controls
+  collapse on phones, while explanatory notes live in expandable sections. Input widgets remain
+  native HTML and never cover the plot. See [Text in space](text.html) for text transforms,
+  camera-facing orientation, depth and mathematical typography.
+- **PlotLayer owns the frame and its labels.** `plot.update(plotFrame(...))` replaces the frame without
+  accumulating old nodes or textures. Unchanged tick text keeps its existing glyphs and scene objects. `plot.dispose()` removes it; `labels.remove(...nodes)` releases
+  individual annotations. For custom styling, `labels.addAnchors(frame.labels)` applies the library's
+  tick alignment and pixel gaps.
 - The renderer is intentionally **unlit** at this stage. Colour ramps, geometry, camera motion,
   antialiasing and depth-tested labels carry the visual language.
 
@@ -289,7 +345,7 @@ Measurements on Chrome Beta with Vulkan and an AMD RX 6700 XT. They are guidance
 | Crystal symmetry viewer | Painted in ~0.2 s; 60 FPS from 1×1×1 to a 1,600-atom cell; a 400-atom POSCAR loads in ~0.5 s and a 1,600-atom one in ~1.1 s |
 | Physics laboratory | 60 FPS, six views, ~54K triangles |
 | GPU oscillator | 50,000 particles, ~0.022 ms GPU integration per step |
-| GPU direct n-body | 8,192 bodies ≈ 0.25 ms/step; 32,768 ≈ 3.1 ms/step |
+| GPU direct n-body | 8,192 bodies ≈ 0.5 ms/step; 32,768 ≈ 3.7 ms/step |
 | Isosurface extraction | 250,000-sample budget; 48³ two-ball field ≈ 110 ms CPU |
 
 Default budgets throw when exceeded: isosurfaces allow 250,000 grid samples, surfaces 250,000 quads,
@@ -317,6 +373,12 @@ node scripts/check-basics.mjs [port]     # the basics tour: twenty-five demos, e
 node scripts/check-academy.mjs [port]    # twenty-two chapters, every control, the simulation
 node scripts/check-depth.mjs [port]      # renderer depth and the crystal viewer, pixel by pixel
 node scripts/check-renderer.mjs [port]   # buffer reuse, idle frames, sparse uploads, labels, resize
+node scripts/check-visual-quality.mjs [port] # line AA, glyph overhang, tick alignment, plot lifecycle
+node scripts/check-workspace.mjs [port] # project selection, one visible canvas, tight-binding views
+node scripts/check-demo-layout.mjs [port] # side columns at desktop/phone widths, text notation
+node scripts/check-view-modes.mjs [port] # distant text filtering, 2D elements/camera, high AA
+node scripts/check-text-updates.mjs [port] # changing/empty text, texture reuse, shared pipelines
+node scripts/check-text-transform.mjs [port] # parent transforms, perspective, texture reuse
 node scripts/check-text-depth.mjs [port] # partial text occlusion, MathML, styling, texture reuse
 node scripts/check-transparency.mjs [port] # alpha ordering, instancing and wireframe separation
 node scripts/check-particles.mjs [port]  # GPU results against a CPU force reference
