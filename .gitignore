@@ -1,3 +1,4 @@
-build/
+# The compiled site is committed so GitHub Pages (which serves this branch directly) can load
+# build/examples/*.js. Run `npm run build` and commit build/ after changing src/.
 node_modules/
 test-results/
