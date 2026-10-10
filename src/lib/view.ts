@@ -56,8 +56,23 @@ const clampDpr = (value: number) => Number.isFinite(value) ? Math.min(3, Math.ma
 /** Default colour of a mesh's contour lines: white, the one value that reads on every hue here. */
 const WHITE_WIRE: Color = [1, 1, 1, 1];
 
+/** A GPU-resident scene component sharing this view's camera, depth buffer and render pass. */
+export interface GpuSceneLayer {
+  readonly revision: number;
+  prepare(encoder: GPUCommandEncoder, camera: Float32Array, width: number, height: number): void;
+  drawOpaque(pass: GPURenderPassEncoder): void;
+  drawTransparent(pass: GPURenderPassEncoder): void;
+  dispose(): void;
+}
+
 export class WebGPUView {
   readonly world=new World();
+  private gpuLayers = new Map<GpuSceneLayer, number>();
+  addGpuLayer<T extends GpuSceneLayer>(create: (device: GPUDevice, format: GPUTextureFormat, samples: number) => T): T {
+    const layer = create(this.device, this.format, this.samples);
+    this.gpuLayers.set(layer, -1); this.frameValid = false;
+    return layer;
+  }
   readonly camera=new OrbitCamera();
   /** The drawables of the most recent frame, for overlays that need to know what is on screen. */
   private lastScene:readonly SceneEntry[]=[];
@@ -200,16 +215,22 @@ export class WebGPUView {
     this.frameMaterials.length = entries.length;
     const sceneChanged = this.frameState.changed(camera, entries, this.frameMaterials);
     const textChanged = this.textRenderer?.prepare(this.dpr, camera, this.canvas.width / this.dpr, this.canvas.height / this.dpr);
-    if (!force && this.frameValid && !sceneChanged && !textChanged) return;
+    const layersChanged = [...this.gpuLayers].some(([layer, revision]) => layer.revision !== revision);
+    if (!force && this.frameValid && !sceneChanged && !textChanged && !layersChanged) return;
     this.ensureRenderTargets();
     const encoder=this.device.createCommandEncoder();
     this.textRenderer?.prepareMipmaps(encoder);
+    for (const layer of this.gpuLayers.keys()) {
+      layer.prepare(encoder, camera, this.canvas.width, this.canvas.height);
+      this.gpuLayers.set(layer, layer.revision);
+    }
     const target=this.context.getCurrentTexture().createView();
     const clearValue={r:0,g:0,b:0,a:this.alphaMode==='opaque'?1:0};
     const colorAttachment:GPURenderPassColorAttachment=this.samples>1
       ?{view:this.msaa!.createView(),resolveTarget:target,clearValue,loadOp:'clear',storeOp:'discard'}
       :{view:target,clearValue,loadOp:'clear',storeOp:'store'};
     const pass=encoder.beginRenderPass({colorAttachments:[colorAttachment],depthStencilAttachment:{view:this.depth!.createView(),depthClearValue:1,depthLoadOp:'clear',depthStoreOp:'discard'}});
+    for (const layer of this.gpuLayers.keys()) layer.drawOpaque(pass);
     const usedGeometry = new Set<Geometry>(), usedBatches = new Set<string>();
     const groups = new Map<string, {
       geometry: Geometry; color: Color; wireColor: Color; instances: SceneEntry[];
@@ -274,6 +295,7 @@ export class WebGPUView {
     let textDrawn = false;
     const drawText = () => {
       this.textRenderer?.draw(pass);
+      for (const layer of this.gpuLayers.keys()) layer.drawTransparent(pass);
       textDrawn = true;
     };
     for(const [key,group] of groups){
@@ -372,6 +394,8 @@ export class WebGPUView {
   }
 
   dispose():void {
+    for (const layer of this.gpuLayers.keys()) layer.dispose();
+    this.gpuLayers.clear();
     VIEW_OF_CAMERA.delete(this.camera);
     this.textRenderer?.dispose();
     this.lineRenderer?.dispose();

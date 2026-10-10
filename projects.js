@@ -1,5 +1,8 @@
 // Runnable scenes, loaded on demand. Original films and tours remain directly accessible.
 const groups = [
+  {group:"Crystal symmetry",page:"symmetry.html",scenes:[
+    ["scene", "Crystal symmetry"],
+  ]},
   {group:"Tight binding",page:"tight-binding.html",scenes:[
     ["tb-canvas", "2D tight binding"],
   ]},
@@ -81,9 +84,6 @@ const groups = [
   ]},
   {group:"Scalar fields",page:"field.html",scenes:[
     ["scene", "Scalar fields"],
-  ]},
-  {group:"Crystal symmetry",page:"symmetry.html",scenes:[
-    ["scene", "Crystal symmetry"],
   ]},
  ];
 export const projects = groups.flatMap(({group,page,scenes}) =>

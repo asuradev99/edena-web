@@ -172,7 +172,7 @@ Everything is re-exported from `edena-web` (`src/index.ts`).
 | **Camera & view** | Orbit controls, orthographic or perspective projection, MSAA, alpha mode, DPR cap, transformable `Text`, `MathText`, and `LabelLayer` text, and `onResize` so a demo can re-fit its camera |
 | **Animation** | Absolute-time `Timeline` and `tween` |
 | **Simulation** | `createParticleState`/`stepParticles`/`ParticleSimulation` (CPU, renderer-agnostic) and `GpuParticleSimulation` (ping-pong storage buffers, compute integration, instanced rendering, timestamps, reset, checksums) |
-| **Crystal** | `parsePOSCAR`, `parsePhonopySymmetry`, `cellFromParameters`, `supercell`, `bonds`, `nearestNeighbours`, `latticePointGroup`, `mapsOntoSelf`, `siteMapping`, `symmetryOrbits`, `operationIsometry`/`isometryPoint`/`isometryTarget` |
+| **Crystal** | `parsePOSCAR`, `parsePhonopySymmetry`, `cellFromParameters`, `supercell`, `bonds`, `nearestNeighbours`, `latticePointGroup`, `spaceGroupOperations`, `closedCell`, `mapsOntoSelf`, `siteMapping`, `symmetryOrbits`, `operationIsometry`/`isometryPoint`/`isometryTarget`, `symmetryAnimationPoint`/`symmetryAnimationTransform`, `centeredIsometry` |
 | **Elements** | `ELEMENTS`, `appearanceFor` (CPK-brightened colours and covalent radii) |
 | **Math text** | `mathml`/`mi`/`mn`/`mo`/`frac`/`sqrt`/`msub`/`msup`/`matrix`/`cases`/`vec`/`integral`/`summation`… plus `number` (real minus signs, grouped digits) and `latex('\\frac{a}{b}')` → native MathML |
 | **Derivations** | `Derivation` — addressable tokens and *beats*: brackets that grow, terms struck through, colour changes and notes, playable or scrubbable |
@@ -245,6 +245,25 @@ plane facing the reader; an explicit normal pins it, e.g. to a floor. Grabbing a
 `camera.locked`, so orbiting and dragging never fight over the same gesture.
 
 ### Crystal workflow
+
+Crystal symmetry is the default workspace demo. **Load MoS₂ example** opens the idealized
+bulk 2H structure in [`examples/MoS2.POSCAR`](examples/MoS2.POSCAR).
+
+**Displayed sites** switches between the POSCAR basis and all periodic images inside the closed
+cell, including its faces, edges and corners. POSCAR already lists the interior sites; this option
+adds boundary copies, rather than inferring missing atoms in an incomplete structure.
+**Operation set** switches between origin-preserving point operations and space-group
+representatives modulo integer lattice translations. Discovery uses the lattice metric and verifies
+same-species site permutations; it does not assign an international space-group name or number.
+
+The side-panel report shows source → destination IDs for the displayed cell; scene labels are temporarily removed. Animations use
+an equivalent symmetry element near the cell centre, absorbing removable translation into the
+axis, plane or inversion centre. Only the screw/glide displacement remains; the placement card
+shows the chosen centre. Composite moves pause between stages, and periodic images return to
+the cell only when necessary. Paused scenes submit no GPU work once their labels have loaded.
+Select an atom under **Displacement arrow** and enter Cartesian components in Å to follow its
+polar displacement vector. Translation moves the arrow's anchor without changing the vector.
+Atoms, bonds, starting markers and trails use persistent GPU buffers. A compute shader updates atom positions; vertex shaders generate bonds and trails and fragment shaders shade depth-correct spheres. A bond half is evaluated from the animated positions of its two atoms — including a partner on a periodic image — so bonds ride a rotation exactly instead of dissolving while the crystal moves, and each periodic ghost follows the same transform as its host atom. Operation changes update shared parameters without rebuilding labels or atom meshes.
 
 The symmetry viewer accepts extensionless POSCAR files, VASP 4 and 5 layouts, positive or
 target-volume scale factors, Direct or Cartesian positions, Selective Dynamics lines, and phonopy

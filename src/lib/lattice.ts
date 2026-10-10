@@ -316,6 +316,113 @@ export function siteMapping(structure: CrystalStructure, operation: CrystalOpera
   });
 }
 
+/** Space-group representatives modulo integer lattice translations, for the supplied cell. */
+export function spaceGroupOperations(structure: CrystalStructure, tolerance = 1e-4): CrystalOperation[] {
+  if (!structure.positions.length) return [];
+  const counts = new Map<string, number>();
+  structure.species.forEach(symbol => counts.set(symbol, (counts.get(symbol) ?? 0) + 1));
+  const anchor = structure.species.reduce((best, symbol, i) => counts.get(symbol)! < counts.get(structure.species[best])! ? i : best, 0);
+  const result: CrystalOperation[] = [];
+  for (const rotation of latticePointGroup(structure.lattice, tolerance)) {
+    const rotated = rotation.map(row => dot(row as Vec3, structure.positions[anchor])) as Vec3;
+    const shifts: Vec3[] = [];
+    structure.positions.forEach((position, i) => {
+      if (structure.species[i] !== structure.species[anchor]) return;
+      const translation = wrapFractional(position.map((v, a) => v - rotated[a]) as Vec3)
+        .map(v => v < tolerance || 1 - v < tolerance ? 0 : v) as Vec3;
+      if (shifts.some(t => fractionalDistanceSquared(t, translation) < tolerance ** 2)) return;
+      shifts.push(translation);
+      const operation = { rotation, translation, label: '' };
+      const mapping = siteMapping(structure, operation, tolerance);
+      if (mapping.every(i => i >= 0) && new Set(mapping).size === mapping.length) result.push(operation);
+    });
+  }
+  return result;
+}
+
+/** Include all periodic images on the closed unit-cell boundary, without duplicating interior sites. */
+export function closedCell(structure: CrystalStructure, tolerance = 1e-6): CrystalStructure {
+  const positions: Vec3[] = [], species: string[] = [];
+  structure.positions.forEach((position, i) => {
+    const p = wrapFractional(position).map(v => v < tolerance || 1 - v < tolerance ? 0 : v);
+    const choices = p.map(v => v === 0 ? [0, 1] : [v]);
+    for (const x of choices[0]) for (const y of choices[1]) for (const z of choices[2]) {
+      const candidate: Vec3 = [x, y, z];
+      if (positions.some((other, j) => species[j] === structure.species[i] && Math.hypot(...other.map((v, a) => v - candidate[a])) < tolerance)) continue;
+      positions.push(candidate); species.push(structure.species[i]);
+    }
+  });
+  return { ...structure, positions, species };
+}
+
+/** A nearby symmetry element and its unavoidable screw/glide displacement. */
+export type CenteredIsometry = Isometry & {
+  /** Cartesian location of the element, in the original lattice frame. */
+  centre: Vec3;
+  /** Integer translation added to the supplied operation; equivalent modulo the base lattice. */
+  latticeShift: Vec3;
+};
+
+/**
+ * Place an equivalent operation near a requested fractional centre. For each nearby lattice
+ * representative, solve b = (I-R)q + v: q moves the element and Rv=v is the screw/glide part.
+ * Prefer the least residual translation, then the nearest element. The 27-image search uses the
+ * same conventional/reduced-cell assumption as latticePointGroup; this is not a lattice reduction.
+ */
+export function centeredIsometry(lattice: Lattice, operation: CrystalOperation, centre: Vec3 = [.5, .5, .5]): CenteredIsometry {
+  const motion = operationIsometry(lattice, operation);
+  const target = fractionalToCartesian(centre, lattice);
+  const offset = operation.rotation.map((row, a) => dot(row as Vec3, centre) + operation.translation[a] - centre[a]) as Vec3;
+  const nearest = offset.map(v => -Math.round(v));
+  let best: CenteredIsometry | undefined, bestTranslation = Infinity, bestDistance = Infinity;
+  const { axis, angle, improper, inversion } = motion;
+  for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) for (let k = -1; k <= 1; k++) {
+    const latticeShift: Vec3 = [nearest[0] + i, nearest[1] + j, nearest[2] + k];
+    const b = fractionalToCartesian(offset.map((v, a) => v + latticeShift[a]) as Vec3, lattice);
+    const parallel = axis.map(v => v * dot(b, axis)) as Vec3;
+    const perpendicular = b.map((v, a) => v - parallel[a]) as Vec3;
+    let translation: Vec3, q: Vec3;
+    if (inversion) { translation = [0, 0, 0]; q = b.map(v => v / 2) as Vec3; }
+    else if (Math.abs(angle) < 1e-9) {
+      translation = improper ? perpendicular : b;
+      q = improper ? parallel.map(v => v / 2) as Vec3 : [0, 0, 0];
+    } else {
+      translation = improper ? [0, 0, 0] : parallel;
+      const turn = cross(axis, perpendicular), cot = 1 / Math.tan(angle / 2);
+      q = perpendicular.map((v, a) => (v + cot * turn[a] + (improper ? parallel[a] : 0)) / 2) as Vec3;
+    }
+    const shiftCost = dot(translation, translation), distance = dot(q, q);
+    if (shiftCost < bestTranslation - 1e-9 || (Math.abs(shiftCost - bestTranslation) <= 1e-9 && distance < bestDistance - 1e-9)) {
+      bestTranslation = shiftCost; bestDistance = distance;
+      best = { ...motion, translation, centre: target.map((v, a) => v + q[a]) as Vec3, latticeShift };
+    }
+  }
+  return best!;
+}
+
+/** Affine animation transform: evaluate once per frame, then reuse for every atom and vector. */
+export function symmetryAnimationTransform(motion: Isometry, progress: number): { translation: Vec3; columns: [Vec3, Vec3, Vec3] } {
+  const translation = symmetryAnimationPoint(motion, [0, 0, 0], progress);
+  const columns = ([ [1, 0, 0], [0, 1, 0], [0, 0, 1] ] as Vec3[]).map(point =>
+    symmetryAnimationPoint(motion, point, progress).map((v, a) => v - translation[a]) as Vec3) as [Vec3, Vec3, Vec3];
+  return { translation, columns };
+}
+
+/** Animation with a visible pause between rotation/reflection and translation stages. */
+export function symmetryAnimationPoint(motion: Isometry, point: Vec3, progress: number): Vec3 {
+  const p = Math.max(0, Math.min(1, progress));
+  const ease = (v: number) => v * v * (3 - 2 * v);
+  const linear = { ...motion, translation: [0, 0, 0] as Vec3 };
+  const translated = motion.translation.some(v => Math.abs(v) > 1e-9);
+  const compound = motion.improper && !motion.inversion && Math.abs(motion.angle) > 1e-9;
+  const hasLinear = motion.improper || Math.abs(motion.angle) > 1e-9;
+  const q = translated && hasLinear ? Math.min(1, p / .6) : p;
+  const t = compound ? (q < .35 ? .5 * ease(q / .35) : q <= .65 ? .5 : .5 + .5 * ease((q - .65) / .35)) : ease(q);
+  const moved = isometryPoint(linear, point, t);
+  const shift = translated && hasLinear ? ease(Math.max(0, (p - .78) / .22)) : ease(p);
+  return moved.map((v, a) => v + motion.translation[a] * shift) as Vec3;
+}
+
 /** Group sites into symmetry orbits under a list of operations. */
 export function symmetryOrbits(structure: CrystalStructure, operations: CrystalOperation[], tolerance = 1e-4): number[][] {
   // One mapping per operation, computed once. Mapping inside the walk below would recompute an

@@ -190,8 +190,10 @@ export const sphere = (radius=1) => parametricSurface((u,v)=>[radius*Math.sin(u)
  * `Visual` color to the element hue and the renderer multiplies the two together. Render a
  * larger, faint copy of the same mesh for a glow rim.
  */
-export function shadedSphere(radius=1,options:{light?:Vec3;fill?:Vec3;ambient?:number;shininess?:number}={}):Geometry {
-  const base=sphere(radius);
+export function shadedSphere(radius=1,options:{light?:Vec3;fill?:Vec3;ambient?:number;shininess?:number;resolution?:[number,number]}={}):Geometry {
+  const base=options.resolution
+    ? parametricSurface((u,v)=>[radius*Math.sin(u)*Math.cos(v),radius*Math.cos(u),radius*Math.sin(u)*Math.sin(v)],[0,Math.PI],[0,2*Math.PI],options.resolution)
+    : sphere(radius);
   const light=normalize(options.light??[-.45,.72,.52]);
   const fill=normalize(options.fill??[.65,-.4,-.35]);
   const ambient=options.ambient??.32,shininess=options.shininess??30;

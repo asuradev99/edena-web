@@ -24,3 +24,5 @@ export * from './lib/schedule.js';
 
 export * from "./lib/tight-binding.js";
 export * from "./lib/tight-binding-sampling.js";
+
+export * from "./lib/gpu-crystal.js";

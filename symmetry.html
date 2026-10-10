@@ -87,7 +87,7 @@ input[type=range]{width:100%;accent-color:#70d7df;margin:2px 0}
 #status[data-state=info]{color:#a4b3c6}
 #status[data-state=error]{color:#ffaca4}
 @media(max-width:900px){body{overflow:auto}main{grid-template-columns:1fr;height:auto}.stage{height:52vh}.app-bar .hint{display:none}aside{overflow:visible}}
-</style><link rel="stylesheet" href="canvas-ui.css">
+.map-grid{max-height:260px;overflow:auto} input[type=number]{width:100%;box-sizing:border-box} </style><link rel="stylesheet" href="canvas-ui.css">
 <script src="canvas-ui.js" defer></script>
 </head>
 <body>
@@ -115,18 +115,22 @@ input[type=range]{width:100%;accent-color:#70d7df;margin:2px 0}
 
     <details class="card" open><summary>Structure</summary>
       <div id="structure-info"></div>
+      <button id="mos2-example" type="button">Load MoS₂ example</button>
+      <label for="cell-sites">Displayed sites</label><select id="cell-sites"><option value="basis">Basis (one periodic representative)</option><option value="all">All atoms in the closed cell (including faces and edges)</option></select>
       <div class="legend-head" id="legend-anchor" role="button" tabindex="0" aria-expanded="true" aria-controls="legend" aria-label="Fold the element list away"><span class="muted" style="font-size:10.5px;letter-spacing:.12em">ELEMENTS</span><span class="legend-actions"><button type="button" id="legend-all" class="ghost-button" hidden>show all</button><span class="muted" id="legend-toggle-label" style="font-size:10.5px">collapse</span></span></div>
       <div id="legend"></div>
       <div class="row">
         <div><label for="supercell">Supercell</label><select id="supercell"><option value="1" selected>1 × 1 × 1</option><option value="2">2 × 2 × 2</option><option value="3">3 × 3 × 3</option></select></div>
         <div><label for="colour">Atom colour</label><select id="colour"><option value="species" selected>by element</option><option value="site">by site index</option></select></div>
       </div>
-      <div class="toggles"><label title="Draw a bond between neighbouring sites"><input type="checkbox" id="bonds" checked> bonds</label><label title="Draw the unit-cell box and its a, b, c axes"><input type="checkbox" id="cell" checked> cell</label><label title="Trace each site's path and outline where it started"><input type="checkbox" id="trails" checked> trails</label><label title="Label every site with its element"><input type="checkbox" id="atom-labels"> symbols</label><label title="Keep the starting outlines on screen for the whole move, so before and after can be compared"><input type="checkbox" id="start-sites"> compare</label></div>
+      <div class="toggles"><label title="Draw a bond between neighbouring sites"><input type="checkbox" id="bonds" checked> bonds</label><label title="Draw the unit-cell box and its a, b, c axes"><input type="checkbox" id="cell" checked> cell</label><label title="Trace each site's path and outline where it started"><input type="checkbox" id="trails" checked> trails</label><label title="Keep the starting outlines on screen for the whole move, so before and after can be compared"><input type="checkbox" id="start-sites"> compare</label></div>
     </details>
 
     <details class="card" open><summary>Symmetry operation</summary>
+      <label for="operation-scope">Operation set</label><select id="operation-scope"><option value="space">Space group (including translations)</option><option value="point">Point operations about the origin</option></select>
       <div class="op-row"><button id="prev-op" aria-label="Previous operation">‹</button><select id="operation" aria-label="Symmetry operation"></select><button id="next-op" aria-label="Next operation">›</button></div>
       <div id="description"></div>
+      <div id="operation-placement" class="muted"></div>
       <div class="element-key"><b style="color:#f7d681">gold</b> axis · <b style="color:#58c4dd">blue</b> sweep · <b style="color:#83c167">green</b> mirror plane</div>
       <div class="transport" style="margin-top:10px">
         <button id="play" aria-label="Play">▶</button>
@@ -134,10 +138,17 @@ input[type=range]{width:100%;accent-color:#70d7df;margin:2px 0}
         <input id="progress" type="range" min="0" max="1" step="0.002" value="0" aria-label="Operation progress">
         <span class="value" id="progress-value">0%</span>
       </div>
+      <div id="animation-phase" class="muted"></div>
       <label for="speed">Speed</label>
       <select id="speed"><option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="2">2×</option></select>
     </details>
 
+    <details class="card" open><summary>Displacement arrow</summary>
+      <label for="displacement-atom">Track atom</label><select id="displacement-atom"><option value="-1">None</option></select>
+      <p class="muted">Cartesian displacement in Å. The arrow follows the atom and transforms with the operation.</p>
+      <div class="row"><div><label for="displacement-x">uₓ</label><input id="displacement-x" type="number" value="1" step="0.1"></div><div><label for="displacement-y">uᵧ</label><input id="displacement-y" type="number" value="0" step="0.1"></div><div><label for="displacement-z">u_z</label><input id="displacement-z" type="number" value="0" step="0.1"></div></div>
+      <div id="displacement-value" class="muted"></div>
+    </details>
     <details class="card" open><summary>Symmetry report</summary>
       <div id="mapping"></div>
     </details>
