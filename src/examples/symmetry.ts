@@ -85,7 +85,18 @@ type PlacedMotion = Motion & { centre: Vec3; latticeShift: Vec3 };
  * A bond half drawn by the GPU layer: from its tip atom to the midpoint with its partner. The image
  * offsets are Cartesian and let a partner that sits on a periodic copy end where its ghost does.
  */
-type GpuBond = { tip: number; partner: number; tipImage: Vec3; partnerImage: Vec3 };
+type GpuBond = {
+  /** The in-box atom this half-bond is anchored to. */
+  anchor: number;
+  /** The bonded partner, used directly when it, too, is in the box. */
+  farAtom: number;
+  /** 1 when this half is drawn outward from the anchor, 0 when back from the far end. */
+  tip: 0 | 1;
+  /** 1 when the far end is the drawn partner rather than a periodic copy. */
+  linked: 0 | 1;
+  /** The far endpoint relative to the anchor's resting position, rotated by the frame. */
+  rel: Vec3;
+};
 
 type Built = {
   big: Supercell;
@@ -103,8 +114,8 @@ type Built = {
   bondSymbols: string[];
   ghostSymbols: string[];
   ghostVisuals: Visual[];
-  /** Resting position and host atom of each periodic ghost, so it can follow the animation. */
-  ghostPlace: { rest: Vec3; atom: number }[];
+  /** Resting position and in-box anchor of each periodic ghost, so it can follow the animation. */
+  ghostPlace: { rest: Vec3; anchor: number }[];
   cellVisual?: Visual;
   /** One merged arc set per colour, so a trail matches the atoms that draw it. */
   trailVisuals: Visual[];
@@ -152,7 +163,7 @@ let neighbours: { base: CrystalStructure; n: number; showBonds: boolean; shortes
 /** Which structure the camera was framed for, so a manual zoom survives operation changes. */
 let framed: { base: CrystalStructure; n: number } | undefined;
 /** Bond and ghost geometry, rebuilt only when the crystal changes. */
-let bondScene: { base: CrystalStructure; n: number; bonds: (GpuBond & { symbol: string })[]; ghosts: { symbol: string; rest: Vec3; radius: Vec3; atom: number }[] } | undefined;
+let bondScene: { base: CrystalStructure; n: number; bonds: (GpuBond & { symbol: string; rest: Vec3 })[]; ghosts: { symbol: string; rest: Vec3; radius: Vec3; anchor: number }[] } | undefined;
 /** One shaded unit sphere for every atom of every element, built on first use. */
 let atomMesh: Geometry | undefined;
 let compactAtomMesh: Geometry | undefined;
@@ -547,7 +558,7 @@ function rebuild(): void {
 
   const ghostVisuals: Visual[] = [];
   const ghostSymbols: string[] = [];
-  const ghostPlace: { rest: Vec3; atom: number }[] = [];
+  const ghostPlace: { rest: Vec3; anchor: number }[] = [];
   const bondSpecs: GpuBond[] = [];
   const bondSymbols: string[] = [];
   if (showBonds && big.positions.length <= 1200) {
@@ -555,32 +566,37 @@ function rebuild(): void {
     // and never has to dissolve while the crystal moves. The search and the half-bond list describe
     // the crystal, so they are still built once per structure.
     if (!bondScene || bondScene.base !== base || bondScene.n !== n) {
-      const bonds: (GpuBond & { symbol: string })[] = [];
-      const ghosts: { symbol: string; rest: Vec3; radius: Vec3; atom: number }[] = [];
+      const bonds: (GpuBond & { symbol: string; rest: Vec3 })[] = [];
+      const ghosts: { symbol: string; rest: Vec3; radius: Vec3; anchor: number }[] = [];
       const seen = new Set<string>();
       for (const bond of found) {
         // The partner may sit on a periodic copy; the image is a Cartesian offset in the drawn frame.
         const image = fractionalToCartesian(bond.image, big.lattice);
         const rest: Vec3 = add(ideal[bond.j], image);
+        const rel = sub(rest, ideal[bond.i]);
         const symbolI = big.species[bond.i], symbolJ = big.species[bond.j];
-        // Half-bonds are grouped by element symbol — not by colour — so the legend can fold one
-        // element away without disturbing another that happens to share a colour.
-        bonds.push({ tip: bond.i, partner: bond.j, tipImage: [0, 0, 0], partnerImage: image, symbol: symbolI });
-        bonds.push({ tip: bond.j, partner: bond.i, tipImage: image, partnerImage: [0, 0, 0], symbol: symbolJ });
-        // A bond with a non-zero image offset ends on a periodic copy, not on a drawn atom.
-        // Show that neighbour as a faded ghost so the coordination shell reads as complete.
-        const periodicImage = bond.i !== bond.j && (bond.image[0] !== 0 || bond.image[1] !== 0 || bond.image[2] !== 0);
+        // A zero image offset means the partner is drawn in the box and can be used directly.
+        const linked: 0 | 1 = bond.image.every(value => Math.abs(value) < 1e-9) ? 1 : 0;
+        // Both halves are anchored on atom i — the end that stays in the box — so they share one
+        // midpoint however the two atoms are individually re-imaged into the cell. Half-bonds are
+        // grouped by element symbol, not by colour, so the legend can fold one element away without
+        // disturbing another that happens to share a colour.
+        bonds.push({ anchor: bond.i, farAtom: bond.j, tip: 1, linked, rel, symbol: symbolI, rest });
+        bonds.push({ anchor: bond.i, farAtom: bond.j, tip: 0, linked, rel, symbol: symbolJ, rest });
+        // Show a periodic partner as a faded ghost so the coordination shell reads as complete. The
+        // ghost rides the anchor's re-imaging, so it sits exactly at the far end of its bond.
+        const periodicImage = bond.i !== bond.j && !linked;
         const key = `${symbolJ}:${rest.map(value => value.toFixed(3)).join(',')}`;
         if (periodicImage && !seen.has(key)) {
           seen.add(key);
           // Slightly smaller than a real site, so a periodic image never reads as an atom of the cell.
-          ghosts.push({ symbol: symbolJ, rest, radius: times(atomScales[bond.j], .72), atom: bond.j });
+          ghosts.push({ symbol: symbolJ, rest, radius: times(atomScales[bond.j], .72), anchor: bond.i });
         }
       }
       bondScene = { base, n, bonds, ghosts };
     }
     for (const bond of bondScene.bonds) {
-      bondSpecs.push({ tip: bond.tip, partner: bond.partner, tipImage: bond.tipImage, partnerImage: bond.partnerImage });
+      bondSpecs.push({ anchor: bond.anchor, farAtom: bond.farAtom, tip: bond.tip, linked: bond.linked, rel: bond.rel });
       bondSymbols.push(bond.symbol);
     }
     for (const ghost of bondScene.ghosts) {
@@ -589,7 +605,7 @@ function rebuild(): void {
       visual.scale = ghost.radius;
       ghostVisuals.push(visual);
       ghostSymbols.push(ghost.symbol);
-      ghostPlace.push({ rest: ghost.rest, atom: ghost.atom });
+      ghostPlace.push({ rest: ghost.rest, anchor: ghost.anchor });
     }
   }
   gpuCrystal!.setBonds(bondSpecs.map((spec, index) => ({ ...spec, color: bondTint(bondSymbols[index]) })));
@@ -797,9 +813,10 @@ function update(): void {
   // its periodic ghosts, its atoms, its "before" markers, and its floating symbols.
   state.ghostVisuals.forEach((visual, index) => {
     visual.opacity = showBonds && !hiddenElements.has(state.ghostSymbols[index]) ? 1 : 0;
-    // A periodic ghost is an image of its host atom, so it rides the same transform and drift.
+    // The ghost is the far end of a bond, so it rides that bond's in-box anchor: applying the anchor's
+    // drift (not the ghost's own host's) keeps it exactly one bond-length from the atom it hangs off.
     const place = state.ghostPlace[index];
-    visual.position = add(add(linear(place.rest), offset), times(state.drift[place.atom], wrap));
+    visual.position = add(add(linear(place.rest), offset), times(state.drift[place.anchor], wrap));
   });
   state.trailVisuals.forEach((visual, order) => { visual.opacity = hiddenElements.has(state.trailSymbols[order]) ? 0 : trailOpacity; });
   state.elementVisuals.forEach(visual => { visual.opacity = .3 + .7 * t; });

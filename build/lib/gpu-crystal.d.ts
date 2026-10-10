@@ -31,12 +31,18 @@ export declare class GpuCrystalLayer implements GpuSceneLayer {
     constructor(device: GPUDevice, format: GPUTextureFormat, samples: number);
     setSites(positions: Vec3[], radii: number[], colors: Color[]): void;
     setColors(colors: Color[]): void;
-    /** Bond halves (tip atom → partner atom); each end is resolved through its own animated transform. */
+    /**
+     * Bond halves. Each half is anchored on the atom that stays in the box (`anchor`); its far end is
+     * either the bonded atom `farAtom` when that is also in the box (`linked`), or the anchor's rest
+     * vector to the periodic partner (`rel`) rotated by the frame. Both halves of a bond share an
+     * anchor, so they share one midpoint however the two atoms are re-imaged into the cell.
+     */
     setBonds(list: {
-        tip: number;
-        partner: number;
-        tipImage: Vec3;
-        partnerImage: Vec3;
+        anchor: number;
+        farAtom: number;
+        tip: 0 | 1;
+        linked: 0 | 1;
+        rel: Vec3;
         color: Color;
     }[]): void;
     /** Folding an element away changes only the tint, so the bond topology stays on the GPU. */

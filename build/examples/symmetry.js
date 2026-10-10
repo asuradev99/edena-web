@@ -496,25 +496,30 @@ function rebuild() {
                 // The partner may sit on a periodic copy; the image is a Cartesian offset in the drawn frame.
                 const image = fractionalToCartesian(bond.image, big.lattice);
                 const rest = add(ideal[bond.j], image);
+                const rel = sub(rest, ideal[bond.i]);
                 const symbolI = big.species[bond.i], symbolJ = big.species[bond.j];
-                // Half-bonds are grouped by element symbol — not by colour — so the legend can fold one
-                // element away without disturbing another that happens to share a colour.
-                bonds.push({ tip: bond.i, partner: bond.j, tipImage: [0, 0, 0], partnerImage: image, symbol: symbolI });
-                bonds.push({ tip: bond.j, partner: bond.i, tipImage: image, partnerImage: [0, 0, 0], symbol: symbolJ });
-                // A bond with a non-zero image offset ends on a periodic copy, not on a drawn atom.
-                // Show that neighbour as a faded ghost so the coordination shell reads as complete.
-                const periodicImage = bond.i !== bond.j && (bond.image[0] !== 0 || bond.image[1] !== 0 || bond.image[2] !== 0);
+                // A zero image offset means the partner is drawn in the box and can be used directly.
+                const linked = bond.image.every(value => Math.abs(value) < 1e-9) ? 1 : 0;
+                // Both halves are anchored on atom i — the end that stays in the box — so they share one
+                // midpoint however the two atoms are individually re-imaged into the cell. Half-bonds are
+                // grouped by element symbol, not by colour, so the legend can fold one element away without
+                // disturbing another that happens to share a colour.
+                bonds.push({ anchor: bond.i, farAtom: bond.j, tip: 1, linked, rel, symbol: symbolI, rest });
+                bonds.push({ anchor: bond.i, farAtom: bond.j, tip: 0, linked, rel, symbol: symbolJ, rest });
+                // Show a periodic partner as a faded ghost so the coordination shell reads as complete. The
+                // ghost rides the anchor's re-imaging, so it sits exactly at the far end of its bond.
+                const periodicImage = bond.i !== bond.j && !linked;
                 const key = `${symbolJ}:${rest.map(value => value.toFixed(3)).join(',')}`;
                 if (periodicImage && !seen.has(key)) {
                     seen.add(key);
                     // Slightly smaller than a real site, so a periodic image never reads as an atom of the cell.
-                    ghosts.push({ symbol: symbolJ, rest, radius: times(atomScales[bond.j], .72), atom: bond.j });
+                    ghosts.push({ symbol: symbolJ, rest, radius: times(atomScales[bond.j], .72), anchor: bond.i });
                 }
             }
             bondScene = { base, n, bonds, ghosts };
         }
         for (const bond of bondScene.bonds) {
-            bondSpecs.push({ tip: bond.tip, partner: bond.partner, tipImage: bond.tipImage, partnerImage: bond.partnerImage });
+            bondSpecs.push({ anchor: bond.anchor, farAtom: bond.farAtom, tip: bond.tip, linked: bond.linked, rel: bond.rel });
             bondSymbols.push(bond.symbol);
         }
         for (const ghost of bondScene.ghosts) {
@@ -523,7 +528,7 @@ function rebuild() {
             visual.scale = ghost.radius;
             ghostVisuals.push(visual);
             ghostSymbols.push(ghost.symbol);
-            ghostPlace.push({ rest: ghost.rest, atom: ghost.atom });
+            ghostPlace.push({ rest: ghost.rest, anchor: ghost.anchor });
         }
     }
     gpuCrystal.setBonds(bondSpecs.map((spec, index) => ({ ...spec, color: bondTint(bondSymbols[index]) })));
@@ -733,9 +738,10 @@ function update() {
     // its periodic ghosts, its atoms, its "before" markers, and its floating symbols.
     state.ghostVisuals.forEach((visual, index) => {
         visual.opacity = showBonds && !hiddenElements.has(state.ghostSymbols[index]) ? 1 : 0;
-        // A periodic ghost is an image of its host atom, so it rides the same transform and drift.
+        // The ghost is the far end of a bond, so it rides that bond's in-box anchor: applying the anchor's
+        // drift (not the ghost's own host's) keeps it exactly one bond-length from the atom it hangs off.
         const place = state.ghostPlace[index];
-        visual.position = add(add(linear(place.rest), offset), times(state.drift[place.atom], wrap));
+        visual.position = add(add(linear(place.rest), offset), times(state.drift[place.anchor], wrap));
     });
     state.trailVisuals.forEach((visual, order) => { visual.opacity = hiddenElements.has(state.trailSymbols[order]) ? 0 : trailOpacity; });
     state.elementVisuals.forEach(visual => { visual.opacity = .3 + .7 * t; });

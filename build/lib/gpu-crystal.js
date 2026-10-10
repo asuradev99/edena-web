@@ -28,7 +28,7 @@ struct Sample { transform: mat4x4f, wrap: vec4f };
 @group(0) @binding(3) var<uniform> frame: Frame;
 @group(0) @binding(4) var<uniform> camera: Camera;
 @group(0) @binding(5) var<storage, read> samples: array<Sample>;
-struct Bond { ends: vec4u, tipImage: vec4f, partnerImage: vec4f, color: vec4f };
+struct Bond { ends: vec4u, far: vec4f, color: vec4f };
 @group(0) @binding(6) var<storage, read> bonds: array<Bond>;
 struct Vertex {
   @builtin(position) clip: vec4f,
@@ -88,29 +88,31 @@ struct Fragment { @location(0) color: vec4f, @builtin(frag_depth) depth: f32 };
   if (in.color.a < .001) { discard; }
   return vec4f(in.color.rgb,in.color.a*(1-smoothstep(.5,1,abs(in.uv.y))));
 }
-// A ball's animated position, optionally offset to a periodic image (image is already Cartesian).
-fn movedWith(i: u32, image: vec3f) -> vec4f {
-  let base = rest[i].position;
-  let p = (frame.transform * vec4f(base.xyz + image, 1)).xyz + drift[i].xyz * frame.timing.x;
-  return vec4f(p, base.w * (1 + frame.timing.y * drift[i].w));
+// A ball's animated position (the position part of the compute pass).
+fn movedPos(i: u32) -> vec3f {
+  return (frame.transform * vec4f(rest[i].position.xyz, 1)).xyz + drift[i].xyz * frame.timing.x;
 }
-// A bond half: from its tip atom to the midpoint of the tip and the partner. Evaluating both ends
-// through the same per-atom transform keeps a bond attached while the crystal rotates, and lets a
-// periodic partner end at its image. Drawn as a screen-space stroke, like the trails.
+// A bond half, drawn as a screen-space stroke like the trails. Each half is anchored on the atom that
+// stays in the box (ends.x) and reaches either a bonded atom that is also in the box, or a periodic
+// partner. The image end is the *same rigid offset from the anchor* the pair had at rest, rotated by
+// the frame — so both halves share one midpoint and the bond keeps its length no matter how the two
+// atoms are individually re-imaged into the cell.
 @vertex fn bond(@builtin(vertex_index) v: u32, @builtin(instance_index) i: u32) -> Vertex {
   let c = corner(v % 6u);
   let entry = bonds[i];
-  let head = movedWith(entry.ends.x, entry.tipImage.xyz);
-  let tail = movedWith(entry.ends.y, entry.partnerImage.xyz);
-  let mid = (head + tail) * .5;
-  let a = camera.matrix * vec4f(head.xyz, 1);
-  let b = camera.matrix * vec4f(mid.xyz, 1);
+  let anchor = movedPos(entry.ends.x);
+  var far = anchor + (frame.transform * vec4f(entry.far.xyz, 0)).xyz;
+  if (entry.ends.w == 1u) { far = movedPos(entry.ends.y); }
+  let mid = (anchor + far) * .5;
+  let head = select(far, anchor, entry.ends.z == 1u);
+  let a = camera.matrix * vec4f(head, 1);
+  let b = camera.matrix * vec4f(mid, 1);
   let delta = (b.xy / b.w - a.xy / a.w) * camera.viewport.xy;
   let normal = vec2f(-delta.y, delta.x) / max(length(delta), .0001);
   var p = mix(a, b, (c.x + 1) * .5);
   p = vec4f(p.xy + normal * c.y * 1.8 * camera.viewport.z / camera.viewport.xy * p.w, p.zw);
   var out: Vertex;
-  out.clip = p; out.uv = c; out.centre = head; out.color = entry.color;
+  out.clip = p; out.uv = c; out.centre = vec4f(anchor, 1); out.color = entry.color;
   out.color.a *= frame.visibility.z;
   return out;
 }
@@ -191,22 +193,29 @@ export class GpuCrystalLayer {
         this.device.queue.writeBuffer(this.rest, 0, this.source);
         this.revision++;
     }
-    /** Bond halves (tip atom → partner atom); each end is resolved through its own animated transform. */
+    /**
+     * Bond halves. Each half is anchored on the atom that stays in the box (`anchor`); its far end is
+     * either the bonded atom `farAtom` when that is also in the box (`linked`), or the anchor's rest
+     * vector to the periodic partner (`rel`) rotated by the frame. Both halves of a bond share an
+     * anchor, so they share one midpoint however the two atoms are re-imaged into the cell.
+     */
     setBonds(list) {
         this.bondCount = list.length;
-        this.bondData = new Float32Array(Math.max(16, list.length * 16));
+        this.bondData = new Float32Array(Math.max(12, list.length * 12));
         const words = new Uint32Array(this.bondData.buffer);
         list.forEach((bond, i) => {
-            words[i * 16] = bond.tip;
-            words[i * 16 + 1] = bond.partner;
-            this.bondData.set(bond.tipImage, i * 16 + 4);
-            this.bondData.set(bond.partnerImage, i * 16 + 8);
-            this.bondData.set(bond.color, i * 16 + 12);
+            words[i * 12] = bond.anchor;
+            words[i * 12 + 1] = bond.farAtom;
+            words[i * 12 + 2] = bond.tip;
+            words[i * 12 + 3] = bond.linked;
+            this.bondData.set(bond.rel, i * 12 + 4);
+            this.bondData.set(bond.color, i * 12 + 8);
         });
         if (list.length !== this.bondCapacity) {
             this.bonds?.destroy();
             this.bondCapacity = list.length;
-            this.bonds = this.device.createBuffer({ size: Math.max(64, list.length * 64), usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST });
+            const size = Math.max(48, list.length * 48);
+            this.bonds = this.device.createBuffer({ size, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST });
             // Bonds can arrive before the first setSites(); setSites builds the bind group in that case.
             this.buildRenderBind();
         }
@@ -217,7 +226,7 @@ export class GpuCrystalLayer {
     setBondColors(colors) {
         const count = Math.min(colors.length, this.bondCount);
         for (let i = 0; i < count; i++)
-            this.bondData.set(colors[i], i * 16 + 12);
+            this.bondData.set(colors[i], i * 12 + 8);
         if (count)
             this.device.queue.writeBuffer(this.bonds, 0, this.bondData);
         this.revision++;
