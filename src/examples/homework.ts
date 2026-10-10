@@ -9,13 +9,20 @@ const C={teal:'#68d5cd',gold:'#f4cc79',rose:'#f19cae',blue:'#91b9ff',muted:'#637
 const bandColors=[C.teal,C.rose,C.blue,C.gold];
 // Resolve narrow avoided crossings without interpolating a coarse mesh across them.
 const BAND_RESOLUTION=96;
+// While a slider moves the band grids are solved at a coarser sampling, and the full-resolution
+// picture is rebuilt once the input settles. The drag stays at frame rate; the resting image is
+// still full quality. The same trick coarsens the DOS integral for the eta slider.
+const INTERACTIVE_BAND_RESOLUTION=48,INTERACTIVE_ZOOM_RESOLUTION=32,INTERACTIVE_DOS_SAMPLES=64,DOS_SAMPLES=120;
+let bandResolution=BAND_RESOLUTION,dosSamples=DOS_SAMPLES;
+const settleTimers=new Map<string,number>();
+/** Keyed so dragging one slider cannot cancel another slider's deferred full-quality rebuild. */
+function settle(key:string,fn:()=>void,delay=180){const timer=settleTimers.get(key);if(timer)clearTimeout(timer);settleTimers.set(key,window.setTimeout(fn,delay));}
 const state={v1:.06,v3:.025,mu:.22,band:0,delta:-.25,upper:false,both:false,showBands:false,showFree:false,kind:'saddle' as CriticalKind,a:1,b:1,eta:.024,dosEnergy:.08};
 const views:WebGPUView[]=[],layers:LabelLayer[]=[];
 const visible=new Set<HTMLCanvasElement>();
 let spectra:Grid[]=[],disposed=false,frame=0,muPlay=false,transitionPlay=false,last=0,phase=0;
-let schedule=0,dosSchedule=0;
 let zoomX=false;
-let freeSpectra=bandGrids(0,0);
+let freeSpectra=bandGrids(0,0),freeCache=new Map<string,Grid[]>();
 let globalSpectra:Grid[]=[];
 let bandDOSBase='';let bandDOSChart:ReturnType<typeof chart>;
 let bandCuts:Visual[]=[];let bandPlane:Visual;
@@ -53,12 +60,17 @@ function segmentPath(segments:Segment[],x:(v:number)=>number,y:(v:number)=>numbe
   return `<path d="${segments.map(([a,b])=>`M${x(a[0]).toFixed(2)},${y(a[1]).toFixed(2)}L${x(b[0]).toFixed(2)},${y(b[1]).toFixed(2)}`).join('')}" fill="none" stroke="${color}" stroke-width="${width}" stroke-linecap="round"/>`;
 }
 function mesh(g:Grid,map:(x:number,y:number,e:number)=>Vec3,range:[number,number],palette=viridis):Geometry{
-  const {n,min,max,values}=g;
+  const {n,min,max,values}=g,count=(n+1)*(n+1);
   const positions=new Float32Array(n*n*18),colors=new Float32Array(positions.length);
-  const samples=Array.from(values,(e,index)=>map(min+(max-min)*(index%(n+1))/n,min+(max-min)*Math.floor(index/(n+1))/n,e));
-  const shades=Array.from(values,e=>palette((e-range[0])/(range[1]-range[0]||1)));
+  const points=new Float32Array(count*3),shades=new Float32Array(count*3),span=range[1]-range[0]||1;
+  for(let index=0;index<values.length;index++){
+    const i=index%(n+1),j=(index/(n+1))|0,e=values[index];
+    const p=map(min+(max-min)*i/n,min+(max-min)*j/n,e),c=palette((e-range[0])/span);
+    points[index*3]=p[0];points[index*3+1]=p[1];points[index*3+2]=p[2];
+    shades[index*3]=c[0];shades[index*3+1]=c[1];shades[index*3+2]=c[2];
+  }
   let offset=0;
-  const vertex=(i:number,j:number)=>{const index=j*(n+1)+i;const p=samples[index],c=shades[index];for(let axis=0;axis<3;axis++){positions[offset]=p[axis];colors[offset++]=c[axis];}};
+  const vertex=(i:number,j:number)=>{const index=(j*(n+1)+i)*3;for(let axis=0;axis<3;axis++){positions[offset]=points[index+axis];colors[offset++]=shades[index+axis];}};
   for(let j=0;j<n;j++)for(let i=0;i<n;i++){vertex(i,j);vertex(i+1,j+1);vertex(i+1,j);vertex(i,j);vertex(i,j+1);vertex(i+1,j+1);}
   return new Geometry(positions,colors);
 }
@@ -157,10 +169,19 @@ function drawBandScene(){
 function drawFermi(){
   const extent=bandExtent(),p=chart(-extent,extent,-extent,extent,zoomX?'qₓ / G':'kₓ / G',zoomX?'qᵧ / G':'kᵧ / G',500,400);let out=p.base;
   const selected=spectra[state.band],{n,values}=selected,h=2*extent/n;
+  const cellW=(p.right-p.left)/n,cellH=(p.bottom-p.top)/n;
   let occupied='';
-  for(let j=0;j<n;j++)for(let i=0;i<n;i++){
-    const mean=(values[j*(n+1)+i]+values[j*(n+1)+i+1]+values[(j+1)*(n+1)+i]+values[(j+1)*(n+1)+i+1])/4;
-    if(mean<state.mu)occupied+=`M${p.x(-extent+i*h)},${p.y(-extent+(j+1)*h)}h${(p.right-p.left)/n+.1}v${(p.bottom-p.top)/n+.1}h-${(p.right-p.left)/n+.1}Z`;
+  // One rectangle per horizontal run of occupied cells, not per cell: the SVG stays small and the
+  // string building stops dominating the frame.
+  for(let j=0;j<n;j++){
+    let i=0;
+    const mean=(at:number)=>(values[j*(n+1)+at]+values[j*(n+1)+at+1]+values[(j+1)*(n+1)+at]+values[(j+1)*(n+1)+at+1])/4;
+    while(i<n){
+      if(mean(i)<state.mu){
+        const start=i;while(i<n&&mean(i)<state.mu)i++;
+        occupied+=`M${p.x(-extent+start*h)},${p.y(-extent+(j+1)*h)}h${cellW*(i-start)+.1}v${cellH+.1}h-${cellW*(i-start)+.1}Z`;
+      }else i++;
+    }
   }
   out+=`<path d="${occupied}" fill="${bandColors[state.band]}" opacity=".13"/>`;
   spectra.forEach((g,b)=>{
@@ -190,8 +211,11 @@ function drawBandDOS(){
   bandDOSBase=p.base+line(points.map(([e,d])=>[p.x(e),p.y(d)]),C.teal,2);
 }
 function sampleBandRegion(){
-  spectra=zoomX?bandGrids(state.v1,state.v3,BAND_RESOLUTION,-.12,.12,.5):globalSpectra;
-  freeSpectra=zoomX?bandGrids(0,0,BAND_RESOLUTION,-.12,.12,.5):bandGrids(0,0,BAND_RESOLUTION);
+  spectra=zoomX?bandGrids(state.v1,state.v3,bandResolution,-.12,.12,.5):globalSpectra;
+  // The free dispersion does not depend on V1 or V3, so compute each variant once per resolution.
+  const key=`${bandResolution}/${zoomX}`;
+  freeSpectra=freeCache.get(key)??bandGrids(0,0,bandResolution,zoomX?-.12:-.5,zoomX?.12:.5,zoomX?.5:0);
+  freeCache.set(key,freeSpectra);
 }
 function drawX(){
   const c=xCoefficients(state.v1);
@@ -264,8 +288,8 @@ function drawDOS(){
   $('critical-note').textContent=`ε/E_G = ${kind==='maximum'?'−':''}${a.toFixed(2)}(qₓ/G)² ${kind==='minimum'?'+':'−'} ${b.toFixed(2)}(qᵧ/G)². Height rescaled for framing. Effective mass magnitudes: |mₓ|/m = ${(1/a).toFixed(2)}, |mᵧ|/m = ${(1/b).toFixed(2)}.`;
   const energies=Array.from({length:181},(_,i)=>-.55+1.1*i/180);
   // In scaled coordinates curvature changes only the Jacobian, not the sampled integral.
-  const integralKey=`${kind}/${eta}`;
-  if(integralKey!==dosIntegralKey){dosIntegral=numericalDOS(energies,1,1,kind,eta,120);dosIntegralKey=integralKey;}
+  const integralKey=`${kind}/${eta}/${dosSamples}`;
+  if(integralKey!==dosIntegralKey){dosIntegral=numericalDOS(energies,1,1,kind,eta,dosSamples);dosIntegralKey=integralKey;}
   const numeric=dosIntegral.map(value=>value/Math.sqrt(a*b));
   dosValues=numeric;
   const ymax=Math.max(...numeric)*1.35,p=chart(-.55,.55,0,ymax,'(E − E_c) / E_G','ν · E_G / G²');dosChart=p;let out=p.base;
@@ -295,11 +319,19 @@ function drawDosProbe(){
   svg('dos-probe').innerHTML=line([[p.x(e),p.bottom],[p.x(e),p.top]],C.rose,1,'stroke-dasharray="3 4"')+`<circle cx="${p.x(e)}" cy="${p.y(density)}" r="4" fill="${C.rose}"/>`;
   $('dos-energy-out').textContent=`${e.toFixed(3)} · ν̃ ≈ ${density.toFixed(3)}`;
 }
+let waveEigenKey='';
+let waveEigen:ReturnType<typeof eigenstates>=[];
+/** The X-point eigenvectors depend on V1 and V3, not on the animation phase. */
+function waveEigenstates(){
+  const key=`${state.v1}/${state.v3}`;
+  if(key!==waveEigenKey){waveEigenKey=key;waveEigen=eigenstates(planeWaveMatrix(.5,0,state.v1,state.v3));}
+  return waveEigen;
+}
 function drawWavefunction(){
-  const states=eigenstates(planeWaveMatrix(.5,0,state.v1,state.v3)),selected=states[state.band];
+  const states=waveEigenstates(),selected=states[state.band];
   const phase=value('wave-phase'),mode=$<HTMLSelectElement>('wave-mode').value as 'real'|'imag'|'density';
   const sample=(x:number,y:number)=>xWavefunction(selected.coefficients,x,y,phase);
-  const g=grid((x,y)=>sample(x,y)[mode],96,-1,1);
+  const g=grid((x,y)=>sample(x,y)[mode],bandResolution,-1,1);
   const amplitude=Math.max(Math.abs(Math.min(...g.values)),Math.abs(Math.max(...g.values)),.001);
   const palette=(t:number):[number,number,number]=>{
     const rgb=rgba(t<.5?C.rose:C.teal),strength=.25+.75*Math.abs(2*t-1);
@@ -320,7 +352,7 @@ function drawWavefunction(){
 }
 function rebuild(){
   state.v1=value('v1');state.v3=value('v3');$('v1-out').textContent=state.v1.toFixed(3);$('v3-out').textContent=state.v3.toFixed(3);
-  globalSpectra=bandGrids(state.v1,state.v3,BAND_RESOLUTION);sampleBandRegion();drawBandDOS();drawPotential();drawBandScene();drawFermi();drawX();drawWavefunction();
+  globalSpectra=bandGrids(state.v1,state.v3,bandResolution);sampleBandRegion();drawBandDOS();drawPotential();drawBandScene();drawFermi();drawX();drawWavefunction();
 }
 function wire(){
   $('wave-mode').addEventListener('change',drawWavefunction);
@@ -330,15 +362,16 @@ function wire(){
   $('dos-energy').addEventListener('input',coalesce(()=>{state.dosEnergy=value('dos-energy');drawDosProbe();}));
   for(const [id,key] of [['show-bands','showBands'],['show-free','showFree']] as const)$(id).addEventListener('change',()=>{state[key]=$<HTMLInputElement>(id).checked;drawBandScene();drawFermi();});
   for(const [id,delta] of [['slice-below',-.3],['slice-at',0],['slice-above',.3]] as const)$(id).addEventListener('click',()=>{state.delta=delta;$<HTMLInputElement>('delta').value=String(delta);drawTransition();});
-  for(const id of ['v1','v3'])$(id).addEventListener('input',()=>{clearTimeout(schedule);schedule=window.setTimeout(rebuild,70);});
-  $('empty-preset').addEventListener('click',()=>{$<HTMLInputElement>('v1').value='0';$<HTMLInputElement>('v3').value='0';clearTimeout(schedule);rebuild();});
-  $('weak-preset').addEventListener('click',()=>{$<HTMLInputElement>('v1').value='.06';$<HTMLInputElement>('v3').value='.025';clearTimeout(schedule);rebuild();});
+  for(const id of ['v1','v3'])$(id).addEventListener('input',coalesce(()=>{bandResolution=zoomX?INTERACTIVE_ZOOM_RESOLUTION:INTERACTIVE_BAND_RESOLUTION;rebuild();settle('band',()=>{bandResolution=BAND_RESOLUTION;rebuild();});}));
+  $('empty-preset').addEventListener('click',()=>{$<HTMLInputElement>('v1').value='0';$<HTMLInputElement>('v3').value='0';rebuild();});
+  $('weak-preset').addEventListener('click',()=>{$<HTMLInputElement>('v1').value='.06';$<HTMLInputElement>('v3').value='.025';rebuild();});
   $('mu').addEventListener('input',coalesce(()=>{state.mu=value('mu');drawFermi();}));
   $('mu-saddle').addEventListener('click',()=>{state.mu=bands(.5,0,state.v1,state.v3)[0];$<HTMLInputElement>('mu').value=String(state.mu);drawFermi();});
   $('band').addEventListener('change',()=>{state.band=value('band');$<HTMLSelectElement>('wave-band').value=String(state.band);drawBandScene();drawFermi();drawWavefunction();});
   $('x-branch').addEventListener('change',()=>{state.upper=value('x-branch')===1;state.both=value('x-branch')===2;drawX();});
   $('delta').addEventListener('input',coalesce(()=>{state.delta=value('delta');drawTransition();}));
-  for(const [id,key] of [['curvature-a','a'],['curvature-b','b'],['eta','eta']] as const)$(id).addEventListener('input',()=>{state[key]=value(id);clearTimeout(dosSchedule);dosSchedule=window.setTimeout(drawDOS,60);});
+  for(const [id,key] of [['curvature-a','a'],['curvature-b','b']] as const)$(id).addEventListener('input',coalesce(()=>{state[key]=value(id);drawDOS();}));
+  $('eta').addEventListener('input',coalesce(()=>{state.eta=value('eta');dosSamples=INTERACTIVE_DOS_SAMPLES;drawDOS();settle('dos',()=>{dosSamples=DOS_SAMPLES;drawDOS();});}));
   $('critical-kind').addEventListener('change',()=>{state.kind=$<HTMLSelectElement>('critical-kind').value as CriticalKind;drawDOS();});
   $('mu-play').addEventListener('click',()=>{muPlay=!muPlay;$('mu-play').textContent=muPlay?'Pause sweep':'Sweep energy';$('mu-play').setAttribute('aria-pressed',String(muPlay));});
   $('transition-play').addEventListener('click',()=>{transitionPlay=!transitionPlay;$('transition-play').textContent=transitionPlay?'Pause reconnection':'Animate reconnection';$('transition-play').setAttribute('aria-pressed',String(transitionPlay));});
@@ -355,7 +388,7 @@ function animate(now:number){
   for(let i=0;i<views.length;i++)if(visible.has(views[i].canvas)){layers[i].update();views[i].render();}
   frame=requestAnimationFrame(animate);
 }
-function dispose(){disposed=true;cancelAnimationFrame(frame);clearTimeout(schedule);clearTimeout(dosSchedule);observer.disconnect();for(const layer of layers)layer.dispose();for(const view of [...views].reverse())view.dispose();}
+function dispose(){disposed=true;cancelAnimationFrame(frame);for(const timer of settleTimers.values())clearTimeout(timer);observer.disconnect();for(const layer of layers)layer.dispose();for(const view of [...views].reverse())view.dispose();}
 window.addEventListener('pagehide',dispose,{once:true});document.addEventListener('visibilitychange',()=>{last=0;});
 async function boot(){
   formulas();
