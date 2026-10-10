@@ -1,4 +1,4 @@
-import { WebGPUView, LabelLayer, Group, Visual, isosurface, axes3d, boundsBox, rgba, mathml, mi, type Vec3 } from '../index.js';
+import { WebGPUView, LabelLayer, Group, Visual, isosurface, axes3d, boundsBox, rgba, mathml, mi, coalesce, type Vec3 } from '../index.js';
 
 const get = <T extends HTMLElement>(id: string) => { const node = document.getElementById(id); if (!node) throw new Error(`Missing ${id}`); return node as T; };
 const canvas = get<HTMLCanvasElement>('scene'), host = get<HTMLElement>('labels'), status = get<HTMLElement>('status'), hint = get<HTMLElement>('hint'), stats = get<HTMLElement>('stats');
@@ -62,7 +62,7 @@ async function initialize() {
   applyShape();
 
   shapeSelect.addEventListener('change', () => { shapeName = shapeSelect.value as ShapeName; applyShape(); });
-  isoInput.addEventListener('input', () => { melting = false; meltToggle.checked = false; iso = Number(isoInput.value); isoValue.textContent = iso.toFixed(3); build(); });
+  isoInput.addEventListener('input', coalesce(() => { melting = false; meltToggle.checked = false; iso = Number(isoInput.value); isoValue.textContent = iso.toFixed(3); build(); }));
   resolutionSelect.addEventListener('change', () => { resolution = Number(resolutionSelect.value); build(); });
   spinToggle.addEventListener('change', () => { spinning = spinToggle.checked; });
   meltToggle.addEventListener('change', () => { melting = meltToggle.checked; meltTimer = 0; });

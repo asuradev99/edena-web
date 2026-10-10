@@ -1,7 +1,7 @@
 import {
   WebGPUView, LabelLayer, Group, Visual, Geometry, merge, polyline, sphere, circle, axes3d,
   colorMappedSurface, functionSurface, plasma, viridis, ramp, rgba, smooth,
-  createParticleState, ParticleSimulation, GpuParticleSimulation, OrbitCamera, Timeline, tween,
+  createParticleState, ParticleSimulation, GpuParticleSimulation, OrbitCamera, Timeline, tween, coalesce,
   type Vec3, type Rgb,
 } from '../index.js';
 
@@ -284,11 +284,11 @@ async function initialize() {
   pendulumLabels.add('histories split', () => [-2.1, -1.9, 0], '#21918c');
   labels.push(pendulumLabels);
   buildPendulum();
-  pendulumAngle.addEventListener('input', () => {
+  pendulumAngle.addEventListener('input', coalesce(() => {
     get('pendulum-angle-value').textContent = `${pendulumAngle.value}°`;
     buildPendulum();
     elapsedSeconds=0;
-  });
+  }));
 
   /* ── 04 · The Lorenz attractor ────────────────────────────────────────────────────────── */
   const lorenzView = await addView('lorenz');
@@ -322,11 +322,11 @@ async function initialize() {
   lorenzTimeline.add({ start: 0, duration: 3, update: p => { if (lorenzCurve) lorenzCurve.reveal = p; } });
   timelines.push(lorenzTimeline);
   buildLorenz(Number(rhoInput.value));
-  rhoInput.addEventListener('input', () => {
+  rhoInput.addEventListener('input', coalesce(() => {
     get('rho-value').textContent = rhoInput.valueAsNumber.toFixed(1);
     buildLorenz(rhoInput.valueAsNumber);
     elapsedSeconds=0;
-  });
+  }));
 
   /* ── 05 · Two-source interference as a height field ──────────────────────────────────── */
   const waveView = await addView('wave');
@@ -349,14 +349,14 @@ async function initialize() {
   const waveLabels = new LabelLayer(get('wave-labels'), waveView.camera, { faceCamera: true });
   waveLabels.add('nodes', () => [0, .34, 0], '#8f8f99');
   labels.push(waveLabels);
-  waveInput.addEventListener('input', () => {
+  waveInput.addEventListener('input', coalesce(() => {
     get('wave-k-value').textContent = waveInput.valueAsNumber.toFixed(1);
     buildWave(waveInput.valueAsNumber, waveGap.valueAsNumber);
-  });
-  waveGap.addEventListener('input', () => {
+  }));
+  waveGap.addEventListener('input', coalesce(() => {
     get('wave-gap-value').textContent = waveGap.valueAsNumber.toFixed(2);
     buildWave(waveInput.valueAsNumber, waveGap.valueAsNumber);
-  });
+  }));
 
   /* ── 06 · Drumhead modes: functionSurface, nodal lines, group visibility ─────────────── */
   const drumView = await addView('drum');

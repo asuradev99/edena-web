@@ -27,7 +27,12 @@ struct Vertex { @builtin(position) position: vec4<f32>, @location(0) uv: vec2<f3
 @fragment fn fragment(input: Vertex) -> @location(0) vec4<f32> {
   let color = textureSample(glyphs, filtering, input.uv);
   if (color.a * label.point.w < .01) { discard; }
-  return vec4(color.rgb * label.tint.rgb, color.a) * label.point.w;
+  // Glyph alpha is coverage, not colour. Lifting it with a gamma makes the thin, small strokes that
+  // antialias to a pale grey read brighter and less washed out, while fully transparent and fully
+  // inked pixels are unchanged. The colour is premultiplied, so scale rgb by the same ratio.
+  let alpha = pow(color.a, .8);
+  let weight = select(0., alpha / max(color.a, 1e-5), color.a > 0.);
+  return vec4(color.rgb * label.tint.rgb * weight, alpha) * label.point.w;
 }`;
 
 type TextResources = { pipeline: GPURenderPipeline; sampler: GPUSampler };

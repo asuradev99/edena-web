@@ -13,7 +13,7 @@ import {
   type M, type DerivationStep, type DerivationPosition,
   mathml, mi, mn, mo, mtext, msub, msup, row, matrix, vec, space, number, paren, brackets, prime, tickValues, niceStep, formatTick, plotFrame,
   areaUnder, lineThrough, attachHandles, Derivation, frac, limit, viridis, plasma,
-  Geometry, type Vec3, type Rgb,
+  Geometry, coalesce, type Vec3, type Rgb,
 } from '../index.js';
 
 const $ = <T extends HTMLElement>(id: string): T => {
@@ -151,11 +151,11 @@ function coordinateDemo(view: WebGPUView): Demo {
     view.camera.distance = 5.9;
   });
   $<HTMLInputElement>('coordinates-grid').addEventListener('change', event => { grid.visible = (event.target as HTMLInputElement).checked; });
-  $<HTMLInputElement>('coordinates-height').addEventListener('input', event => {
+  $<HTMLInputElement>('coordinates-height').addEventListener('input', coalesce((event: Event) => {
     height = Number((event.target as HTMLInputElement).value);
     $('coordinates-height-value').textContent = `y = ${height.toFixed(2)}`;
     place();
-  });
+  }));
 
   // Dragging moves the marker in the floor plane, at whatever height the slider has put it in: the
   // point is the thing the picture is about, so it should be the thing the cursor can hold. The
@@ -279,7 +279,7 @@ function transparencyDemo(view: WebGPUView): Demo {
     spinButton.textContent = spinning ? 'Spinning' : 'Still';
     spinButton.setAttribute('aria-pressed', String(spinning));
   };
-  opacityInput.addEventListener('input', sync);
+  opacityInput.addEventListener('input', coalesce(sync));
   spinButton.addEventListener('click', () => { spinning = !spinning; button(); });
   sync();
   button();
@@ -366,8 +366,8 @@ function shapesDemo(view: WebGPUView): Demo {
     shelf.rotation = degrees * Math.PI / 180;
     shelf.orientation = [tilt, 0, 0];
   };
-  spinInput.addEventListener('input', applySpin);
-  tiltInput.addEventListener('input', applySpin);
+  spinInput.addEventListener('input', coalesce(applySpin));
+  tiltInput.addEventListener('input', coalesce(applySpin));
   applySpin();
 
   $<HTMLSelectElement>('shapes-kind').addEventListener('change', event => {
@@ -425,13 +425,13 @@ function groupsDemo(view: WebGPUView): Demo {
 
   const scaleInput = $<HTMLInputElement>('groups-scale');
   const opacityInput = $<HTMLInputElement>('groups-opacity');
-  scaleInput.addEventListener('input', () => {
+  scaleInput.addEventListener('input', coalesce(() => {
     const value = Number(scaleInput.value);
     $('groups-scale-value').textContent = value.toFixed(2);
     system.scale = [value, value, value];
-  });
+  }));
   // Group opacity multiplies down the tree: the beams and balls share the arms' fading.
-  opacityInput.addEventListener('input', () => { for (const arm of arms) arm.group.opacity = Number(opacityInput.value); });
+  opacityInput.addEventListener('input', coalesce(() => { for (const arm of arms) arm.group.opacity = Number(opacityInput.value); }));
 
   return {
     labels,
@@ -477,11 +477,11 @@ function labelDemo(view: WebGPUView): Demo {
   view.world.add(live);
 
   const turnsInput = $<HTMLInputElement>('labels-turns');
-  turnsInput.addEventListener('input', () => {
+  turnsInput.addEventListener('input', coalesce(() => {
     turns = Number(turnsInput.value);
     $('labels-turns-value').textContent = String(turns);
     helix.geometry = helixGeometry(turns);
-  });
+  }));
 
   const playButton = $<HTMLButtonElement>('labels-play');
   let playing = !reducedMotion, phase = 0, shown = -1;
@@ -577,7 +577,7 @@ function colourDemo(view: WebGPUView): Demo {
     bottom.innerHTML = mathml(mn(`−${amplitude.toFixed(2)}`));
   };
   paletteSelect.addEventListener('change', sync);
-  amplitudeInput.addEventListener('input', sync);
+  amplitudeInput.addEventListener('input', coalesce(sync));
   sync();
 
   return { labels, update: () => {} };
@@ -643,11 +643,11 @@ function contrastDemo(view: WebGPUView): Demo {
   };
   fieldSelect.addEventListener('change', () => { kind = fieldSelect.value; build(); });
   paletteSelect.addEventListener('change', () => { palette = paletteSelect.value; build(); });
-  rangeInput.addEventListener('input', () => {
+  rangeInput.addEventListener('input', coalesce(() => {
     contrast = Number(rangeInput.value);
     $('contrast-range-value').textContent = `${contrast}%`;
     build();
-  });
+  }));
   spinButton.addEventListener('click', () => { spinning = !spinning; button(); });
   build();
   button();
@@ -992,13 +992,13 @@ function barDemo(view: WebGPUView): Demo {
     spinButton.setAttribute('aria-pressed', String(spinning));
   };
   seriesSelect.addEventListener('change', () => { kind = seriesSelect.value; build(); });
-  sortInput.addEventListener('input', () => {
+  sortInput.addEventListener('input', coalesce(() => {
     rank = Number(sortInput.value);
     $('bars-sort-value').textContent = rank < .5 ? 'by index' : 'by size';
     targets = rank < .5 ? [...series[kind].values] : [...series[kind].values].sort((a, b) => b - a);
     playing = true;
     button();
-  });
+  }));
   spinButton.addEventListener('click', () => { spinning = !spinning; button(); });
   playButton.addEventListener('click', () => { playing = !playing; button(); });
   build();
@@ -1144,11 +1144,11 @@ function normalDemo(view: WebGPUView): Demo {
     spinButton.setAttribute('aria-pressed', String(spinning));
   };
   kindSelect.addEventListener('change', () => { kind = kindSelect.value; build(); });
-  lengthInput.addEventListener('input', () => {
+  lengthInput.addEventListener('input', coalesce(() => {
     arrowLength = Number(lengthInput.value);
     $('normals-length-value').textContent = arrowLength.toFixed(2);
     build();
-  });
+  }));
   spinButton.addEventListener('click', () => { spinning = !spinning; button(); });
   build();
   button();
@@ -1321,16 +1321,16 @@ function vectorDemo(view: WebGPUView): Demo {
     spinButton.textContent = spinning ? 'Turning' : 'Still';
     spinButton.setAttribute('aria-pressed', String(spinning));
   };
-  spreadInput.addEventListener('input', () => {
+  spreadInput.addEventListener('input', coalesce(() => {
     spread = Number(spreadInput.value);
     $('vectors-spread-value').textContent = `${spread}°`;
     build();
-  });
-  lengthInput.addEventListener('input', () => {
+  }));
+  lengthInput.addEventListener('input', coalesce(() => {
     length = Number(lengthInput.value);
     $('vectors-length-value').textContent = length.toFixed(2);
     build();
-  });
+  }));
   spinButton.addEventListener('click', () => { spinning = !spinning; button(); });
   build();
   button();
@@ -1491,17 +1491,17 @@ function streamlineDemo(view: WebGPUView): Demo {
     spinButton.setAttribute('aria-pressed', String(spinning));
   };
   kindSelect.addEventListener('change', () => { kind = kindSelect.value; build(); });
-  countInput.addEventListener('input', () => {
+  countInput.addEventListener('input', coalesce(() => {
     seeds = Number(countInput.value);
     $('streamlines-count-value').textContent = String(seeds);
     build();
-  });
-  speedInput.addEventListener('input', () => {
+  }));
+  speedInput.addEventListener('input', coalesce(() => {
     speed = Number(speedInput.value);
     $('streamlines-speed-value').textContent = speed.toFixed(2);
     // The readout names the rate, so a check can see the control without waiting for motion.
     summary.innerHTML = mathml(mtext(`${kind} · ${traced.filter(line => line.length > 6).length} streamlines · ${markers.length} markers · flow ${speed.toFixed(2)}`));
-  });
+  }));
   spinButton.addEventListener('click', () => { spinning = !spinning; button(); });
   build();
   button();
@@ -1569,11 +1569,11 @@ function fieldDemo(view: WebGPUView): Demo {
     levelOutput.textContent = level.toFixed(2);
     build();
   });
-  levelInput.addEventListener('input', () => {
+  levelInput.addEventListener('input', coalesce(() => {
     level = Number(levelInput.value);
     levelOutput.textContent = level.toFixed(2);
     build();
-  });
+  }));
   resolutionSelect.addEventListener('change', () => { resolution = Number(resolutionSelect.value); build(); });
   const button = (): void => {
     spinButton.textContent = spinning ? 'Turning' : 'Still';
@@ -1809,11 +1809,11 @@ function instancesDemo(view: WebGPUView): Demo {
     spinButton.textContent = spinning ? 'Animating' : 'Still';
     spinButton.setAttribute('aria-pressed', String(spinning));
   };
-  countInput.addEventListener('input', () => {
+  countInput.addEventListener('input', coalesce(() => {
     count = Number(countInput.value);
     $('instances-count-value').textContent = `${count}³ = ${count ** 3} cubes`;
     build();
-  });
+  }));
   waveInput.addEventListener('input', () => {
     wave = Number(waveInput.value);
     $('instances-wave-value').textContent = wave.toFixed(2);
@@ -1882,8 +1882,8 @@ function depthDemo(view: WebGPUView): Demo {
     spinButton.textContent = spinning ? 'Turning' : 'Still';
     spinButton.setAttribute('aria-pressed', String(spinning));
   };
-  crossInput.addEventListener('input', place);
-  tiltInput.addEventListener('input', place);
+  crossInput.addEventListener('input', coalesce(place));
+  tiltInput.addEventListener('input', coalesce(place));
   spinButton.addEventListener('click', () => { spinning = !spinning; button(); });
   place();
   button();
@@ -1989,10 +1989,10 @@ function plotDemo(view: WebGPUView): Demo {
     equation.innerHTML = mathml(formulas[kind]);
     place();
   });
-  $<HTMLInputElement>('plot-probe').addEventListener('input', event => {
+  $<HTMLInputElement>('plot-probe').addEventListener('input', coalesce((event: Event) => {
     probe = Number((event.target as HTMLInputElement).value);
     place();
-  });
+  }));
   $<HTMLInputElement>('plot-area').addEventListener('change', event => {
     shaded = (event.target as HTMLInputElement).checked;
     area.reveal = shaded ? 1 : 0;

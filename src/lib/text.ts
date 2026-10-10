@@ -6,7 +6,7 @@ import { latex } from './latex.js';
 
 const plane = new Geometry([]);
 export type TextOptions = {
-  /** Height of the untransformed text box in world units. Default .3. */
+  /** Height of the untransformed text box in world units. Default .36. */
   height?: number;
   color?: Color;
   fontFamily?: string;
@@ -29,7 +29,7 @@ export class Text extends Visual {
   vertical: number;
   constructor(content: string | HTMLSpanElement, options: TextOptions = {}) {
     super(plane, options.color);
-    this.height = options.height ?? .3;
+    this.height = options.height ?? .36;
     this.faceCamera = options.faceCamera ?? false;
     if (!Number.isFinite(this.height) || this.height <= 0) throw new Error('Text height must be positive and finite');
     this.anchor = options.anchor === 'left' ? 0 : options.anchor === 'right' ? 1 : .5;

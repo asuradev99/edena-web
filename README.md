@@ -311,6 +311,16 @@ group.scale = [2, 2, 2];
 - **Grid and contour strokes default to 1.8 CSS pixels**, with analytic edge antialiasing that stays
   consistent while zooming. Use `lineSegments(points, width)` or `gridPlane(x, y, options)` for guides;
   `plotFrame` accepts `gridWidth`. These strokes live in `Geometry.segments`, separate from triangles.
+- **Slider-driven rebuilds are coalesced.** A drag can fire `input` several times a frame, and each
+  event used to rebuild the same surface or field with one number changed. `coalesce(fn)` (exported by
+  the library) folds rapid calls into one per animation frame with the latest arguments; the tours and
+  labs route their function, field, colour and geometry sliders through it. The arithmetic is not the
+  bottleneck — a 64×64 field is a few thousand evaluations — the cost was rebuilding geometry buffers
+  and re-typesetting readouts per event, so the fix is at the event, not the maths.
+- **Labels read from the page's label stylesheet.** The shared stylesheet sets
+  `body .labels{font-size:clamp(12px,1.85cqw,17px)}`, and world text keeps its size in world units
+  (larger labels are genuinely larger in the scene, not just on the DOM overlay). The glyph shader
+  lifts coverage slightly (`alpha^0.8`) so thin, small strokes read brighter without a bolder face.
 - **Whole-canvas 4× MSAA is enabled by default.** `antialias: 'high'` adds 2× supersampling on
   each axis (four times the pixels). Pass `?quality=high` to opt into supersampling in the demos; viewport-sized render
   targets are created when needed and released when a canvas leaves the viewport. Set `antialias: false` for the cheaper single-sample

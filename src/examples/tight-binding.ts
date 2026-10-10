@@ -1,6 +1,6 @@
 import {WebGPUView,LabelLayer,PlotLayer,Visual,Geometry,lineSegments,circle,rgba,viridis,plotFrame,
   TightBinding2D,tightBindingPreset,nearestHoppings,latticePoint,insideZone,fermiContours,fermiArea,bandTriangles,bandFilling,
-  type TightBindingModel,type KPoint,type BandSample,type Point2,type Vec3} from '../index.js';
+  type TightBindingModel,type KPoint,type BandSample,type Point2,type Vec3,coalesce} from '../index.js';
 const $=<T extends HTMLElement>(id:string)=>document.getElementById(id) as T;
 const input=(id:string)=>$<HTMLInputElement>(id);
 const colors=['#80d4df','#f3cf84','#f098b6','#a0e5a4','#bca7ff','#ff9a75'];
@@ -161,7 +161,7 @@ async function main(){
   labels=new LabelLayer($('tb-labels'),view.camera,{faceCamera:true});writeEditors();solve();
   $('apply').onclick=solve;
   for(const id of ['view','band'])$(id).addEventListener('change',buildScene);
-  $('mu').addEventListener('input',()=>{updateEnergy();view.render();});
+  $('mu').addEventListener('input',coalesce(()=>{updateEnergy();view.render();}));
   $('mu-number').addEventListener('change',()=>{if(Number.isFinite(input('mu-number').valueAsNumber)){input('mu').value=input('mu-number').value;updateEnergy();view.render();}});
   $('reset-camera').onclick=fit;
   $('preset').addEventListener('change',()=>{current=tightBindingPreset(input('preset').value,Number(input('hopping').value));model=current.model;path=current.path;writeEditors();$('description').textContent=input('preset').value==='hexagonal'?'One-atom hexagonal (triangular) lattice: six equal nearest neighbors, ε₀ = 0. For t = −1: Γ = −6, M = 2, K = 3.':'A spinless model with one orbital per basis site. Edit the basis, site energies, and bonds below.';solve();});

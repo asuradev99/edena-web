@@ -18,7 +18,7 @@ import {
   isosurface, streamlines, sphereSeeds,
   mathml, mi, mn, mo, mtext, row, number, matrix, brackets, frac, msup, msub, subsup, sqrt, mroot,
   cases, integral, differential, paren, limit, areaUnder, lineThrough, secantSlope, latex,
-  Derivation, checkStep, strikeRuns, attachHandles, screenDistance,
+  coalesce, Derivation, checkStep, strikeRuns, attachHandles, screenDistance,
   parsePOSCAR, parsePhonopySymmetry, appearanceFor,
   type M, type DerivationStep, type Vec3, type Rgb, Geometry,
 } from '../index.js';
@@ -167,7 +167,7 @@ function projectionDemo(view: WebGPUView): Demo {
     else camera.height = Math.max(2.4, Number(distance.value) * .56);
     refresh();
   });
-  distance.addEventListener('input', refresh);
+  distance.addEventListener('input', coalesce(refresh));
   view.onResize = (w, h) => { size = [w, h]; refresh(); };
   refresh();
 
@@ -222,7 +222,7 @@ function meshDemo(view: WebGPUView): Demo {
     probeStatus.textContent = `surfaces cap ${CPU_BUDGET.toLocaleString()} quads, so a square grid is legal to 500×500 · ${fieldNote}`;
   };
   kind.addEventListener('change', rebuild);
-  resolution.addEventListener('input', rebuild);
+  resolution.addEventListener('input', coalesce(rebuild));
   // The honest way to show the guard: ask for one step past the budget and print the library's own
   // refusal. The guard fires before any sampling, so this cannot hang the page.
   probe.addEventListener('click', () => {
@@ -288,8 +288,8 @@ function colourDemo(view: WebGPUView): Demo {
       + `${(100 * pinned / total).toFixed(0)}% of samples pinned to an end · ${auto}`;
   };
   mapSelect.addEventListener('change', rebuild);
-  low.addEventListener('input', rebuild);
-  high.addEventListener('input', rebuild);
+  low.addEventListener('input', coalesce(rebuild));
+  high.addEventListener('input', coalesce(rebuild));
   rebuild();
 
   return { labels, update: () => {} };
@@ -538,7 +538,7 @@ function symmetryDemo(view: WebGPUView): Demo {
   };
   latticeSelect.addEventListener('change', rebuild);
   operationSelect.addEventListener('change', rebuild);
-  strain.addEventListener('input', rebuild);
+  strain.addEventListener('input', coalesce(rebuild));
   rebuild();
 
   return { labels, update: () => {} };
@@ -593,7 +593,7 @@ function transformDemo(view: WebGPUView): Demo {
     readout.textContent = `wrist in world = (${tipWorld.map(value => value.toFixed(2)).join(', ')}) `
       + `· three local y-rotations, composed parent → child`;
   };
-  for (const control of joints) control.addEventListener('input', () => { live = false; apply(); });
+  for (const control of joints) control.addEventListener('input', coalesce(() => { live = false; apply(); }));
   labels.addHTML(mathml(mtext('wrist')), () => [tipWorld[0], tipWorld[1] + .4, tipWorld[2]], '#ff9ec4', 'math-label');
   apply();
 
@@ -701,8 +701,8 @@ function curveDemo(view: WebGPUView): Demo {
     probeStatus.textContent = 'The sampler is capped at 100 000 points; longer runs are chunked with the joint repeated, so the cap is reachable rather than a crash.';
   };
   kind.addEventListener('change', rebuild);
-  samples.addEventListener('input', rebuild);
-  width.addEventListener('input', rebuild);
+  samples.addEventListener('input', coalesce(rebuild));
+  width.addEventListener('input', coalesce(rebuild));
   // Show the guard by asking for one sample past the budget. The check fires before any sampling,
   // so this cannot hang the page — the refusal is the library's own message.
   probe.addEventListener('click', () => {
@@ -759,7 +759,7 @@ function surfaceDemo(view: WebGPUView): Demo {
       + `signed volume ${volume.toFixed(3)} vs exact 2π²Rr² = ${exact.toFixed(3)} · `
       + `${volume > 0 ? 'positive, so every face is wound outward' : 'negative — the winding is inside-out'}`;
   };
-  resolution.addEventListener('input', rebuild);
+  resolution.addEventListener('input', coalesce(rebuild));
   rebuild();
 
   return {
@@ -796,8 +796,8 @@ function fieldDemo(view: WebGPUView): Demo {
     readout.textContent = `iso = ${level.toFixed(2)} · ${res}³ cells → ${samples.toLocaleString()} samples `
       + `(budget 250 000) · ${(blob.geometry.vertices.length / 9).toLocaleString()} triangles · built in ${built.toFixed(0)} ms`;
   };
-  melt.addEventListener('input', rebuild);
-  resolution.addEventListener('input', rebuild);
+  melt.addEventListener('input', coalesce(rebuild));
+  resolution.addEventListener('input', coalesce(rebuild));
   rebuild();
 
   return {
@@ -835,7 +835,7 @@ function streamlineDemo(view: WebGPUView): Demo {
       + `(arc length) · ${points.toLocaleString()} integrated points · a seed on the stagnation point is dropped`;
     if (!marker) { marker = new Visual(sphere(.11), rgba('#f7d681')); view.world.add(marker); }
   };
-  step.addEventListener('input', rebuild);
+  step.addEventListener('input', coalesce(rebuild));
   rebuild();
 
   return {
@@ -882,7 +882,7 @@ function plotFrameDemo(view: WebGPUView): Demo {
       + `ticks ${tickValues(domain[0], domain[1], count).join(', ')} · minor marks subdivide each step by 5`;
     fit();
   };
-  ticks.addEventListener('input', rebuild);
+  ticks.addEventListener('input', coalesce(rebuild));
   view.world.add(curve);
   view.onResize = fit;
   rebuild();
@@ -998,7 +998,7 @@ function derivationDemo(): Demo {
   });
   next.addEventListener('click', () => derivation.next());
   // A control the page test can drive: seeking to a step is the same operation as playing to it.
-  stepControl.addEventListener('input', () => derivation.seek(Number(stepControl.value)));
+  stepControl.addEventListener('input', coalesce(() => derivation.seek(Number(stepControl.value))));
   // `checkStep` is the guard the pages run before rendering: a mark that names a token which is not
   // in the line is a typo that would otherwise fail silently, so it throws with the offending id.
   bad.addEventListener('click', () => {
@@ -1130,7 +1130,7 @@ function instancingDemo(view: WebGPUView): Demo {
       + `${(total * 17 * 4 / 1024).toFixed(1)} KiB of instance data, uploaded once · `
       + `moving one object changes its 16 matrix floats (64 bytes) and its opacity, nothing else`;
   };
-  count.addEventListener('input', rebuild);
+  count.addEventListener('input', coalesce(rebuild));
   rebuild();
 
   let phase = 0;
@@ -1320,7 +1320,7 @@ function areaDemo(view: WebGPUView): Demo {
     fit();
   };
   shape.addEventListener('change', rebuild);
-  steps.addEventListener('input', rebuild);
+  steps.addEventListener('input', coalesce(rebuild));
   view.onResize = fit;
   rebuild();
 
@@ -1386,7 +1386,7 @@ function limitDemo(view: WebGPUView): Demo {
       + `${error < 1e-4 ? 'the difference quotient has converged to the derivative' : 'still distinguishable'}`;
   };
 
-  hControl.addEventListener('input', () => { live = false; place(hOf(Number(hControl.value))); });
+  hControl.addEventListener('input', coalesce(() => { live = false; place(hOf(Number(hControl.value))); }));
   view.onResize = fit;
   place(hOf(Number(hControl.value)));
   fit();

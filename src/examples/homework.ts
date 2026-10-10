@@ -1,4 +1,4 @@
-import {WebGPUView,LabelLayer,Visual,Geometry,gridPlane,lineSegments,polyline,merge,rgba,viridis,plasma,mathml,row,mi,mn,mo,msub,msup,frac,sqrt,matrix,integral,abs,type Vec3} from '../index.js';
+import {WebGPUView,LabelLayer,Visual,Geometry,gridPlane,lineSegments,polyline,merge,rgba,viridis,plasma,mathml,row,mi,mn,mo,msub,msup,frac,sqrt,matrix,integral,abs,coalesce,type Vec3} from '../index.js';
 import {potential,bands,bandGrids,grid,contours,xBands,xCoefficients,singularDOS,numericalDOS,criticalEnergy,type Grid,type CriticalKind,type Segment} from './homework-model.js';
 import {eigenstates,planeWaveMatrix,xWavefunction,RECIPROCAL} from './homework-model.js';
 
@@ -324,20 +324,20 @@ function rebuild(){
 }
 function wire(){
   $('wave-mode').addEventListener('change',drawWavefunction);
-  $('wave-phase').addEventListener('input',drawWavefunction);
+  $('wave-phase').addEventListener('input',coalesce(drawWavefunction));
   $('wave-band').addEventListener('change',()=>{state.band=value('wave-band');$<HTMLSelectElement>('band').value=String(state.band);drawBandScene();drawFermi();drawWavefunction();});
   $('band-region').addEventListener('change',()=>{zoomX=$<HTMLSelectElement>('band-region').value==='x';sampleBandRegion();if(zoomX){state.mu=bands(.5,0,state.v1,state.v3)[state.band];$<HTMLInputElement>('mu').value=String(state.mu);}views[1].camera.height=7.8;views[1].camera.target=[0,0,0];drawBandScene();drawFermi();});
-  $('dos-energy').addEventListener('input',()=>{state.dosEnergy=value('dos-energy');drawDosProbe();});
+  $('dos-energy').addEventListener('input',coalesce(()=>{state.dosEnergy=value('dos-energy');drawDosProbe();}));
   for(const [id,key] of [['show-bands','showBands'],['show-free','showFree']] as const)$(id).addEventListener('change',()=>{state[key]=$<HTMLInputElement>(id).checked;drawBandScene();drawFermi();});
   for(const [id,delta] of [['slice-below',-.3],['slice-at',0],['slice-above',.3]] as const)$(id).addEventListener('click',()=>{state.delta=delta;$<HTMLInputElement>('delta').value=String(delta);drawTransition();});
   for(const id of ['v1','v3'])$(id).addEventListener('input',()=>{clearTimeout(schedule);schedule=window.setTimeout(rebuild,70);});
   $('empty-preset').addEventListener('click',()=>{$<HTMLInputElement>('v1').value='0';$<HTMLInputElement>('v3').value='0';clearTimeout(schedule);rebuild();});
   $('weak-preset').addEventListener('click',()=>{$<HTMLInputElement>('v1').value='.06';$<HTMLInputElement>('v3').value='.025';clearTimeout(schedule);rebuild();});
-  $('mu').addEventListener('input',()=>{state.mu=value('mu');drawFermi();});
+  $('mu').addEventListener('input',coalesce(()=>{state.mu=value('mu');drawFermi();}));
   $('mu-saddle').addEventListener('click',()=>{state.mu=bands(.5,0,state.v1,state.v3)[0];$<HTMLInputElement>('mu').value=String(state.mu);drawFermi();});
   $('band').addEventListener('change',()=>{state.band=value('band');$<HTMLSelectElement>('wave-band').value=String(state.band);drawBandScene();drawFermi();drawWavefunction();});
   $('x-branch').addEventListener('change',()=>{state.upper=value('x-branch')===1;state.both=value('x-branch')===2;drawX();});
-  $('delta').addEventListener('input',()=>{state.delta=value('delta');drawTransition();});
+  $('delta').addEventListener('input',coalesce(()=>{state.delta=value('delta');drawTransition();}));
   for(const [id,key] of [['curvature-a','a'],['curvature-b','b'],['eta','eta']] as const)$(id).addEventListener('input',()=>{state[key]=value(id);clearTimeout(dosSchedule);dosSchedule=window.setTimeout(drawDOS,60);});
   $('critical-kind').addEventListener('change',()=>{state.kind=$<HTMLSelectElement>('critical-kind').value as CriticalKind;drawDOS();});
   $('mu-play').addEventListener('click',()=>{muPlay=!muPlay;$('mu-play').textContent=muPlay?'Pause sweep':'Sweep energy';$('mu-play').setAttribute('aria-pressed',String(muPlay));});
