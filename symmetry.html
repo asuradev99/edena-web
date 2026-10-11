@@ -87,7 +87,8 @@ input[type=range]{width:100%;accent-color:#70d7df;margin:2px 0}
 #status[data-state=info]{color:#a4b3c6}
 #status[data-state=error]{color:#ffaca4}
 @media(max-width:900px){body{overflow:auto}main{grid-template-columns:1fr;height:auto}.stage{height:52vh}.app-bar .hint{display:none}aside{overflow:visible}}
-.map-grid{max-height:260px;overflow:auto} input[type=number]{width:100%;box-sizing:border-box} </style><link rel="stylesheet" href="canvas-ui.css">
+.map-grid{max-height:260px;overflow:auto} input[type=number]{width:100%;box-sizing:border-box}
+.examples{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0} </style><link rel="stylesheet" href="canvas-ui.css">
 <script src="canvas-ui.js" defer></script>
 </head>
 <body>
@@ -115,7 +116,10 @@ input[type=range]{width:100%;accent-color:#70d7df;margin:2px 0}
 
     <details class="card" open><summary>Structure</summary>
       <div id="structure-info"></div>
-      <button id="mos2-example" type="button">Load MoS₂ example</button>
+      <div class="examples">
+        <button id="mos2-example" type="button">Load MoS₂ example</button>
+        <button id="hbn-example" type="button">Load h-BN vacancy example</button>
+      </div>
       <label for="cell-sites">Displayed sites</label><select id="cell-sites"><option value="basis">Basis (one periodic representative)</option><option value="all">All atoms in the closed cell (including faces and edges)</option></select>
       <div class="legend-head" id="legend-anchor" role="button" tabindex="0" aria-expanded="true" aria-controls="legend" aria-label="Fold the element list away"><span class="muted" style="font-size:10.5px;letter-spacing:.12em">ELEMENTS</span><span class="legend-actions"><button type="button" id="legend-all" class="ghost-button" hidden>show all</button><span class="muted" id="legend-toggle-label" style="font-size:10.5px">collapse</span></span></div>
       <div id="legend"></div>

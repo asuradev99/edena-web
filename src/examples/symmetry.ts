@@ -8,6 +8,7 @@ import {
   mathml, mi, mn, mo, row, matrix, vec,
   type Vec3, type Color, type Bond, type Lattice, type CrystalStructure, type CrystalOperation, type Supercell, type Isometry,
 } from '../index.js';
+import { boronNitrideVacancy } from './hbn.js';
 
 const $ = <T extends HTMLElement>(id: string): T => {
   const node = document.getElementById(id);
@@ -1036,6 +1037,13 @@ async function init(): Promise<void> {
       base = parsePOSCAR(await response.text()); fileOperations = undefined;
       recomputeOperations(); setStatus('Loaded bulk 2H-MoS₂ · idealized example', 'ok');
     } catch (error) { setStatus(String(error), 'error'); }
+  }, events);
+  $('hbn-example').addEventListener('click', () => {
+    // The monovacancy sits on a site the layer's point group fixes, so the defected sheet keeps the
+    // layer's full symmetry — the picker below lists exactly those operations.
+    base = boronNitrideVacancy(); fileOperations = undefined;
+    recomputeOperations();
+    setStatus('Loaded 9 × 9 h-BN monolayer · one boron removed at the centre', 'ok');
   }, events);
   operationSelect.addEventListener('change', () => setOperation(Number(operationSelect.value)), events);
   progressInput.addEventListener('input', () => { playing = false; progress = Number(progressInput.value); update(); }, events);

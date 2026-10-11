@@ -1,4 +1,5 @@
 import { WebGPUView, GpuCrystalLayer, Visual, Geometry, rgba, smooth, clamp, polyline, merge, shadedSphere, arrow, lineSegments, parsePOSCAR, parsePhonopySymmetry, latticeSites, supercell as makeSupercell, bonds as findBonds, cellVolume, fractionalToCartesian, cartesianToFractional, shortestDistance, appearanceFor, mapsOntoSelf, siteMapping, symmetryOrbits, closedCell, spaceGroupOperations, symmetryAnimationPoint, symmetryAnimationTransform, centeredIsometry, operationIsometry, rotateAboutAxis, mathml, mi, mn, mo, row, matrix, vec, } from '../index.js';
+import { boronNitrideVacancy } from './hbn.js';
 const $ = (id) => {
     const node = document.getElementById(id);
     if (!node)
@@ -997,6 +998,14 @@ async function init() {
         catch (error) {
             setStatus(String(error), 'error');
         }
+    }, events);
+    $('hbn-example').addEventListener('click', () => {
+        // The monovacancy sits on a site the layer's point group fixes, so the defected sheet keeps the
+        // layer's full symmetry — the picker below lists exactly those operations.
+        base = boronNitrideVacancy();
+        fileOperations = undefined;
+        recomputeOperations();
+        setStatus('Loaded 9 × 9 h-BN monolayer · one boron removed at the centre', 'ok');
     }, events);
     operationSelect.addEventListener('change', () => setOperation(Number(operationSelect.value)), events);
     progressInput.addEventListener('input', () => { playing = false; progress = Number(progressInput.value); update(); }, events);
