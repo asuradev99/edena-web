@@ -98,16 +98,16 @@ fn movedPos(i: u32) -> vec3f {
 // A bond half, drawn as a screen-space stroke like the trails. Each half is anchored on the atom that
 // stays in the box (ends.x) and reaches either a bonded atom that is also in the box, or a periodic
 // partner. The image end is the *same rigid offset from the anchor* the pair had at rest, rotated by
-// the frame — so both halves share one midpoint and the bond keeps its length no matter how the two
-// atoms are individually re-imaged into the cell.
+// the frame — the partner is deliberately *not* resolved through its own drift, because the box wrap
+// can re-image the two atoms of a bond by different lattice vectors, which would draw the bond a
+// whole cell long. So both halves share one midpoint and a bond always keeps its resting length.
 @vertex fn bond(@builtin(vertex_index) v: u32, @builtin(instance_index) i: u32) -> Vertex {
   let c = corner(v % 6u);
   let entry = bonds[i];
   let anchor = movedPos(entry.ends.x);
-  var far = anchor + (frame.transform * vec4f(entry.far.xyz, 0)).xyz;
-  if (entry.ends.w == 1u) { far = movedPos(entry.ends.y); }
+  let far = anchor + (frame.transform * vec4f(entry.far.xyz, 0)).xyz;
   let mid = (anchor + far) * .5;
-  let head = select(far, anchor, entry.ends.z == 1u);
+  let head = select(far, anchor, entry.ends.y == 1u);
   let a = camera.matrix * vec4f(head, 1);
   let b = camera.matrix * vec4f(mid, 1);
   let delta = (b.xy / b.w - a.xy / a.w) * camera.viewport.xy;
@@ -188,18 +188,17 @@ export class GpuCrystalLayer implements GpuSceneLayer {
     this.device.queue.writeBuffer(this.rest!,0,this.source);this.revision++;
   }
   /**
-   * Bond halves. Each half is anchored on the atom that stays in the box (`anchor`); its far end is
-   * either the bonded atom `farAtom` when that is also in the box (`linked`), or the anchor's rest
-   * vector to the periodic partner (`rel`) rotated by the frame. Both halves of a bond share an
-   * anchor, so they share one midpoint however the two atoms are re-imaged into the cell.
+   * Bond halves. Each half is anchored on its atom (`anchor`) and reaches the partner as the resting
+   * bond vector (`rel`) rotated by the frame — never through the partner's own position, so a bond
+   * keeps its length even when the box wrap re-images the two atoms differently. Both halves of a bond
+   * share an anchor, so they share one midpoint.
    */
-  setBonds(list: { anchor: number; farAtom: number; tip: 0 | 1; linked: 0 | 1; rel: Vec3; color: Color }[]): void {
+  setBonds(list: { anchor: number; tip: 0 | 1; rel: Vec3; color: Color }[]): void {
     this.bondCount = list.length;
     this.bondData = new Float32Array(Math.max(12, list.length * 12));
     const words = new Uint32Array(this.bondData.buffer);
     list.forEach((bond, i) => {
-      words[i * 12] = bond.anchor; words[i * 12 + 1] = bond.farAtom;
-      words[i * 12 + 2] = bond.tip; words[i * 12 + 3] = bond.linked;
+      words[i * 12] = bond.anchor; words[i * 12 + 1] = bond.tip;
       this.bondData.set(bond.rel, i * 12 + 4);
       this.bondData.set(bond.color, i * 12 + 8);
     });

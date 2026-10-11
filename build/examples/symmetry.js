@@ -84,6 +84,8 @@ let holdStart = false;
 /** Elements folded away from the scene by clicking the legend. */
 const hiddenElements = new Set();
 let colourMode = 'species';
+/** Paint one atom per symmetry orbit and dim the rest, so the inequivalent sites stand out. */
+let highlightOrbits = false;
 let built;
 /** Neighbour search and bonds, reused while the crystal and the bond toggle are unchanged. */
 let neighbours;
@@ -493,7 +495,7 @@ function rebuild() {
         // the crystal, so they are still built once per structure.
         if (!bondScene || bondScene.base !== base || bondScene.n !== n) {
             const bonds = [];
-            const ghosts = [];
+            const ghostCandidates = [];
             const seen = new Set();
             for (const bond of found) {
                 // The partner may sit on a periodic copy; the image is a Cartesian offset in the drawn frame.
@@ -501,7 +503,7 @@ function rebuild() {
                 const rest = add(ideal[bond.j], image);
                 const rel = sub(rest, ideal[bond.i]);
                 const symbolI = big.species[bond.i], symbolJ = big.species[bond.j];
-                // A zero image offset means the partner is drawn in the box and can be used directly.
+                // A zero image offset means the partner is drawn in the box.
                 const linked = bond.image.every(value => Math.abs(value) < 1e-9) ? 1 : 0;
                 // Both halves are anchored on atom i — the end that stays in the box — so they share one
                 // midpoint however the two atoms are individually re-imaged into the cell. Half-bonds are
@@ -509,23 +511,29 @@ function rebuild() {
                 // disturbing another that happens to share a colour.
                 bonds.push({ anchor: bond.i, farAtom: bond.j, tip: 1, linked, rel, symbol: symbolI, rest });
                 bonds.push({ anchor: bond.i, farAtom: bond.j, tip: 0, linked, rel, symbol: symbolJ, rest });
-                // Show a periodic partner as a faded ghost so the coordination shell reads as complete. The
-                // ghost rides the anchor's re-imaging, so it sits exactly at the far end of its bond.
-                const periodicImage = bond.i !== bond.j && !linked;
-                const key = `${symbolJ}:${rest.map(value => value.toFixed(3)).join(',')}`;
-                if (periodicImage && !seen.has(key)) {
+                // Where a bond ends, show the partner as a faded ghost, so a bond is never a line to nothing.
+                // The bond is drawn in its anchor's frame, so the ghost must be too: when the wrap re-images
+                // the two atoms differently, this is the only thing holding the far end open.
+                const key = `${symbolJ}:${bond.i}:${rest.map(value => value.toFixed(3)).join(',')}`;
+                if (!seen.has(key)) {
                     seen.add(key);
                     // Slightly smaller than a real site, so a periodic image never reads as an atom of the cell.
-                    ghosts.push({ symbol: symbolJ, rest, radius: times(atomScales[bond.j], .72), anchor: bond.i });
+                    ghostCandidates.push({ symbol: symbolJ, rest, radius: times(atomScales[bond.j], .72), anchor: bond.i, partner: bond.j, linked });
                 }
             }
-            bondScene = { base, n, bonds, ghosts };
+            bondScene = { base, n, bonds, ghostCandidates };
         }
         for (const bond of bondScene.bonds) {
             bondSpecs.push({ anchor: bond.anchor, farAtom: bond.farAtom, tip: bond.tip, linked: bond.linked, rel: bond.rel });
             bondSymbols.push(bond.symbol);
         }
-        for (const ghost of bondScene.ghosts) {
+        for (const ghost of bondScene.ghostCandidates) {
+            // A bond drawn inside the box needs no ghost while both atoms are re-imaged the same way — the
+            // far end then is the drawn partner. As soon as the wrap splits them the bond ends on an image.
+            const sameImage = ghost.linked === 1 && drift[ghost.anchor] !== undefined && drift[ghost.partner] !== undefined &&
+                drift[ghost.anchor].every((value, axis) => Math.abs(value - drift[ghost.partner][axis]) < 1e-6);
+            if (sameImage)
+                continue;
             // Opaque enough that the half-bond reaching it visibly ends on an atom: at 0.22 alpha a dark
             // element (nitrogen blue) reads as black, so its periodic bond looks like a line to nowhere.
             const visual = new Visual(meshes.get(ghost.symbol), rgba(ELEMENT_COLOR(ghost.symbol), .42));
@@ -536,7 +544,7 @@ function rebuild() {
             ghostPlace.push({ rest: ghost.rest, anchor: ghost.anchor });
         }
     }
-    gpuCrystal.setBonds(bondSpecs.map((spec, index) => ({ ...spec, color: bondTint(bondSymbols[index]) })));
+    gpuCrystal.setBonds(bondSpecs.map((spec, index) => ({ anchor: spec.anchor, tip: spec.tip, rel: spec.rel, color: bondTint(bondSymbols[index]) })));
     const cellVisual = showCell ? new Visual(cellWire(big.lattice, pivot, Math.max(.006, bounds.extent * .0018)), rgba('#a4b3c6', .55)) : undefined;
     // Trail paths are evaluated in the vertex shader from 25 shared affine samples.
     const trailVisuals = [], trailSymbols = [];
@@ -675,6 +683,17 @@ function orbitsFor(used) {
     orbitSummary = { used, orbits: symmetryOrbits(base, used, 1e-3) };
     return orbitSummary.orbits;
 }
+/** One drawn atom per symmetry orbit: the sites no operation relates to any other. */
+let siteSummary;
+function inequivalentSites(big) {
+    const exact = exactOperations();
+    if (siteSummary && siteSummary.big === big && siteSummary.operations === exact)
+        return siteSummary.representatives;
+    const used = exact.length ? exact : [operations[operationIndex]];
+    const representatives = symmetryOrbits(big, used, 1e-3).map(orbit => orbit[0]).sort((a, b) => a - b);
+    siteSummary = { big, operations: exact, representatives };
+    return representatives;
+}
 function writeMapping() {
     // The animation is the thing on screen, so the report judges what it actually does.
     const drawnOk = built?.drawnPermutes ?? false;
@@ -743,7 +762,7 @@ function update() {
     // Folding an element away from the legend silences everything that carries it: its half-bonds,
     // its periodic ghosts, its atoms, its "before" markers, and its floating symbols.
     state.ghostVisuals.forEach((visual, index) => {
-        visual.opacity = showBonds && !hiddenElements.has(state.ghostSymbols[index]) ? 1 : 0;
+        visual.opacity = showBonds && !hiddenElements.has(state.ghostSymbols[index]) ? (highlightOrbits ? .22 : 1) : 0;
         // The ghost is the far end of a bond, so it rides that bond's in-box anchor: applying the anchor's
         // drift (not the ghost's own host's) keeps it exactly one bond-length from the atom it hangs off.
         const place = state.ghostPlace[index];
@@ -752,12 +771,22 @@ function update() {
     state.trailVisuals.forEach((visual, order) => { visual.opacity = hiddenElements.has(state.trailSymbols[order]) ? 0 : trailOpacity; });
     state.elementVisuals.forEach(visual => { visual.opacity = .3 + .7 * t; });
     const startOpacity = showTrails ? (holdStart ? .5 : smooth(progress * 3) * (1 - smooth((progress - .82) / .18)) * .5) * orbitWeight : 0;
-    const colorKey = `${colourMode}|${[...hiddenElements].sort().join(',')}`;
+    // Selecting a highlight repaints one atom per symmetry orbit and dims everything a symmetry
+    // operation can reach from one of them, so the inequivalent sites are what stands out.
+    const representatives = highlightOrbits ? inequivalentSites(state.big) : undefined;
+    const marked = representatives ? new Set(representatives) : undefined;
+    const colorKey = `${colourMode}|${[...hiddenElements].sort().join(',')}|${representatives ? representatives.join(',') : ''}`;
     if (gpuColorKey !== colorKey) {
-        gpuCrystal.setColors(state.big.species.map((symbol, i) => rgba(atomColor(i, symbol), hiddenElements.has(symbol) ? 0 : 1)));
-        gpuCrystal.setBondColors(state.bondSymbols.map(bondTint));
+        gpuCrystal.setColors(state.big.species.map((symbol, i) => hiddenElements.has(symbol) ? rgba(atomColor(i, symbol), 0)
+            : marked ? (marked.has(i) ? rgba('#ffd23f') : rgba(atomColor(i, symbol), .16))
+                : rgba(atomColor(i, symbol), 1)));
+        gpuCrystal.setBondColors(state.bondSymbols.map(symbol => {
+            const tint = bondTint(symbol);
+            return marked ? [tint[0], tint[1], tint[2], tint[3] * .2] : tint;
+        }));
         gpuColorKey = colorKey;
     }
+    setText($('orbit-note'), representatives ? `${representatives.length} inequivalent site${representatives.length === 1 ? '' : 's'} highlighted` : '');
     gpuCrystal.setFrame(new Float32Array([...x, 0, ...y, 0, ...z, 0, ...offset, 1]), wrap, .06 * flight, trailOpacity * .5, startOpacity * .55, showBonds ? 1 : 0);
     const tracked = Number(displacementAtom.value);
     if (displacementVisual && displacementOrigin) {
@@ -1032,6 +1061,13 @@ async function init() {
     resetButton.addEventListener('click', () => { progress = 0; playing = false; update(); }, events);
     supercellSelect.addEventListener('change', () => { repeats = Number(supercellSelect.value); rebuild(); update(); }, events);
     colourSelect.addEventListener('change', () => { colourMode = colourSelect.value === 'site' ? 'site' : 'species'; rebuild(); update(); }, events);
+    const orbitButton = $('orbit-highlight');
+    orbitButton.addEventListener('click', () => {
+        highlightOrbits = !highlightOrbits;
+        orbitButton.setAttribute('aria-pressed', String(highlightOrbits));
+        gpuColorKey = '';
+        update();
+    }, events);
     speedSelect.addEventListener('change', () => { speed = Number(speedSelect.value); }, events);
     bondsToggle.addEventListener('change', () => { showBonds = bondsToggle.checked; rebuild(); update(); }, events);
     cellToggle.addEventListener('change', () => { showCell = cellToggle.checked; rebuild(); update(); }, events);

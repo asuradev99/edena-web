@@ -32,16 +32,14 @@ export declare class GpuCrystalLayer implements GpuSceneLayer {
     setSites(positions: Vec3[], radii: number[], colors: Color[]): void;
     setColors(colors: Color[]): void;
     /**
-     * Bond halves. Each half is anchored on the atom that stays in the box (`anchor`); its far end is
-     * either the bonded atom `farAtom` when that is also in the box (`linked`), or the anchor's rest
-     * vector to the periodic partner (`rel`) rotated by the frame. Both halves of a bond share an
-     * anchor, so they share one midpoint however the two atoms are re-imaged into the cell.
+     * Bond halves. Each half is anchored on its atom (`anchor`) and reaches the partner as the resting
+     * bond vector (`rel`) rotated by the frame — never through the partner's own position, so a bond
+     * keeps its length even when the box wrap re-images the two atoms differently. Both halves of a bond
+     * share an anchor, so they share one midpoint.
      */
     setBonds(list: {
         anchor: number;
-        farAtom: number;
         tip: 0 | 1;
-        linked: 0 | 1;
         rel: Vec3;
         color: Color;
     }[]): void;
