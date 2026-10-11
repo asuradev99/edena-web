@@ -390,10 +390,13 @@ export function arrow(start, end, width = .018) {
     const d = sub(end, start), size = Math.hypot(...d), dir = normalize(d);
     if (size < 1e-8)
         return new Geometry([]);
-    const base = end.map((v, k) => v - dir[k] * Math.min(.14, size * .3));
+    // The head keeps the historic proportions at the default width, but grows with the shaft so a
+    // deliberately thick arrow ends in a head instead of a pinhead.
+    const base = end.map((v, k) => v - dir[k] * Math.min(Math.max(.14, width * 2.6), size * .3));
     const n = normalize(cross(dir, Math.abs(dir[1]) > .9 ? [1, 0, 0] : [0, 1, 0])), b = normalize(cross(dir, n));
     const out = [];
-    const rim = (i) => base.map((v, k) => v + Math.min(.055, size * .13) * (n[k] * Math.cos(i * Math.PI / 4) + b[k] * Math.sin(i * Math.PI / 4)));
+    const spread = Math.min(Math.max(.055, width * 1.9), size * .13);
+    const rim = (i) => base.map((v, k) => v + spread * (n[k] * Math.cos(i * Math.PI / 4) + b[k] * Math.sin(i * Math.PI / 4)));
     for (let i = 0; i < 8; i++)
         triangle(out, rim(i), rim(i + 1), end);
     return merge(polyline([start, base], width, 6), new Geometry(out));

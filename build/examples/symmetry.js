@@ -36,6 +36,8 @@ const operationScope = $('operation-scope');
 const displacementAtom = $('displacement-atom');
 const displacementInputs = ['x', 'y', 'z'].map(axis => $(`displacement-${axis}`));
 let displacementVisual;
+/** The same vector held at the atom's starting site, so before and after can be compared. */
+let displacementOrigin;
 let arrowMesh;
 let markerMesh;
 let displacementSites;
@@ -524,7 +526,9 @@ function rebuild() {
             bondSymbols.push(bond.symbol);
         }
         for (const ghost of bondScene.ghosts) {
-            const visual = new Visual(meshes.get(ghost.symbol), rgba(ELEMENT_COLOR(ghost.symbol), .22));
+            // Opaque enough that the half-bond reaching it visibly ends on an atom: at 0.22 alpha a dark
+            // element (nitrogen blue) reads as black, so its periodic bond looks like a line to nowhere.
+            const visual = new Visual(meshes.get(ghost.symbol), rgba(ELEMENT_COLOR(ghost.symbol), .42));
             visual.position = ghost.rest;
             visual.scale = ghost.radius;
             ghostVisuals.push(visual);
@@ -555,9 +559,10 @@ function rebuild() {
         elementLabel: element.label, elementAnchor: element.anchor, motion, centre: bounds.centre, extent: bounds.extent, movers, moverList, shortest,
     };
     view.world.add(...ghostVisuals, ...(cellVisual ? [cellVisual] : []), ...trailVisuals, ...element.visuals, ...startVisuals);
-    arrowMesh ??= arrow([0, 0, 0], [0, 0, 1], .04);
+    arrowMesh ??= arrow([0, 0, 0], [0, 0, 1], .09);
+    displacementOrigin = new Visual(arrowMesh, rgba('#ff2d2d'));
     displacementVisual = new Visual(arrowMesh, rgba('#ff9ec4'));
-    view.world.add(displacementVisual);
+    view.world.add(displacementOrigin, displacementVisual);
     const tracked = Number(displacementAtom.value);
     if (displacementSites !== big) {
         displacementAtom.replaceChildren(new Option('None', '-1'), ...big.species.map((symbol, i) => new Option(`${symbol}${i}`, String(i))));
@@ -755,16 +760,25 @@ function update() {
     }
     gpuCrystal.setFrame(new Float32Array([...x, 0, ...y, 0, ...z, 0, ...offset, 1]), wrap, .06 * flight, trailOpacity * .5, startOpacity * .55, showBonds ? 1 : 0);
     const tracked = Number(displacementAtom.value);
-    if (displacementVisual) {
+    if (displacementVisual && displacementOrigin) {
         const u = displacementInputs.map(input => Number(input.value));
         const valid = tracked >= 0 && tracked < state.ideal.length && u.every(Number.isFinite) && Math.hypot(...u) > 1e-9;
-        displacementVisual.visible = valid && !hiddenElements.has(state.big.species[tracked]);
+        const shown = valid && !hiddenElements.has(state.big.species[tracked]);
+        displacementVisual.visible = shown;
+        displacementOrigin.visible = shown;
         if (valid) {
-            const vector = linear(u), length = Math.hypot(...vector);
-            displacementVisual.visible &&= length > 1e-9;
+            const length = Math.hypot(...u);
+            // The bold arrow holds the original vector at the atom's starting site, so it stays put while
+            // the operation plays and the two directions can be compared side by side.
+            displacementOrigin.position = state.ideal[tracked];
+            displacementOrigin.scale = [1, 1, length];
+            displacementOrigin.orientation = [0, Math.acos(clamp(u[2] / length, -1, 1)), Math.atan2(u[1], u[0])];
+            // The lighter arrow follows the atom and rotates with the operation.
+            const vector = linear(u), moved = Math.hypot(...vector);
+            displacementVisual.visible &&= moved > 1e-9;
             displacementVisual.position = add(add(linear(state.ideal[tracked]), offset), times(state.drift[tracked], wrap));
-            displacementVisual.scale = [1, 1, length];
-            displacementVisual.orientation = [0, Math.acos(clamp(vector[2] / (length || 1), -1, 1)), Math.atan2(vector[1], vector[0])];
+            displacementVisual.scale = [1, 1, moved];
+            displacementVisual.orientation = [0, Math.acos(clamp(vector[2] / (moved || 1), -1, 1)), Math.atan2(vector[1], vector[0])];
             setText($('displacement-value'), `u = (${vector.map(v => v.toFixed(3)).join(', ')}) Å`);
         }
         else
